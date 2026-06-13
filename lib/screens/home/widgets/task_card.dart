@@ -1,0 +1,374 @@
+import 'package:flutter/material.dart';
+import 'package:lucide_icons/lucide_icons.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../../core/constants/app_constants.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/snackbar_utils.dart';
+import '../../../models/task_model.dart';
+import '../../../providers/auth_provider.dart';
+import '../../../providers/catalog_provider.dart';
+import '../../../services/task_repository.dart';
+import '../../../widgets/confirm_dialog.dart';
+import '../add_edit_task_page.dart';
+import 'reschedule_dialog.dart';
+
+/// Card representation of a single task, used on Home / Calendar / Week.
+/// Shows a thin gold left border, client info, status chip and the
+/// Editar / Completar / Reprogramar action row.
+class TaskCard extends StatelessWidget {
+  const TaskCard({super.key, required this.task});
+
+  final TaskModel task;
+
+  Future<void> _callClient(BuildContext context) async {
+    final phone = task.clientPhone.replaceAll(' ', '');
+    if (phone.isEmpty) return;
+    final uri = Uri(scheme: 'tel', path: phone);
+    final ok = await launchUrl(uri);
+    if (!ok && context.mounted) {
+      SnackbarUtils.showError(context, 'No se pudo iniciar la llamada');
+    }
+  }
+
+  Future<void> _completeTask(BuildContext context) async {
+    final catalog = context.read<CatalogProvider>();
+    final repo = context.read<TaskRepository>();
+    final completedId = catalog.completedStatusId;
+    if (completedId == null) {
+      SnackbarUtils.showError(
+          context, 'No existe un estado "Completada" configurado');
+      return;
+    }
+    final confirm = await showConfirmDialog(
+      context,
+      title: 'Completar tarea',
+      message:
+          '¿Marcar la tarea de ${task.clientName} a las ${task.hour} como completada?',
+      confirmLabel: 'Completar',
+    );
+    if (!confirm) return;
+    try {
+      await repo.completeTask(task.id, completedId);
+      if (context.mounted) {
+        SnackbarUtils.showSuccess(context, 'Tarea completada');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final catalog = context.watch<CatalogProvider>();
+    final auth = context.watch<AuthProvider>();
+
+    final isPending = task.statusId == catalog.pendingStatusId;
+    final isCompleted = task.statusId == catalog.completedStatusId;
+    final canEdit = auth.isSuperAdmin || isPending;
+    final canComplete = !isCompleted;
+    final canReschedule = !isCompleted;
+
+    final taskType = catalog.taskTypeName(task.taskTypeId);
+    final statusName = catalog.statusName(task.statusId);
+    final assignedName = catalog.userName(task.assignedUserId);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.gold.withValues(alpha: 0.18)),
+        boxShadow: const [],
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 4,
+              decoration: const BoxDecoration(
+                color: AppColors.gold,
+                borderRadius: BorderRadius.horizontal(left: Radius.circular(10)),
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(LucideIcons.clock, size: 16, color: AppColors.gold),
+                        const SizedBox(width: 6),
+                        Text(
+                          task.hour,
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            taskType,
+                            style: const TextStyle(
+                              color: AppColors.goldLight,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        _StatusChip(statusName: statusName, isCompleted: isCompleted),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(LucideIcons.userCircle, size: 15, color: AppColors.textSecondary),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            task.clientName,
+                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (task.clientPhone.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      InkWell(
+                        onTap: () => _callClient(context),
+                        child: Row(
+                          children: [
+                            const Icon(LucideIcons.phone, size: 15, color: AppColors.gold),
+                            const SizedBox(width: 6),
+                            Text(
+                              task.clientPhone,
+                              style: const TextStyle(
+                                color: AppColors.gold,
+                                fontSize: 13,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (task.observations.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        task.observations,
+                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(LucideIcons.userCheck, size: 13, color: AppColors.textSecondary),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Encargado: $assignedName',
+                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (task.rescheduledCount > 0)
+                          Text(
+                            'Reprogramada x${task.rescheduledCount}',
+                            style: const TextStyle(color: AppColors.error, fontSize: 11),
+                          ),
+                      ],
+                    ),
+                    if (canEdit || canComplete || canReschedule) ...[
+                      const SizedBox(height: 10),
+                      const Divider(height: 1),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        alignment: WrapAlignment.end,
+                        spacing: 4,
+                        children: [
+                          if (canEdit)
+                            TextButton.icon(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => AddEditTaskPage(existingTask: task),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(LucideIcons.pencil, size: 16),
+                              label: const Text('Editar'),
+                            ),
+                          if (canReschedule)
+                            TextButton.icon(
+                              onPressed: () => showRescheduleDialog(context, task),
+                              icon: const Icon(LucideIcons.repeat, size: 16),
+                              label: const Text('Reprogramar'),
+                            ),
+                          if (canComplete)
+                            TextButton.icon(
+                              onPressed: () => _completeTask(context),
+                              style: TextButton.styleFrom(foregroundColor: AppColors.success),
+                              icon: const Icon(LucideIcons.checkCircle, size: 16),
+                              label: const Text('Completar'),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.statusName, required this.isCompleted});
+
+  final String statusName;
+  final bool isCompleted;
+
+  @override
+  Widget build(BuildContext context) {
+    final isReprogramada = statusName == AppStatusNames.reprogramada;
+    final color = isCompleted
+        ? AppColors.success
+        : isReprogramada
+            ? AppColors.error
+            : AppColors.gold;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        statusName,
+        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet with quick actions (Editar / Reprogramar / Completar) for
+/// a task, used by long-press gestures on the Calendar and Week views.
+Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
+  final catalog = context.read<CatalogProvider>();
+  final auth = context.read<AuthProvider>();
+
+  final isPending = task.statusId == catalog.pendingStatusId;
+  final isCompleted = task.statusId == catalog.completedStatusId;
+  final canEdit = auth.isSuperAdmin || isPending;
+  final canComplete = !isCompleted;
+  final canReschedule = !isCompleted;
+
+  return showModalBottomSheet(
+    context: context,
+    backgroundColor: AppColors.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (sheetContext) {
+      return SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.clock, color: AppColors.gold, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${task.hour} · ${task.clientName}',
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            if (canEdit)
+              ListTile(
+                leading: const Icon(LucideIcons.pencil, color: AppColors.gold),
+                title: const Text('Editar'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => AddEditTaskPage(existingTask: task)),
+                  );
+                },
+              ),
+            if (canReschedule)
+              ListTile(
+                leading: const Icon(LucideIcons.repeat, color: AppColors.gold),
+                title: const Text('Reprogramar'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  showRescheduleDialog(context, task);
+                },
+              ),
+            if (canComplete)
+              ListTile(
+                leading: const Icon(LucideIcons.checkCircle, color: AppColors.success),
+                title: const Text('Completar'),
+                onTap: () async {
+                  Navigator.of(sheetContext).pop();
+                  final repo = context.read<TaskRepository>();
+                  final completedId = catalog.completedStatusId;
+                  if (completedId == null) {
+                    if (context.mounted) {
+                      SnackbarUtils.showError(
+                          context, 'No existe un estado "Completada" configurado');
+                    }
+                    return;
+                  }
+                  try {
+                    await repo.completeTask(task.id, completedId);
+                    if (context.mounted) {
+                      SnackbarUtils.showSuccess(context, 'Tarea completada');
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      SnackbarUtils.showError(
+                          context, SnackbarUtils.firebaseErrorMessage(e));
+                    }
+                  }
+                },
+              ),
+            if (!canEdit && !canComplete && !canReschedule)
+              const Padding(
+                padding: EdgeInsets.all(20),
+                child: Text(
+                  'Esta tarea ya fue completada.',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      );
+    },
+  );
+}

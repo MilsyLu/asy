@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- TaskFlow Executive gold accent, used for the small icon tint on
+         FCM notifications shown while the app is backgrounded/terminated. -->
+    <color name="notification_gold">#D4AF37</color>
+</resources>

@@ -1,0 +1,75 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../core/constants/firestore_paths.dart';
+import '../models/app_user.dart';
+
+/// CRUD + streams for the `users` collection.
+class UserRepository {
+  UserRepository({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance;
+
+  final FirebaseFirestore _firestore;
+
+  CollectionReference<Map<String, dynamic>> get _collection =>
+      _firestore.collection(FirestoreCollections.users);
+
+  Stream<AppUser?> watchUser(String uid) {
+    return _collection.doc(uid).snapshots().map((doc) {
+      if (!doc.exists) return null;
+      return AppUser.fromDoc(doc);
+    });
+  }
+
+  Future<AppUser?> getUser(String uid) async {
+    final doc = await _collection.doc(uid).get();
+    if (!doc.exists) return null;
+    return AppUser.fromDoc(doc);
+  }
+
+  Stream<List<AppUser>> watchAllUsers() {
+    return _collection.orderBy('name').snapshots().map(
+        (snap) => snap.docs.map((d) => AppUser.fromDoc(d)).toList());
+  }
+
+  Stream<List<AppUser>> watchUsersByGroup(String groupId) {
+    return _collection
+        .where('groupId', isEqualTo: groupId)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => AppUser.fromDoc(d)).toList());
+  }
+
+  Future<List<AppUser>> getUsersByGroup(String groupId) async {
+    final snap =
+        await _collection.where('groupId', isEqualTo: groupId).get();
+    return snap.docs.map((d) => AppUser.fromDoc(d)).toList();
+  }
+
+  Future<void> updateRole(String uid, String role) {
+    return _collection.doc(uid).update({'role': role});
+  }
+
+  Future<void> updateGroup(String uid, String? groupId) {
+    return _collection.doc(uid).update({'groupId': groupId});
+  }
+
+  Future<void> updateName(String uid, String name) {
+    return _collection.doc(uid).update({'name': name});
+  }
+
+  /// Registers an FCM token for push notifications (idempotent).
+  Future<void> addFcmToken(String uid, String token) {
+    return _collection.doc(uid).set({
+      'fcmTokens': FieldValue.arrayUnion([token]),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> removeFcmToken(String uid, String token) {
+    return _collection.doc(uid).update({
+      'fcmTokens': FieldValue.arrayRemove([token]),
+    });
+  }
+
+  Future<void> deleteUserDoc(String uid) {
+    return _collection.doc(uid).delete();
+  }
+}
