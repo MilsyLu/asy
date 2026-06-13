@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "74896792623",
+    "project_id": "asyone-d8b68",
+    "storage_bucket": "asyone-d8b68.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:74896792623:android:35ee092d1a860adef9bada",
+        "android_client_info": {
+          "package_name": "com.taskflow.taskflow_executive"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA7kt3XTS-A66THH-cMPOzCg9oL3Y29_Qs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

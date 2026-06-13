@@ -1,0 +1,13 @@
+{
+  "name": "taskflow-seed",
+  "version": "1.0.0",
+  "description": "One-time Firestore seed script for TaskFlow Executive (catalog data + optional super admin user).",
+  "main": "seed.js",
+  "scripts": {
+    "seed": "node seed.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0"
+  },
+  "private": true
+}

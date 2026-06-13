@@ -1,0 +1,108 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function me() {
+      return userDoc(request.auth.uid);
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && me().role == 'super_admin';
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // True if the signed-in user may see/manage a task, mirroring
+    // `isTaskVisibleToUser` on the client:
+    // - super_admin sees/manages every task.
+    // - a task with visibleToAllGroups == true is visible to any
+    //   signed-in user.
+    // - otherwise a normal user may only access tasks whose groupId
+    //   matches their own groupId.
+    // - tasks created before this feature have no groupId field at all;
+    //   `.get('groupId', null)` defaults those to null, so (per the rule
+    //   above) only super_admin can access them until they're assigned a
+    //   group.
+    function canAccessTask(task) {
+      return isSuperAdmin()
+        || (task.get('groupId', null) != null
+            && (task.get('visibleToAllGroups', false) == true
+                || task.get('groupId', null) == me().groupId));
+    }
+
+    // -----------------------------------------------------------------
+    // users
+    // -----------------------------------------------------------------
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      // Accounts are provisioned from the admin panel only.
+      allow create: if isSuperAdmin();
+      // Admins can edit any field (role, group, etc). Regular users may
+      // only update the fields the app touches on their own behalf.
+      allow update: if isSuperAdmin()
+        || (isOwner(userId)
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['fcmTokens', 'lastLogin', 'streakDays', 'maxStreakDays', 'name']));
+      allow delete: if isSuperAdmin();
+    }
+
+    // -----------------------------------------------------------------
+    // tasks
+    // -----------------------------------------------------------------
+    match /tasks/{taskId} {
+      // Single-document reads: `resource.data` is concrete here, so the
+      // get()-based canAccessTask() check evaluates per document as expected.
+      allow get: if isSignedIn() && canAccessTask(resource.data);
+      // Collection queries (watchTasksForDate/watchTasksInRange): rules
+      // aren't filters. canAccessTask() depends on resource.data fields
+      // that vary per doc and aren't constrained by the date/hour query
+      // filters, so for any role other than super_admin (the only branch
+      // that's constant w.r.t. resource.data) Firestore can't prove the
+      // rule holds for the whole result set and rejects the ENTIRE query
+      // with permission-denied. So list is open to any signed-in user;
+      // privacy is enforced client-side via isTaskVisibleToUser
+      // (lib/core/utils/task_visibility.dart), same as groups/taskTypes/etc.
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && canAccessTask(request.resource.data);
+      allow update: if isSignedIn()
+        && canAccessTask(resource.data)
+        && canAccessTask(request.resource.data);
+      allow delete: if isSignedIn() && canAccessTask(resource.data);
+    }
+
+    // -----------------------------------------------------------------
+    // Catalog collections: readable by any signed-in user (needed to
+    // resolve names/colors throughout the app), editable only by admins.
+    // -----------------------------------------------------------------
+    match /groups/{id} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    match /taskTypes/{id} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    match /statuses/{id} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    match /availableHours/{id} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+  }
+}
