@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../core/utils/snackbar_utils.dart';
 import '../../../core/utils/validators.dart';
@@ -27,6 +27,7 @@ Future<void> showRescheduleDialog(BuildContext context, TaskModel task) async {
     builder: (dialogContext) {
       return StatefulBuilder(
         builder: (context, setState) {
+          final colors = context.colors;
           return AlertDialog(
             title: const Text('Reprogramar tarea'),
             content: Column(
@@ -35,7 +36,7 @@ Future<void> showRescheduleDialog(BuildContext context, TaskModel task) async {
               children: [
                 Text(
                   '${task.clientName} · ${catalog.taskTypeName(task.taskTypeId)}',
-                  style: const TextStyle(color: AppColors.textSecondary),
+                  style: TextStyle(color: colors.textSecondary),
                 ),
                 const SizedBox(height: 16),
                 InkWell(
@@ -51,9 +52,9 @@ Future<void> showRescheduleDialog(BuildContext context, TaskModel task) async {
                     }
                   },
                   child: InputDecorator(
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Nueva fecha',
-                      prefixIcon: Icon(LucideIcons.calendar, color: AppColors.gold),
+                      prefixIcon: Icon(LucideIcons.calendar, color: colors.primary),
                     ),
                     child: Text(AppDateUtils.formatShortDate(selectedDate)),
                   ),
@@ -61,11 +62,11 @@ Future<void> showRescheduleDialog(BuildContext context, TaskModel task) async {
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: selectedHour,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Nueva hora',
-                    prefixIcon: Icon(LucideIcons.clock, color: AppColors.gold),
+                    prefixIcon: Icon(LucideIcons.clock, color: colors.primary),
                   ),
-                  dropdownColor: AppColors.surface,
+                  dropdownColor: colors.surface,
                   items: catalog.availableHours
                       .map((h) => DropdownMenuItem(value: h.hour, child: Text(h.hour)))
                       .toList(),

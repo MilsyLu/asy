@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/theme_colors.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../core/utils/validators.dart';
 import '../../providers/auth_provider.dart';
@@ -50,6 +50,7 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -70,41 +71,41 @@ class _LoginPageState extends State<LoginPage> {
                         height: 84,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.gold, width: 2),
+                          border: Border.all(color: colors.primary, width: 2),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.task_alt_rounded,
-                          color: AppColors.gold,
+                          color: colors.primary,
                           size: 42,
                         ),
                       ),
                     ),
                     const SizedBox(height: 24),
-                    const Text(
+                    Text(
                       AppConstants.appName,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
+                        color: colors.textPrimary,
                         letterSpacing: 0.5,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                    Text(
                       'Gestión de tareas para equipos',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: AppColors.textSecondary),
+                      style: TextStyle(color: colors.textSecondary),
                     ),
                     const SizedBox(height: 40),
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
                       autofillHints: const [AutofillHints.email],
-                      style: const TextStyle(color: AppColors.textPrimary),
-                      decoration: const InputDecoration(
+                      style: TextStyle(color: colors.textPrimary),
+                      decoration: InputDecoration(
                         labelText: 'Email',
-                        prefixIcon: Icon(Icons.email_outlined, color: AppColors.gold),
+                        prefixIcon: Icon(Icons.email_outlined, color: colors.primary),
                       ),
                       validator: Validators.email,
                     ),
@@ -113,16 +114,16 @@ class _LoginPageState extends State<LoginPage> {
                       controller: _passwordController,
                       obscureText: _obscurePassword,
                       autofillHints: const [AutofillHints.password],
-                      style: const TextStyle(color: AppColors.textPrimary),
+                      style: TextStyle(color: colors.textPrimary),
                       decoration: InputDecoration(
                         labelText: 'Contraseña',
-                        prefixIcon: const Icon(Icons.lock_outline, color: AppColors.gold),
+                        prefixIcon: Icon(Icons.lock_outline, color: colors.primary),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _obscurePassword
                                 ? Icons.visibility_off_outlined
                                 : Icons.visibility_outlined,
-                            color: AppColors.textSecondary,
+                            color: colors.textSecondary,
                           ),
                           onPressed: () {
                             setState(() => _obscurePassword = !_obscurePassword);

@@ -3,7 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
 import 'core/constants/app_constants.dart';
-import 'core/theme/app_theme.dart';
+import 'core/theme/theme_manager.dart';
 import 'providers/auth_provider.dart';
 import 'providers/catalog_provider.dart';
 import 'screens/auth/login_page.dart';
@@ -26,34 +26,47 @@ class TaskFlowApp extends StatelessWidget {
         Provider<TaskRepository>(create: (_) => TaskRepository()),
         Provider<CatalogRepository>(create: (_) => CatalogRepository()),
         ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider()),
+        ChangeNotifierProxyProvider<AuthProvider, ThemeManager>(
+          create: (_) => ThemeManager(),
+          update: (_, auth, manager) {
+            final themeManager = manager ?? ThemeManager();
+            themeManager.updateFromUser(auth.appUser);
+            return themeManager;
+          },
+        ),
       ],
-      child: MaterialApp(
-        title: AppConstants.appName,
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.darkTheme,
-        darkTheme: AppTheme.darkTheme,
-        themeMode: ThemeMode.dark,
-        locale: const Locale('es'),
-        supportedLocales: const [Locale('es'), Locale('en')],
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        home: const AuthGate(),
-        // `builder` wraps the Navigator itself, so this provider covers
-        // `home` AND every page/dialog pushed with Navigator.push or
-        // showDialog. Placing it on `home` (as a child of AuthGate)
-        // would only cover the first route: pushed routes are siblings
-        // of `home` inside the Overlay, not its descendants, so they
-        // couldn't see it.
-        builder: (context, child) {
-          final user = context.watch<AuthProvider>().appUser;
-          if (user == null) return child!;
-          return ChangeNotifierProvider<CatalogProvider>(
-            key: ValueKey(user.id),
-            create: (_) => CatalogProvider(),
-            child: child!,
+      child: Builder(
+        builder: (context) {
+          final themeManager = context.watch<ThemeManager>();
+          return MaterialApp(
+            title: AppConstants.appName,
+            debugShowCheckedModeBanner: false,
+            theme: themeManager.lightTheme,
+            darkTheme: themeManager.darkTheme,
+            themeMode: themeManager.themeMode,
+            locale: const Locale('es'),
+            supportedLocales: const [Locale('es'), Locale('en')],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: const AuthGate(),
+            // `builder` wraps the Navigator itself, so this provider covers
+            // `home` AND every page/dialog pushed with Navigator.push or
+            // showDialog. Placing it on `home` (as a child of AuthGate)
+            // would only cover the first route: pushed routes are siblings
+            // of `home` inside the Overlay, not its descendants, so they
+            // couldn't see it.
+            builder: (context, child) {
+              final user = context.watch<AuthProvider>().appUser;
+              if (user == null) return child!;
+              return ChangeNotifierProvider<CatalogProvider>(
+                key: ValueKey(user.id),
+                create: (_) => CatalogProvider(),
+                child: child!,
+              );
+            },
           );
         },
       ),

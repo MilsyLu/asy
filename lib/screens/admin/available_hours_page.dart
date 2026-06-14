@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/theme_colors.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../models/available_hour_model.dart';
 import '../../providers/catalog_provider.dart';
@@ -34,6 +34,7 @@ class AvailableHoursPage extends StatelessWidget {
     final catalog = context.watch<CatalogProvider>();
     final hours = List<AvailableHourModel>.from(catalog.availableHours)
       ..sort((a, b) => a.hour.compareTo(b.hour));
+    final colors = context.colors;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Horarios disponibles')),
@@ -50,16 +51,16 @@ class AvailableHoursPage extends StatelessWidget {
                 final item = hours[index];
                 return Container(
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
+                    color: colors.surface,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.gold.withValues(alpha: 0.2)),
+                    border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
                   ),
                   child: ListTile(
-                    leading: const Icon(LucideIcons.clock, color: AppColors.gold),
+                    leading: Icon(LucideIcons.clock, color: colors.primary),
                     title: Text(
                       item.hour,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
+                      style: TextStyle(
+                        color: colors.textPrimary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -67,11 +68,11 @@ class AvailableHoursPage extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: const Icon(LucideIcons.pencil, color: AppColors.gold, size: 18),
+                          icon: Icon(LucideIcons.pencil, color: colors.primary, size: 18),
                           onPressed: () => _editHour(context, item),
                         ),
                         IconButton(
-                          icon: const Icon(LucideIcons.trash2, color: AppColors.error, size: 18),
+                          icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
                           onPressed: () => _deleteHour(context, item),
                         ),
                       ],

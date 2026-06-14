@@ -4,7 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_constants.dart';
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/task_visibility.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/auth_provider.dart';
@@ -24,6 +24,7 @@ class StatusReportTab extends StatelessWidget {
     final repo = context.read<TaskRepository>();
     final catalog = context.watch<CatalogProvider>();
     final currentUser = context.watch<AuthProvider>().appUser;
+    final colors = context.colors;
 
     if (currentUser == null) return const LoadingIndicator();
 
@@ -64,24 +65,24 @@ class StatusReportTab extends StatelessWidget {
           _Metric(
             'Reprogramadas',
             tasks.where((t) => t.statusId == rescheduledId).length,
-            AppColors.error,
+            colors.error,
           ),
           _Metric(
             'Instaladas',
             tasks
                 .where((t) => t.statusId == completedId && t.taskTypeId == installationTypeId)
                 .length,
-            AppColors.success,
+            colors.success,
           ),
           _Metric(
             'Tareas de instalación',
             tasks.where((t) => t.taskTypeId == installationTypeId).length,
-            AppColors.gold,
+            colors.primary,
           ),
           _Metric(
             'Pendientes',
             tasks.where((t) => t.statusId == pendingId).length,
-            AppColors.goldLight,
+            colors.primaryLight,
           ),
         ];
 
@@ -111,8 +112,8 @@ class StatusReportTab extends StatelessWidget {
                           title: '${m.value}',
                           color: m.color,
                           radius: 64,
-                          titleStyle: const TextStyle(
-                            color: AppColors.background,
+                          titleStyle: TextStyle(
+                            color: colors.background,
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
                           ),
@@ -127,21 +128,21 @@ class StatusReportTab extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                color: colors.surface,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.gold.withValues(alpha: 0.2)),
+                border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(LucideIcons.info, color: AppColors.gold, size: 16),
-                  SizedBox(width: 10),
+                  Icon(LucideIcons.info, color: colors.primary, size: 16),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       'Las categorías pueden superponerse (por ejemplo, una '
                       'instalación completada también cuenta como "tarea de '
                       'instalación"), por lo que el total puede no coincidir '
                       'con el número de tareas.',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      style: TextStyle(color: colors.textSecondary, fontSize: 12),
                     ),
                   ),
                 ],
@@ -170,6 +171,7 @@ class _LegendRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final percentage = total == 0 ? 0.0 : (metric.value / total * 100);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -187,13 +189,13 @@ class _LegendRow extends StatelessWidget {
           Expanded(
             child: Text(
               metric.label,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              style: TextStyle(color: colors.textPrimary, fontSize: 13),
             ),
           ),
           Text(
             '${metric.value} (${percentage.toStringAsFixed(0)}%)',
-            style: const TextStyle(
-              color: AppColors.textSecondary,
+            style: TextStyle(
+              color: colors.textSecondary,
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),

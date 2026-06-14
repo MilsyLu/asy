@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
 import 'widgets/groups_report_tab.dart';
 import 'widgets/performance_report_tab.dart';
@@ -53,6 +53,7 @@ class _ReportsPageState extends State<ReportsPage>
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Scaffold(
       body: Column(
         children: [
@@ -65,25 +66,25 @@ class _ReportsPageState extends State<ReportsPage>
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
+                  color: colors.surface,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
+                  border: Border.all(color: colors.primary.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(LucideIcons.calendarRange, color: AppColors.gold, size: 18),
+                    Icon(LucideIcons.calendarRange, color: colors.primary, size: 18),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         '${AppDateUtils.formatShortDate(_range.start)} - '
                         '${AppDateUtils.formatShortDate(_range.end)}',
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
+                        style: TextStyle(
+                          color: colors.textPrimary,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
-                    const Icon(LucideIcons.chevronDown, color: AppColors.textSecondary, size: 18),
+                    Icon(LucideIcons.chevronDown, color: colors.textSecondary, size: 18),
                   ],
                 ),
               ),
@@ -93,9 +94,9 @@ class _ReportsPageState extends State<ReportsPage>
           TabBar(
             controller: _tabController,
             isScrollable: true,
-            labelColor: AppColors.gold,
-            unselectedLabelColor: AppColors.textSecondary,
-            indicatorColor: AppColors.gold,
+            labelColor: colors.primary,
+            unselectedLabelColor: colors.textSecondary,
+            indicatorColor: colors.primary,
             tabs: const [
               Tab(text: 'Tareas'),
               Tab(text: 'Estados'),

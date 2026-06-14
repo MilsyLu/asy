@@ -14,6 +14,14 @@ class AppUser {
   final int maxStreakDays;
   final DateTime? createdAt;
 
+  /// Visual preferences (FASE 3): 'system' | 'light' | 'dark'. Defaults to
+  /// 'dark' for users without a stored preference, matching the app's
+  /// original always-dark theme.
+  final String themeMode;
+
+  /// Visual preferences (FASE 3): 'gold' | 'blue' | 'green' | 'purple'.
+  final String accentColor;
+
   const AppUser({
     required this.id,
     required this.email,
@@ -25,6 +33,8 @@ class AppUser {
     this.streakDays = 0,
     this.maxStreakDays = 0,
     this.createdAt,
+    this.themeMode = 'dark',
+    this.accentColor = 'gold',
   });
 
   bool get isSuperAdmin => role == AppRoles.superAdmin;
@@ -44,6 +54,8 @@ class AppUser {
       streakDays: (map['streakDays'] as num?)?.toInt() ?? 0,
       maxStreakDays: (map['maxStreakDays'] as num?)?.toInt() ?? 0,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate(),
+      themeMode: map['themeMode'] as String? ?? 'dark',
+      accentColor: map['accentColor'] as String? ?? 'gold',
     );
   }
 
@@ -63,6 +75,8 @@ class AppUser {
       'maxStreakDays': maxStreakDays,
       'createdAt':
           createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
+      'themeMode': themeMode,
+      'accentColor': accentColor,
     };
   }
 
@@ -74,6 +88,8 @@ class AppUser {
     DateTime? lastLogin,
     int? streakDays,
     int? maxStreakDays,
+    String? themeMode,
+    String? accentColor,
   }) {
     return AppUser(
       id: id,
@@ -86,6 +102,8 @@ class AppUser {
       streakDays: streakDays ?? this.streakDays,
       maxStreakDays: maxStreakDays ?? this.maxStreakDays,
       createdAt: createdAt,
+      themeMode: themeMode ?? this.themeMode,
+      accentColor: accentColor ?? this.accentColor,
     );
   }
 }

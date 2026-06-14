@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/theme_colors.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../models/app_user.dart';
 import '../../models/group_model.dart';
@@ -54,25 +54,26 @@ class _GroupCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.2)),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(LucideIcons.users, color: AppColors.gold, size: 18),
+              Icon(LucideIcons.users, color: colors.primary, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   group.name,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
+                  style: TextStyle(
+                    color: colors.textPrimary,
                     fontWeight: FontWeight.w600,
                     fontSize: 15,
                   ),
@@ -81,13 +82,13 @@ class _GroupCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.background,
+                  color: colors.background,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.gold.withValues(alpha: 0.4)),
+                  border: Border.all(color: colors.primary.withValues(alpha: 0.4)),
                 ),
                 child: Text(
                   '${members.length} ${members.length == 1 ? 'miembro' : 'miembros'}',
-                  style: const TextStyle(color: AppColors.gold, fontSize: 11),
+                  style: TextStyle(color: colors.primary, fontSize: 11),
                 ),
               ),
             ],
@@ -96,7 +97,7 @@ class _GroupCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               group.description,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              style: TextStyle(color: colors.textSecondary, fontSize: 13),
             ),
           ],
           const SizedBox(height: 10),
@@ -118,7 +119,7 @@ class _GroupCard extends StatelessWidget {
               ),
               TextButton.icon(
                 onPressed: () => _deleteGroup(context, group),
-                style: TextButton.styleFrom(foregroundColor: AppColors.error),
+                style: TextButton.styleFrom(foregroundColor: colors.error),
                 icon: const Icon(LucideIcons.trash2, size: 16),
                 label: const Text('Eliminar'),
               ),
@@ -131,6 +132,7 @@ class _GroupCard extends StatelessWidget {
 }
 
 Future<void> _showGroupFormDialog(BuildContext context, {GroupModel? existing}) async {
+  final colors = context.colors;
   final repo = context.read<CatalogRepository>();
   final nameController = TextEditingController(text: existing?.name ?? '');
   final descriptionController = TextEditingController(text: existing?.description ?? '');
@@ -152,7 +154,7 @@ Future<void> _showGroupFormDialog(BuildContext context, {GroupModel? existing}) 
                   TextFormField(
                     controller: nameController,
                     autofocus: true,
-                    style: const TextStyle(color: AppColors.textPrimary),
+                    style: TextStyle(color: colors.textPrimary),
                     decoration: const InputDecoration(labelText: 'Nombre'),
                     validator: (v) =>
                         (v == null || v.trim().isEmpty) ? 'El nombre es requerido' : null,
@@ -161,7 +163,7 @@ Future<void> _showGroupFormDialog(BuildContext context, {GroupModel? existing}) 
                   TextFormField(
                     controller: descriptionController,
                     maxLines: 2,
-                    style: const TextStyle(color: AppColors.textPrimary),
+                    style: TextStyle(color: colors.textPrimary),
                     decoration: const InputDecoration(labelText: 'Descripción (opcional)'),
                   ),
                 ],
@@ -247,6 +249,7 @@ Future<void> _deleteGroup(BuildContext context, GroupModel group) async {
 }
 
 Future<void> _showMembersDialog(BuildContext context, GroupModel group) async {
+  final colors = context.colors;
   final catalog = context.read<CatalogProvider>();
   final userRepo = context.read<UserRepository>();
   final allUsers = List<AppUser>.from(catalog.users)
@@ -268,9 +271,9 @@ Future<void> _showMembersDialog(BuildContext context, GroupModel group) async {
             content: SizedBox(
               width: double.maxFinite,
               child: allUsers.isEmpty
-                  ? const Text(
+                  ? Text(
                       'No hay usuarios registrados.',
-                      style: TextStyle(color: AppColors.textSecondary),
+                      style: TextStyle(color: colors.textSecondary),
                     )
                   : ListView.builder(
                       shrinkWrap: true,
@@ -281,15 +284,15 @@ Future<void> _showMembersDialog(BuildContext context, GroupModel group) async {
                             user.groupId != null && user.groupId != group.id;
                         return CheckboxListTile(
                           value: selected.contains(user.id),
-                          title: Text(user.name, style: const TextStyle(color: AppColors.textPrimary)),
+                          title: Text(user.name, style: TextStyle(color: colors.textPrimary)),
                           subtitle: Text(
                             isInOtherGroup
                                 ? '${user.email} · en "${catalog.groupName(user.groupId)}"'
                                 : user.email,
-                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                            style: TextStyle(color: colors.textSecondary, fontSize: 12),
                           ),
-                          activeColor: AppColors.gold,
-                          checkColor: AppColors.background,
+                          activeColor: colors.primary,
+                          checkColor: colors.background,
                           onChanged: (checked) {
                             setState(() {
                               if (checked == true) {

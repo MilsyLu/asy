@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../models/task_model.dart';
@@ -24,6 +24,7 @@ class ProfilePage extends StatelessWidget {
     final catalog = context.watch<CatalogProvider>();
     final repo = context.read<TaskRepository>();
     final user = auth.appUser;
+    final colors = context.colors;
 
     if (user == null) {
       return const Scaffold(body: LoadingIndicator());
@@ -39,9 +40,9 @@ class ProfilePage extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: colors.surface,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
+              border: Border.all(color: colors.primary.withValues(alpha: 0.3)),
             ),
             child: Column(
               children: [
@@ -50,15 +51,15 @@ class ProfilePage extends StatelessWidget {
                   height: 72,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.gold, width: 2),
+                    border: Border.all(color: colors.primary, width: 2),
                   ),
-                  child: const Icon(LucideIcons.userCircle, color: AppColors.gold, size: 40),
+                  child: Icon(LucideIcons.userCircle, color: colors.primary, size: 40),
                 ),
                 const SizedBox(height: 12),
                 Text(
                   user.name,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
+                  style: TextStyle(
+                    color: colors.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
@@ -66,7 +67,7 @@ class ProfilePage extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   user.email,
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  style: TextStyle(color: colors.textSecondary, fontSize: 13),
                 ),
                 const SizedBox(height: 12),
                 Wrap(
@@ -115,22 +116,22 @@ class ProfilePage extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: colors.surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.divider),
+              border: Border.all(color: colors.divider),
             ),
             child: Row(
               children: [
-                const Icon(LucideIcons.clock, color: AppColors.gold, size: 18),
+                Icon(LucideIcons.clock, color: colors.primary, size: 18),
                 const SizedBox(width: 10),
                 Text(
                   'Último ingreso: ',
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  style: TextStyle(color: colors.textSecondary, fontSize: 13),
                 ),
                 Text(
                   AppDateUtils.formatDateTimeOrDash(user.lastLogin),
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
+                  style: TextStyle(
+                    color: colors.textPrimary,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -140,13 +141,13 @@ class ProfilePage extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           Row(
-            children: const [
-              Icon(LucideIcons.listChecks, color: AppColors.gold, size: 18),
-              SizedBox(width: 8),
+            children: [
+              Icon(LucideIcons.listChecks, color: colors.primary, size: 18),
+              const SizedBox(width: 8),
               Text(
                 'Próximas tareas',
                 style: TextStyle(
-                  color: AppColors.textPrimary,
+                  color: colors.textPrimary,
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
@@ -206,6 +207,7 @@ class ProfilePage extends StatelessWidget {
                 message: '¿Estás seguro que deseas cerrar sesión?',
                 confirmLabel: 'Cerrar sesión',
                 destructive: true,
+                confirmForegroundColor: Colors.white,
               );
               if (confirm && context.mounted) {
                 try {
@@ -217,7 +219,7 @@ class ProfilePage extends StatelessWidget {
                 }
               }
             },
-            style: OutlinedButton.styleFrom(foregroundColor: AppColors.error),
+            style: OutlinedButton.styleFrom(foregroundColor: colors.error),
             icon: const Icon(LucideIcons.logOut),
             label: const Text('Cerrar sesión'),
           ),
@@ -236,19 +238,20 @@ class _InfoChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: colors.background,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.4)),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: AppColors.gold),
+          Icon(icon, size: 14, color: colors.primary),
           const SizedBox(width: 6),
-          Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          Text(label, style: TextStyle(color: colors.textSecondary, fontSize: 12)),
         ],
       ),
     );
@@ -270,21 +273,22 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.divider),
+        border: Border.all(color: colors.divider),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: AppColors.gold, size: 16),
+              Icon(icon, color: colors.primary, size: 16),
               const SizedBox(width: 6),
-              Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+              Text(label, style: TextStyle(color: colors.textSecondary, fontSize: 12)),
             ],
           ),
           const SizedBox(height: 8),
@@ -294,14 +298,14 @@ class _StatCard extends StatelessWidget {
             children: [
               Text(
                 value,
-                style: const TextStyle(
-                  color: AppColors.gold,
+                style: TextStyle(
+                  color: colors.primary,
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(width: 6),
-              Text(suffix, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+              Text(suffix, style: TextStyle(color: colors.textSecondary, fontSize: 12)),
             ],
           ),
         ],

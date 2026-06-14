@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/theme_colors.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../models/status_model.dart';
 import '../../providers/catalog_provider.dart';
@@ -18,6 +18,7 @@ class StatusesPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
     final statuses = catalog.statuses;
+    final colors = context.colors;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Estados')),
@@ -27,20 +28,20 @@ class StatusesPage extends StatelessWidget {
             margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: colors.surface,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.gold.withValues(alpha: 0.2)),
+              border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Icon(LucideIcons.info, color: AppColors.gold, size: 16),
-                SizedBox(width: 10),
+                Icon(LucideIcons.info, color: colors.primary, size: 16),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     'Las funciones automáticas usan los nombres exactos '
                     '"Pendiente", "Completada" y "Reprogramada". Evita '
                     'renombrarlos o eliminarlos.',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    style: TextStyle(color: colors.textSecondary, fontSize: 12),
                   ),
                 ),
               ],
@@ -60,26 +61,26 @@ class StatusesPage extends StatelessWidget {
                       final status = statuses[index];
                       return Container(
                         decoration: BoxDecoration(
-                          color: AppColors.surface,
+                          color: colors.surface,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.gold.withValues(alpha: 0.2)),
+                          border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
                         ),
                         child: ListTile(
-                          leading: const Icon(LucideIcons.listChecks, color: AppColors.gold),
-                          title: Text(status.name, style: const TextStyle(color: AppColors.textPrimary)),
+                          leading: Icon(LucideIcons.listChecks, color: colors.primary),
+                          title: Text(status.name, style: TextStyle(color: colors.textPrimary)),
                           subtitle: Text(
                             'Orden: ${status.order}',
-                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                            style: TextStyle(color: colors.textSecondary, fontSize: 12),
                           ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
-                                icon: const Icon(LucideIcons.pencil, color: AppColors.gold, size: 18),
+                                icon: Icon(LucideIcons.pencil, color: colors.primary, size: 18),
                                 onPressed: () => _showStatusFormDialog(context, existing: status),
                               ),
                               IconButton(
-                                icon: const Icon(LucideIcons.trash2, color: AppColors.error, size: 18),
+                                icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
                                 onPressed: () => _deleteStatus(context, status),
                               ),
                             ],
@@ -100,6 +101,7 @@ class StatusesPage extends StatelessWidget {
 }
 
 Future<void> _showStatusFormDialog(BuildContext context, {StatusModel? existing}) async {
+  final colors = context.colors;
   final repo = context.read<CatalogRepository>();
   final catalog = context.read<CatalogProvider>();
   final nameController = TextEditingController(text: existing?.name ?? '');
@@ -124,7 +126,7 @@ Future<void> _showStatusFormDialog(BuildContext context, {StatusModel? existing}
                   TextFormField(
                     controller: nameController,
                     autofocus: true,
-                    style: const TextStyle(color: AppColors.textPrimary),
+                    style: TextStyle(color: colors.textPrimary),
                     decoration: const InputDecoration(labelText: 'Nombre'),
                     validator: (v) =>
                         (v == null || v.trim().isEmpty) ? 'El nombre es requerido' : null,
@@ -133,7 +135,7 @@ Future<void> _showStatusFormDialog(BuildContext context, {StatusModel? existing}
                   TextFormField(
                     controller: orderController,
                     keyboardType: TextInputType.number,
-                    style: const TextStyle(color: AppColors.textPrimary),
+                    style: TextStyle(color: colors.textPrimary),
                     decoration: const InputDecoration(labelText: 'Orden'),
                     validator: (v) =>
                         int.tryParse(v ?? '') == null ? 'Ingresa un número' : null,

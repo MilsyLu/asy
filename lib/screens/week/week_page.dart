@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/task_visibility.dart';
 import '../../models/task_model.dart';
@@ -57,6 +57,7 @@ class _WeekPageState extends State<WeekPage> {
     final catalog = context.watch<CatalogProvider>();
     final auth = context.watch<AuthProvider>();
     final currentUser = auth.appUser;
+    final colors = context.colors;
     final weekEnd = _weekStart.add(const Duration(days: 6));
 
     if (currentUser == null) {
@@ -75,7 +76,7 @@ class _WeekPageState extends State<WeekPage> {
             child: Row(
               children: [
                 IconButton(
-                  icon: const Icon(LucideIcons.chevronLeft, color: AppColors.gold),
+                  icon: Icon(LucideIcons.chevronLeft, color: colors.primary),
                   onPressed: () {
                     setState(() => _weekStart = _weekStart.subtract(const Duration(days: 7)));
                   },
@@ -84,15 +85,15 @@ class _WeekPageState extends State<WeekPage> {
                   child: Center(
                     child: Text(
                       '${AppDateUtils.formatShortDate(_weekStart)} - ${AppDateUtils.formatShortDate(weekEnd)}',
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
+                      style: TextStyle(
+                        color: colors.textPrimary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(LucideIcons.chevronRight, color: AppColors.gold),
+                  icon: Icon(LucideIcons.chevronRight, color: colors.primary),
                   onPressed: () {
                     setState(() => _weekStart = _weekStart.add(const Duration(days: 7)));
                   },
@@ -148,16 +149,16 @@ class _WeekPageState extends State<WeekPage> {
                               Container(
                                 height: _rowHeight,
                                 alignment: Alignment.center,
-                                decoration: const BoxDecoration(
+                                decoration: BoxDecoration(
                                   border: Border(
-                                    top: BorderSide(color: AppColors.divider),
-                                    right: BorderSide(color: AppColors.divider),
+                                    top: BorderSide(color: colors.divider),
+                                    right: BorderSide(color: colors.divider),
                                   ),
                                 ),
                                 child: Text(
                                   hour,
-                                  style: const TextStyle(
-                                    color: AppColors.gold,
+                                  style: TextStyle(
+                                    color: colors.primary,
                                     fontWeight: FontWeight.w600,
                                     fontSize: 12,
                                   ),
@@ -183,10 +184,10 @@ class _WeekPageState extends State<WeekPage> {
                                       width: _dayColumnWidth,
                                       height: _headerHeight,
                                       alignment: Alignment.center,
-                                      decoration: const BoxDecoration(
+                                      decoration: BoxDecoration(
                                         border: Border(
-                                          bottom: BorderSide(color: AppColors.gold, width: 1.5),
-                                          right: BorderSide(color: AppColors.divider),
+                                          bottom: BorderSide(color: colors.primary, width: 1.5),
+                                          right: BorderSide(color: colors.divider),
                                         ),
                                       ),
                                       child: Column(
@@ -194,16 +195,16 @@ class _WeekPageState extends State<WeekPage> {
                                         children: [
                                           Text(
                                             _dayLabels[day.weekday - 1],
-                                            style: const TextStyle(
-                                              color: AppColors.gold,
+                                            style: TextStyle(
+                                              color: colors.primary,
                                               fontWeight: FontWeight.bold,
                                               fontSize: 12,
                                             ),
                                           ),
                                           Text(
                                             AppDateUtils.formatShortDate(day),
-                                            style: const TextStyle(
-                                              color: AppColors.textSecondary,
+                                            style: TextStyle(
+                                              color: colors.textSecondary,
                                               fontSize: 11,
                                             ),
                                           ),
@@ -268,14 +269,15 @@ class _WeekCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       width: _dayColumnWidth,
       height: _rowHeight,
       padding: const EdgeInsets.all(3),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(
-          top: BorderSide(color: AppColors.divider),
-          right: BorderSide(color: AppColors.divider),
+          top: BorderSide(color: colors.divider),
+          right: BorderSide(color: colors.divider),
         ),
       ),
       child: tasks.isEmpty
@@ -290,10 +292,10 @@ class _WeekCell extends StatelessWidget {
                       margin: const EdgeInsets.only(bottom: 3),
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppColors.surface,
+                        color: colors.surface,
                         borderRadius: BorderRadius.circular(6),
-                        border: const Border(
-                          left: BorderSide(color: AppColors.gold, width: 3),
+                        border: Border(
+                          left: BorderSide(color: colors.primary, width: 3),
                         ),
                       ),
                       child: Column(
@@ -302,8 +304,8 @@ class _WeekCell extends StatelessWidget {
                         children: [
                           Text(
                             task.clientName,
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
+                            style: TextStyle(
+                              color: colors.textPrimary,
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                             ),
@@ -312,8 +314,8 @@ class _WeekCell extends StatelessWidget {
                           ),
                           Text(
                             catalog.taskTypeName(task.taskTypeId),
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
+                            style: TextStyle(
+                              color: colors.textSecondary,
                               fontSize: 10,
                             ),
                             maxLines: 1,

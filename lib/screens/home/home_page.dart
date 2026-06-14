@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/task_visibility.dart';
 import '../../models/task_model.dart';
@@ -99,13 +99,13 @@ class _HomePageState extends State<HomePage> {
                   children: [
                     Row(
                       children: [
-                        const Icon(LucideIcons.calendar, color: AppColors.gold, size: 20),
+                        Icon(LucideIcons.calendar, color: context.colors.primary, size: 20),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             _capitalize(AppDateUtils.formatHumanDate(_today)),
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
+                            style: TextStyle(
+                              color: context.colors.textPrimary,
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),
@@ -165,11 +165,11 @@ class _HomePageState extends State<HomePage> {
       ),
       const SizedBox(height: 10),
       if (agenda.agendaToday.isEmpty)
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
           child: Text(
             'No hay tareas pendientes ni reprogramadas para hoy.',
-            style: TextStyle(color: AppColors.textSecondary),
+            style: TextStyle(color: context.colors.textSecondary),
           ),
         )
       else
@@ -295,7 +295,7 @@ class _CountersGrid extends StatelessWidget {
                 label: 'Pendientes hoy',
                 count: agenda.pendingToday.length,
                 icon: LucideIcons.circleDot,
-                color: AppColors.gold,
+                color: context.colors.primary,
               ),
             ),
             const SizedBox(width: 10),
@@ -304,7 +304,7 @@ class _CountersGrid extends StatelessWidget {
                 label: 'Reprogramadas hoy',
                 count: agenda.rescheduledToday.length,
                 icon: LucideIcons.repeat,
-                color: AppColors.goldLight,
+                color: context.colors.primaryLight,
               ),
             ),
           ],
@@ -317,7 +317,7 @@ class _CountersGrid extends StatelessWidget {
                 label: 'Completadas hoy',
                 count: agenda.completedToday.length,
                 icon: LucideIcons.checkCircle2,
-                color: AppColors.success,
+                color: context.colors.success,
               ),
             ),
             const SizedBox(width: 10),
@@ -326,7 +326,7 @@ class _CountersGrid extends StatelessWidget {
                 label: 'Atrasadas',
                 count: agenda.overdue.length,
                 icon: LucideIcons.alertTriangle,
-                color: AppColors.error,
+                color: context.colors.error,
               ),
             ),
           ],
@@ -354,7 +354,7 @@ class _CounterCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: context.colors.surface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
@@ -374,7 +374,7 @@ class _CounterCard extends StatelessWidget {
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                  style: TextStyle(color: context.colors.textSecondary, fontSize: 11),
                 ),
               ],
             ),
@@ -390,27 +390,28 @@ class _SectionHeader extends StatelessWidget {
     required this.icon,
     required this.title,
     this.count,
-    this.color = AppColors.gold,
+    this.color,
     this.trailing,
   });
 
   final IconData icon;
   final String title;
   final int? count;
-  final Color color;
+  final Color? color;
   final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
+    final effectiveColor = color ?? context.colors.primary;
     return Row(
       children: [
-        Icon(icon, color: color, size: 18),
+        Icon(icon, color: effectiveColor, size: 18),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             title,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
+            style: TextStyle(
+              color: context.colors.textPrimary,
               fontSize: 15,
               fontWeight: FontWeight.w600,
             ),
@@ -420,12 +421,12 @@ class _SectionHeader extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
+              color: effectiveColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
               '$count',
-              style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+              style: TextStyle(color: effectiveColor, fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ),
           if (trailing != null) const SizedBox(width: 8),
@@ -453,9 +454,9 @@ class _CompletedTodaySection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: context.colors.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.success.withValues(alpha: 0.25)),
+        border: Border.all(color: context.colors.success.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -469,10 +470,10 @@ class _CompletedTodaySection extends StatelessWidget {
                 icon: LucideIcons.checkCircle2,
                 title: 'Completadas hoy',
                 count: tasks.length,
-                color: AppColors.success,
+                color: context.colors.success,
                 trailing: Icon(
                   expanded ? LucideIcons.chevronUp : LucideIcons.chevronDown,
-                  color: AppColors.textSecondary,
+                  color: context.colors.textSecondary,
                   size: 18,
                 ),
               ),
@@ -502,9 +503,9 @@ class _OverdueSection extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.error.withValues(alpha: 0.06),
+        color: context.colors.error.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
+        border: Border.all(color: context.colors.error.withValues(alpha: 0.35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -513,7 +514,7 @@ class _OverdueSection extends StatelessWidget {
             icon: LucideIcons.alertTriangle,
             title: 'Tareas atrasadas',
             count: tasks.length,
-            color: AppColors.error,
+            color: context.colors.error,
           ),
           const SizedBox(height: 10),
           for (final t in tasks) ...[
@@ -521,8 +522,8 @@ class _OverdueSection extends StatelessWidget {
               padding: const EdgeInsets.only(left: 2, bottom: 4),
               child: Text(
                 AppDateUtils.formatShortDate(AppDateUtils.parseDateKey(t.date)),
-                style: const TextStyle(
-                  color: AppColors.error,
+                style: TextStyle(
+                  color: context.colors.error,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -614,11 +615,11 @@ class _FiltersBar extends StatelessWidget {
             Expanded(
               child: TextField(
                 controller: clientController,
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
                 decoration: InputDecoration(
                   isDense: true,
                   labelText: 'Cliente',
-                  prefixIcon: const Icon(LucideIcons.search, color: AppColors.gold, size: 18),
+                  prefixIcon: Icon(LucideIcons.search, color: context.colors.primary, size: 18),
                   suffixIcon: clientController.text.isEmpty
                       ? null
                       : IconButton(
@@ -662,9 +663,9 @@ class _FilterDropdown<T> extends StatelessWidget {
       decoration: InputDecoration(
         isDense: true,
         labelText: label,
-        prefixIcon: Icon(icon, color: AppColors.gold, size: 18),
+        prefixIcon: Icon(icon, color: context.colors.primary, size: 18),
       ),
-      dropdownColor: AppColors.surface,
+      dropdownColor: context.colors.surface,
       items: [
         const DropdownMenuItem(value: null, child: Text('Todos')),
         ...items,

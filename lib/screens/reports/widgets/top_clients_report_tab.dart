@@ -3,7 +3,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_constants.dart';
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/task_visibility.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/auth_provider.dart';
@@ -23,6 +23,7 @@ class TopClientsReportTab extends StatelessWidget {
     final repo = context.read<TaskRepository>();
     final catalog = context.watch<CatalogProvider>();
     final currentUser = context.watch<AuthProvider>().appUser;
+    final colors = context.colors;
 
     if (currentUser == null) return const LoadingIndicator();
 
@@ -76,26 +77,26 @@ class TopClientsReportTab extends StatelessWidget {
             final c = top[index];
             return Container(
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                color: colors.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.gold.withValues(alpha: 0.2)),
+                border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
               ),
               child: ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: AppColors.background,
+                  backgroundColor: colors.background,
                   child: Text(
                     '${index + 1}',
-                    style: const TextStyle(color: AppColors.gold, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: colors.primary, fontWeight: FontWeight.bold),
                   ),
                 ),
-                title: Text(c.clientName, style: const TextStyle(color: AppColors.textPrimary)),
+                title: Text(c.clientName, style: TextStyle(color: colors.textPrimary)),
                 subtitle: Text(
                   c.clientPhone,
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  style: TextStyle(color: colors.textSecondary, fontSize: 12),
                 ),
                 trailing: Text(
                   c.count == 1 ? '1 instalación' : '${c.count} instalaciones',
-                  style: const TextStyle(color: AppColors.gold, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: colors.primary, fontWeight: FontWeight.w600),
                 ),
               ),
             );

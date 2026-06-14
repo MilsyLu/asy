@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/task_visibility.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/auth_provider.dart';
@@ -24,6 +24,7 @@ class GroupsReportTab extends StatelessWidget {
     final repo = context.read<TaskRepository>();
     final catalog = context.watch<CatalogProvider>();
     final currentUser = context.watch<AuthProvider>().appUser;
+    final colors = context.colors;
 
     if (currentUser == null) return const LoadingIndicator();
 
@@ -107,21 +108,21 @@ class GroupsReportTab extends StatelessWidget {
                     icon: LucideIcons.briefcase,
                     label: 'Más tareas asignadas',
                     highlight: mostAssigned,
-                    color: AppColors.gold,
+                    color: colors.primary,
                   ),
                 if (mostCompleted != null)
                   _HighlightCard(
                     icon: LucideIcons.trophy,
                     label: 'Más tareas completadas',
                     highlight: mostCompleted,
-                    color: AppColors.success,
+                    color: colors.success,
                   ),
                 if (bestPerformance != null)
                   _HighlightCard(
                     icon: LucideIcons.trendingUp,
                     label: 'Mejor rendimiento',
                     highlight: bestPerformance,
-                    color: AppColors.success,
+                    color: colors.success,
                     suffix: '%',
                   ),
                 if (worstPerformance != null)
@@ -129,7 +130,7 @@ class GroupsReportTab extends StatelessWidget {
                     icon: LucideIcons.trendingDown,
                     label: 'Menor rendimiento',
                     highlight: worstPerformance,
-                    color: AppColors.error,
+                    color: colors.error,
                     suffix: '%',
                   ),
               ],
@@ -199,13 +200,14 @@ class _HighlightCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       width: 160,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.divider),
+        border: Border.all(color: colors.divider),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -217,7 +219,7 @@ class _HighlightCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                  style: TextStyle(color: colors.textSecondary, fontSize: 11),
                 ),
               ),
             ],
@@ -227,8 +229,8 @@ class _HighlightCard extends StatelessWidget {
             highlight.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
+            style: TextStyle(
+              color: colors.textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),

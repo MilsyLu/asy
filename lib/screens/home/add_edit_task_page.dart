@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../core/utils/validators.dart';
@@ -251,6 +251,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     final auth = context.watch<AuthProvider>();
     final currentUser = auth.appUser!;
     final isAdmin = auth.isSuperAdmin;
+    final colors = context.colors;
 
     _assignedUserId ??= currentUser.id;
     if (_taskTypeId == null && catalog.taskTypes.isNotEmpty) {
@@ -284,9 +285,9 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
             InkWell(
               onTap: _pickDate,
               child: InputDecorator(
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Fecha',
-                  prefixIcon: Icon(LucideIcons.calendar, color: AppColors.gold),
+                  prefixIcon: Icon(LucideIcons.calendar, color: colors.primary),
                 ),
                 child: Text(AppDateUtils.formatShortDate(_selectedDate)),
               ),
@@ -296,11 +297,11 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
               initialValue: catalog.availableHours.any((h) => h.hour == _selectedHour)
                   ? _selectedHour
                   : null,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Hora',
-                prefixIcon: Icon(LucideIcons.clock, color: AppColors.gold),
+                prefixIcon: Icon(LucideIcons.clock, color: colors.primary),
               ),
-              dropdownColor: AppColors.surface,
+              dropdownColor: colors.surface,
               items: catalog.availableHours
                   .map((h) => DropdownMenuItem(value: h.hour, child: Text(h.hour)))
                   .toList(),
@@ -312,11 +313,11 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
               initialValue: assignableUsers.any((u) => u.id == _assignedUserId)
                   ? _assignedUserId
                   : null,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Encargado',
-                prefixIcon: Icon(LucideIcons.userCheck, color: AppColors.gold),
+                prefixIcon: Icon(LucideIcons.userCheck, color: colors.primary),
               ),
-              dropdownColor: AppColors.surface,
+              dropdownColor: colors.surface,
               items: assignableUsers
                   .map((u) => DropdownMenuItem(value: u.id, child: Text(u.name)))
                   .toList(),
@@ -326,11 +327,11 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               initialValue: groupOptions.any((g) => g.id == _groupId) ? _groupId : null,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Grupo',
-                prefixIcon: Icon(LucideIcons.users, color: AppColors.gold),
+                prefixIcon: Icon(LucideIcons.users, color: colors.primary),
               ),
-              dropdownColor: AppColors.surface,
+              dropdownColor: colors.surface,
               items: groupOptions
                   .map((g) => DropdownMenuItem(value: g.id, child: Text(g.name)))
                   .toList(),
@@ -340,12 +341,12 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
             const SizedBox(height: 8),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              activeThumbColor: AppColors.gold,
-              secondary: const Icon(LucideIcons.globe, color: AppColors.gold),
+              activeThumbColor: colors.primary,
+              secondary: Icon(LucideIcons.globe, color: colors.primary),
               title: const Text('Visible para todos los grupos'),
-              subtitle: const Text(
+              subtitle: Text(
                 'Si está desactivado, solo el grupo seleccionado podrá ver esta tarea.',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                style: TextStyle(color: colors.textSecondary, fontSize: 12),
               ),
               value: _visibleToAllGroups,
               onChanged: (v) => setState(() => _visibleToAllGroups = v),
@@ -355,11 +356,11 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
               initialValue: catalog.taskTypes.any((t) => t.id == _taskTypeId)
                   ? _taskTypeId
                   : null,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Tipo de tarea',
-                prefixIcon: Icon(LucideIcons.tag, color: AppColors.gold),
+                prefixIcon: Icon(LucideIcons.tag, color: colors.primary),
               ),
-              dropdownColor: AppColors.surface,
+              dropdownColor: colors.surface,
               items: catalog.taskTypes
                   .map((t) => DropdownMenuItem(value: t.id, child: Text(t.name)))
                   .toList(),
@@ -372,11 +373,11 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                 initialValue: catalog.statuses.any((s) => s.id == _statusId)
                     ? _statusId
                     : null,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Estado',
-                  prefixIcon: Icon(LucideIcons.listChecks, color: AppColors.gold),
+                  prefixIcon: Icon(LucideIcons.listChecks, color: colors.primary),
                 ),
-                dropdownColor: AppColors.surface,
+                dropdownColor: colors.surface,
                 items: catalog.statuses
                     .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name)))
                     .toList(),
@@ -386,10 +387,10 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _clientNameController,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(
+              style: TextStyle(color: colors.textPrimary),
+              decoration: InputDecoration(
                 labelText: 'Nombre del cliente',
-                prefixIcon: Icon(LucideIcons.userCircle, color: AppColors.gold),
+                prefixIcon: Icon(LucideIcons.userCircle, color: colors.primary),
               ),
               validator: (v) => Validators.required(v, fieldName: 'El nombre del cliente'),
             ),
@@ -397,10 +398,10 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
             TextFormField(
               controller: _clientPhoneController,
               keyboardType: TextInputType.phone,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(
+              style: TextStyle(color: colors.textPrimary),
+              decoration: InputDecoration(
                 labelText: 'Teléfono del cliente',
-                prefixIcon: Icon(LucideIcons.phone, color: AppColors.gold),
+                prefixIcon: Icon(LucideIcons.phone, color: colors.primary),
                 hintText: '+56 9 1234 5678',
               ),
               validator: Validators.phone,
@@ -409,13 +410,13 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
             TextFormField(
               controller: _observationsController,
               maxLines: 3,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(
+              style: TextStyle(color: colors.textPrimary),
+              decoration: InputDecoration(
                 labelText: 'Observaciones',
                 alignLabelWithHint: true,
                 prefixIcon: Padding(
-                  padding: EdgeInsets.only(bottom: 40),
-                  child: Icon(LucideIcons.pencil, color: AppColors.gold),
+                  padding: const EdgeInsets.only(bottom: 40),
+                  child: Icon(LucideIcons.pencil, color: colors.primary),
                 ),
               ),
             ),
@@ -425,10 +426,10 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
               child: InputDecorator(
                 decoration: InputDecoration(
                   labelText: 'Recordatorio (opcional)',
-                  prefixIcon: const Icon(LucideIcons.barChart3, color: AppColors.gold),
+                  prefixIcon: Icon(LucideIcons.barChart3, color: colors.primary),
                   suffixIcon: _reminderDateTime != null
                       ? IconButton(
-                          icon: const Icon(LucideIcons.xCircle, color: AppColors.textSecondary),
+                          icon: Icon(LucideIcons.xCircle, color: colors.textSecondary),
                           onPressed: () => setState(() => _reminderDateTime = null),
                         )
                       : null,
@@ -440,11 +441,11 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                 ),
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.only(top: 6, left: 4),
+            Padding(
+              padding: const EdgeInsets.only(top: 6, left: 4),
               child: Text(
                 'El recordatorio debe ser anterior a la hora de la tarea.',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                style: TextStyle(color: colors.textSecondary, fontSize: 12),
               ),
             ),
             const SizedBox(height: 28),
