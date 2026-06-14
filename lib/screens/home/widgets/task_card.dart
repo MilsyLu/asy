@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_constants.dart';
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/snackbar_utils.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/auth_provider.dart';
@@ -75,13 +75,14 @@ class TaskCard extends StatelessWidget {
     final taskType = catalog.taskTypeName(task.taskTypeId);
     final statusName = catalog.statusName(task.statusId);
     final assignedName = catalog.userName(task.assignedUserId);
+    final colors = context.colors;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.18)),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.18)),
         boxShadow: const [],
       ),
       child: IntrinsicHeight(
@@ -90,9 +91,9 @@ class TaskCard extends StatelessWidget {
           children: [
             Container(
               width: 4,
-              decoration: const BoxDecoration(
-                color: AppColors.gold,
-                borderRadius: BorderRadius.horizontal(left: Radius.circular(10)),
+              decoration: BoxDecoration(
+                color: colors.primary,
+                borderRadius: const BorderRadius.horizontal(left: Radius.circular(10)),
               ),
             ),
             Expanded(
@@ -103,12 +104,12 @@ class TaskCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(LucideIcons.clock, size: 16, color: AppColors.gold),
+                        Icon(LucideIcons.clock, size: 16, color: colors.primary),
                         const SizedBox(width: 6),
                         Text(
                           task.hour,
-                          style: const TextStyle(
-                            color: AppColors.textPrimary,
+                          style: TextStyle(
+                            color: colors.textPrimary,
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                           ),
@@ -117,8 +118,8 @@ class TaskCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             taskType,
-                            style: const TextStyle(
-                              color: AppColors.goldLight,
+                            style: TextStyle(
+                              color: colors.primaryLight,
                               fontWeight: FontWeight.w600,
                             ),
                             overflow: TextOverflow.ellipsis,
@@ -130,12 +131,12 @@ class TaskCard extends StatelessWidget {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(LucideIcons.userCircle, size: 15, color: AppColors.textSecondary),
+                        Icon(LucideIcons.userCircle, size: 15, color: colors.textSecondary),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             task.clientName,
-                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                            style: TextStyle(color: colors.textPrimary, fontSize: 14),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -147,12 +148,12 @@ class TaskCard extends StatelessWidget {
                         onTap: () => _callClient(context),
                         child: Row(
                           children: [
-                            const Icon(LucideIcons.phone, size: 15, color: AppColors.gold),
+                            Icon(LucideIcons.phone, size: 15, color: colors.primary),
                             const SizedBox(width: 6),
                             Text(
                               task.clientPhone,
-                              style: const TextStyle(
-                                color: AppColors.gold,
+                              style: TextStyle(
+                                color: colors.primary,
                                 fontSize: 13,
                                 decoration: TextDecoration.underline,
                               ),
@@ -165,7 +166,7 @@ class TaskCard extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         task.observations,
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                        style: TextStyle(color: colors.textSecondary, fontSize: 13),
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -173,19 +174,19 @@ class TaskCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        const Icon(LucideIcons.userCheck, size: 13, color: AppColors.textSecondary),
+                        Icon(LucideIcons.userCheck, size: 13, color: colors.textSecondary),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             'Encargado: $assignedName',
-                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                            style: TextStyle(color: colors.textSecondary, fontSize: 12),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         if (task.rescheduledCount > 0)
                           Text(
                             'Reprogramada x${task.rescheduledCount}',
-                            style: const TextStyle(color: AppColors.error, fontSize: 11),
+                            style: TextStyle(color: colors.error, fontSize: 11),
                           ),
                       ],
                     ),
@@ -218,7 +219,7 @@ class TaskCard extends StatelessWidget {
                           if (canComplete)
                             TextButton.icon(
                               onPressed: () => _completeTask(context),
-                              style: TextButton.styleFrom(foregroundColor: AppColors.success),
+                              style: TextButton.styleFrom(foregroundColor: colors.success),
                               icon: const Icon(LucideIcons.checkCircle, size: 16),
                               label: const Text('Completar'),
                             ),
@@ -244,12 +245,13 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final isReprogramada = statusName == AppStatusNames.reprogramada;
     final color = isCompleted
-        ? AppColors.success
+        ? colors.success
         : isReprogramada
-            ? AppColors.error
-            : AppColors.gold;
+            ? colors.error
+            : colors.primary;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -269,6 +271,7 @@ class _StatusChip extends StatelessWidget {
 /// Bottom sheet with quick actions (Editar / Reprogramar / Completar) for
 /// a task, used by long-press gestures on the Calendar and Week views.
 Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
+  final colors = context.colors;
   final catalog = context.read<CatalogProvider>();
   final auth = context.read<AuthProvider>();
 
@@ -280,7 +283,7 @@ Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
 
   return showModalBottomSheet(
     context: context,
-    backgroundColor: AppColors.surface,
+    backgroundColor: colors.surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
@@ -293,13 +296,13 @@ Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Row(
                 children: [
-                  const Icon(LucideIcons.clock, color: AppColors.gold, size: 18),
+                  Icon(LucideIcons.clock, color: colors.primary, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       '${task.hour} · ${task.clientName}',
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
+                      style: TextStyle(
+                        color: colors.textPrimary,
                         fontWeight: FontWeight.bold,
                       ),
                       overflow: TextOverflow.ellipsis,
@@ -311,7 +314,7 @@ Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
             const Divider(height: 1),
             if (canEdit)
               ListTile(
-                leading: const Icon(LucideIcons.pencil, color: AppColors.gold),
+                leading: Icon(LucideIcons.pencil, color: colors.primary),
                 title: const Text('Editar'),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
@@ -322,7 +325,7 @@ Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
               ),
             if (canReschedule)
               ListTile(
-                leading: const Icon(LucideIcons.repeat, color: AppColors.gold),
+                leading: Icon(LucideIcons.repeat, color: colors.primary),
                 title: const Text('Reprogramar'),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
@@ -331,7 +334,7 @@ Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
               ),
             if (canComplete)
               ListTile(
-                leading: const Icon(LucideIcons.checkCircle, color: AppColors.success),
+                leading: Icon(LucideIcons.checkCircle, color: colors.success),
                 title: const Text('Completar'),
                 onTap: () async {
                   Navigator.of(sheetContext).pop();
@@ -358,11 +361,11 @@ Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
                 },
               ),
             if (!canEdit && !canComplete && !canReschedule)
-              const Padding(
-                padding: EdgeInsets.all(20),
+              Padding(
+                padding: const EdgeInsets.all(20),
                 child: Text(
                   'Esta tarea ya fue completada.',
-                  style: TextStyle(color: AppColors.textSecondary),
+                  style: TextStyle(color: colors.textSecondary),
                 ),
               ),
             const SizedBox(height: 8),

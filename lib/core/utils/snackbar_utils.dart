@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
+import '../theme/theme_colors.dart';
 
 /// Helpers for showing user-friendly feedback instead of raw exceptions.
 class SnackbarUtils {
   SnackbarUtils._();
 
   static void showError(BuildContext context, String message) {
+    final colors = context.colors;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.error_outline, color: AppColors.error),
+            Icon(Icons.error_outline, color: colors.error),
             const SizedBox(width: 12),
             Expanded(child: Text(message)),
           ],
@@ -21,12 +22,13 @@ class SnackbarUtils {
   }
 
   static void showSuccess(BuildContext context, String message) {
+    final colors = context.colors;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.check_circle_outline, color: AppColors.success),
+            Icon(Icons.check_circle_outline, color: colors.success),
             const SizedBox(width: 12),
             Expanded(child: Text(message)),
           ],
@@ -36,12 +38,13 @@ class SnackbarUtils {
   }
 
   static void showInfo(BuildContext context, String message) {
+    final colors = context.colors;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.info_outline, color: AppColors.gold),
+            Icon(Icons.info_outline, color: colors.primary),
             const SizedBox(width: 12),
             Expanded(child: Text(message)),
           ],

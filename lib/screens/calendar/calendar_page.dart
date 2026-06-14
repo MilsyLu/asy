@@ -3,7 +3,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/task_visibility.dart';
 import '../../models/task_model.dart';
@@ -34,6 +34,7 @@ class _CalendarPageState extends State<CalendarPage> {
     final catalog = context.watch<CatalogProvider>();
     final auth = context.watch<AuthProvider>();
     final currentUser = auth.appUser;
+    final colors = context.colors;
 
     // Pull a wide-enough window so paging months doesn't require a
     // new query for the visible range immediately.
@@ -94,37 +95,37 @@ class _CalendarPageState extends State<CalendarPage> {
                 },
                 eventLoader: (day) =>
                     tasksByDate[AppDateUtils.formatDateKey(day)] ?? [],
-                headerStyle: const HeaderStyle(
+                headerStyle: HeaderStyle(
                   formatButtonVisible: false,
                   titleCentered: true,
-                  titleTextStyle: TextStyle(color: AppColors.gold, fontWeight: FontWeight.bold, fontSize: 17),
-                  leftChevronIcon: Icon(LucideIcons.chevronLeft, color: AppColors.gold),
-                  rightChevronIcon: Icon(LucideIcons.chevronRight, color: AppColors.gold),
+                  titleTextStyle: TextStyle(color: colors.primary, fontWeight: FontWeight.bold, fontSize: 17),
+                  leftChevronIcon: Icon(LucideIcons.chevronLeft, color: colors.primary),
+                  rightChevronIcon: Icon(LucideIcons.chevronRight, color: colors.primary),
                 ),
-                daysOfWeekStyle: const DaysOfWeekStyle(
-                  weekdayStyle: TextStyle(color: AppColors.textSecondary),
-                  weekendStyle: TextStyle(color: AppColors.textSecondary),
+                daysOfWeekStyle: DaysOfWeekStyle(
+                  weekdayStyle: TextStyle(color: colors.textSecondary),
+                  weekendStyle: TextStyle(color: colors.textSecondary),
                 ),
                 calendarStyle: CalendarStyle(
-                  defaultTextStyle: const TextStyle(color: AppColors.textPrimary),
-                  weekendTextStyle: const TextStyle(color: AppColors.textPrimary),
-                  outsideTextStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.4)),
+                  defaultTextStyle: TextStyle(color: colors.textPrimary),
+                  weekendTextStyle: TextStyle(color: colors.textPrimary),
+                  outsideTextStyle: TextStyle(color: colors.textSecondary.withValues(alpha: 0.4)),
                   todayDecoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.gold, width: 1.5),
+                    border: Border.all(color: colors.primary, width: 1.5),
                   ),
-                  todayTextStyle: const TextStyle(color: AppColors.gold),
-                  selectedDecoration: const BoxDecoration(
+                  todayTextStyle: TextStyle(color: colors.primary),
+                  selectedDecoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.gold,
+                    color: colors.primary,
                   ),
-                  selectedTextStyle: const TextStyle(
-                    color: AppColors.background,
+                  selectedTextStyle: TextStyle(
+                    color: colors.background,
                     fontWeight: FontWeight.bold,
                   ),
-                  markerDecoration: const BoxDecoration(
+                  markerDecoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.goldLight,
+                    color: colors.primaryLight,
                   ),
                   markersMaxCount: 1,
                 ),
@@ -137,16 +138,16 @@ class _CalendarPageState extends State<CalendarPage> {
                         width: 18,
                         height: 18,
                         alignment: Alignment.center,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: AppColors.gold,
+                          color: colors.primary,
                         ),
                         child: Text(
                           '${events.length}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.background,
+                            color: colors.background,
                           ),
                         ),
                       ),
@@ -159,19 +160,19 @@ class _CalendarPageState extends State<CalendarPage> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                 child: Row(
                   children: [
-                    const Icon(LucideIcons.listChecks, color: AppColors.gold, size: 18),
+                    Icon(LucideIcons.listChecks, color: colors.primary, size: 18),
                     const SizedBox(width: 8),
                     Text(
                       AppDateUtils.formatShortDate(_selectedDay),
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
+                      style: TextStyle(
+                        color: colors.textPrimary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     const Spacer(),
                     Text(
                       '${selectedTasks.length} ${selectedTasks.length == 1 ? 'tarea' : 'tareas'}',
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      style: TextStyle(color: colors.textSecondary, fontSize: 12),
                     ),
                   ],
                 ),

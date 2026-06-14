@@ -49,11 +49,12 @@ service cloud.firestore {
       // Accounts are provisioned from the admin panel only.
       allow create: if isSuperAdmin();
       // Admins can edit any field (role, group, etc). Regular users may
-      // only update the fields the app touches on their own behalf.
+      // only update the fields the app touches on their own behalf,
+      // including their own visual preferences (themeMode/accentColor).
       allow update: if isSuperAdmin()
         || (isOwner(userId)
             && request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['fcmTokens', 'lastLogin', 'streakDays', 'maxStreakDays', 'name']));
+                .hasOnly(['fcmTokens', 'lastLogin', 'streakDays', 'maxStreakDays', 'name', 'themeMode', 'accentColor']));
       allow delete: if isSuperAdmin();
     }
 

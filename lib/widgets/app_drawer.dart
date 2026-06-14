@@ -3,10 +3,11 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../core/constants/app_constants.dart';
-import '../core/theme/app_colors.dart';
+import '../core/theme/theme_colors.dart';
 import '../providers/auth_provider.dart';
 import '../providers/catalog_provider.dart';
 import '../screens/admin/admin_panel_page.dart';
+import '../screens/profile/settings_page.dart';
 import '../services/auth_service.dart';
 import 'confirm_dialog.dart';
 
@@ -18,18 +19,19 @@ class AppDrawer extends StatelessWidget {
     final auth = context.watch<AuthProvider>();
     final catalog = context.watch<CatalogProvider>();
     final user = auth.appUser;
+    final colors = context.colors;
 
     return Drawer(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colors.surface,
       child: SafeArea(
         child: Column(
           children: [
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 border: Border(
-                  bottom: BorderSide(color: AppColors.divider),
+                  bottom: BorderSide(color: colors.divider),
                 ),
               ),
               child: Column(
@@ -42,10 +44,10 @@ class AppDrawer extends StatelessWidget {
                         height: 48,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.gold, width: 1.5),
+                          border: Border.all(color: colors.primary, width: 1.5),
                         ),
-                        child: const Icon(LucideIcons.userCircle,
-                            color: AppColors.gold, size: 28),
+                        child: Icon(LucideIcons.userCircle,
+                            color: colors.primary, size: 28),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -54,8 +56,8 @@ class AppDrawer extends StatelessWidget {
                           children: [
                             Text(
                               user?.name ?? '',
-                              style: const TextStyle(
-                                color: AppColors.textPrimary,
+                              style: TextStyle(
+                                color: colors.textPrimary,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
                               ),
@@ -63,8 +65,8 @@ class AppDrawer extends StatelessWidget {
                             ),
                             Text(
                               user?.email ?? '',
-                              style: const TextStyle(
-                                color: AppColors.textSecondary,
+                              style: TextStyle(
+                                color: colors.textSecondary,
                                 fontSize: 12,
                               ),
                               overflow: TextOverflow.ellipsis,
@@ -100,7 +102,7 @@ class AppDrawer extends StatelessWidget {
             const SizedBox(height: 8),
             if (auth.isSuperAdmin)
               ListTile(
-                leading: const Icon(LucideIcons.layoutDashboard, color: AppColors.gold),
+                leading: Icon(LucideIcons.layoutDashboard, color: colors.primary),
                 title: const Text('Panel de administración'),
                 onTap: () {
                   Navigator.of(context).pop();
@@ -109,6 +111,16 @@ class AppDrawer extends StatelessWidget {
                   );
                 },
               ),
+            ListTile(
+              leading: Icon(LucideIcons.settings, color: colors.primary),
+              title: const Text('Configuración'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SettingsPage()),
+                );
+              },
+            ),
             const Spacer(),
             const Divider(),
             Padding(
@@ -116,14 +128,14 @@ class AppDrawer extends StatelessWidget {
               child: Text(
                 AppConstants.appName,
                 style: TextStyle(
-                  color: AppColors.textSecondary.withValues(alpha: 0.6),
+                  color: colors.textSecondary.withValues(alpha: 0.6),
                   fontSize: 11,
                 ),
               ),
             ),
             ListTile(
-              leading: const Icon(LucideIcons.logOut, color: AppColors.error),
-              title: const Text('Cerrar sesión', style: TextStyle(color: AppColors.error)),
+              leading: Icon(LucideIcons.logOut, color: colors.error),
+              title: Text('Cerrar sesión', style: TextStyle(color: colors.error)),
               onTap: () async {
                 final confirm = await showConfirmDialog(
                   context,
@@ -131,6 +143,7 @@ class AppDrawer extends StatelessWidget {
                   message: '¿Estás seguro que deseas cerrar sesión?',
                   confirmLabel: 'Cerrar sesión',
                   destructive: true,
+                  confirmForegroundColor: Colors.white,
                 );
                 if (confirm && context.mounted) {
                   await context.read<AuthProvider>().signOut();
@@ -153,21 +166,22 @@ class _Badge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: colors.background,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.4)),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: AppColors.gold),
+          Icon(icon, size: 13, color: colors.primary),
           const SizedBox(width: 6),
           Text(
             label,
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+            style: TextStyle(color: colors.textSecondary, fontSize: 11),
           ),
         ],
       ),

@@ -56,6 +56,21 @@ class UserRepository {
     return _collection.doc(uid).update({'name': name});
   }
 
+  /// Persists the user's visual preferences (FASE 3). Uses `merge: true`
+  /// so legacy documents without these fields are upgraded in place.
+  Future<void> updateThemePreferences(
+    String uid, {
+    String? themeMode,
+    String? accentColor,
+  }) {
+    final data = <String, dynamic>{
+      'themeMode': ?themeMode,
+      'accentColor': ?accentColor,
+    };
+    if (data.isEmpty) return Future.value();
+    return _collection.doc(uid).set(data, SetOptions(merge: true));
+  }
+
   /// Registers an FCM token for push notifications (idempotent).
   Future<void> addFcmToken(String uid, String token) {
     return _collection.doc(uid).set({

@@ -69,6 +69,7 @@ dependencies:
 
   # Icons
   lucide_icons: ^0.257.0
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:

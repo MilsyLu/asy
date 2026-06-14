@@ -3,7 +3,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/theme_colors.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../core/utils/validators.dart';
 import '../../models/app_user.dart';
@@ -23,6 +23,7 @@ class UsersPage extends StatelessWidget {
     final catalog = context.watch<CatalogProvider>();
     final users = List<AppUser>.from(catalog.users)
       ..sort((a, b) => a.name.compareTo(b.name));
+    final colors = context.colors;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Usuarios')),
@@ -39,16 +40,16 @@ class UsersPage extends StatelessWidget {
                 final user = users[index];
                 return Container(
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
+                    color: colors.surface,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.gold.withValues(alpha: 0.2)),
+                    border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
                   ),
                   child: ListTile(
-                    leading: const Icon(LucideIcons.userCircle, color: AppColors.gold, size: 28),
-                    title: Text(user.name, style: const TextStyle(color: AppColors.textPrimary)),
+                    leading: Icon(LucideIcons.userCircle, color: colors.primary, size: 28),
+                    title: Text(user.name, style: TextStyle(color: colors.textPrimary)),
                     subtitle: Text(
                       user.email,
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      style: TextStyle(color: colors.textSecondary, fontSize: 12),
                     ),
                     trailing: Wrap(
                       spacing: 6,
@@ -77,19 +78,21 @@ class _Tag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: colors.background,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.4)),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.4)),
       ),
-      child: Text(label, style: const TextStyle(color: AppColors.gold, fontSize: 10)),
+      child: Text(label, style: TextStyle(color: colors.primary, fontSize: 10)),
     );
   }
 }
 
 Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
+  final colors = context.colors;
   final catalog = context.read<CatalogProvider>();
   final userRepo = context.read<UserRepository>();
   final authService = context.read<AuthService>();
@@ -102,7 +105,7 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: AppColors.surface,
+    backgroundColor: colors.surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
@@ -123,7 +126,7 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                 children: [
                   Row(
                     children: [
-                      const Icon(LucideIcons.userCircle, color: AppColors.gold, size: 32),
+                      Icon(LucideIcons.userCircle, color: colors.primary, size: 32),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -131,15 +134,15 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                           children: [
                             Text(
                               user.name,
-                              style: const TextStyle(
-                                color: AppColors.textPrimary,
+                              style: TextStyle(
+                                color: colors.textPrimary,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
                               ),
                             ),
                             Text(
                               user.email,
-                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                              style: TextStyle(color: colors.textSecondary, fontSize: 12),
                             ),
                           ],
                         ),
@@ -147,11 +150,11 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                     ],
                   ),
                   const SizedBox(height: 20),
-                  const Text('Rol', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                  Text('Rol', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     initialValue: selectedRole,
-                    dropdownColor: AppColors.surface,
+                    dropdownColor: colors.surface,
                     items: [
                       DropdownMenuItem(
                         value: AppRoles.superAdmin,
@@ -192,11 +195,11 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                     },
                   ),
                   const SizedBox(height: 16),
-                  const Text('Grupo', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                  Text('Grupo', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String?>(
                     initialValue: selectedGroupId,
-                    dropdownColor: AppColors.surface,
+                    dropdownColor: colors.surface,
                     items: [
                       const DropdownMenuItem<String?>(value: null, child: Text('Sin grupo')),
                       for (final group in catalog.groups)
@@ -251,16 +254,16 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                     onTap: () => setState(() => tokensExpanded = !tokensExpanded),
                     child: Row(
                       children: [
-                        const Icon(LucideIcons.smartphone, color: AppColors.gold, size: 16),
+                        Icon(LucideIcons.smartphone, color: colors.primary, size: 16),
                         const SizedBox(width: 8),
                         Text(
                           'Tokens FCM (${user.fcmTokens.length})',
-                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                          style: TextStyle(color: colors.textPrimary, fontSize: 13),
                         ),
                         const Spacer(),
                         Icon(
                           tokensExpanded ? LucideIcons.chevronDown : LucideIcons.chevronRight,
-                          color: AppColors.textSecondary,
+                          color: colors.textSecondary,
                           size: 16,
                         ),
                       ],
@@ -269,9 +272,9 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                   if (tokensExpanded) ...[
                     const SizedBox(height: 8),
                     if (user.fcmTokens.isEmpty)
-                      const Text(
+                      Text(
                         'Este usuario no tiene dispositivos registrados.',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        style: TextStyle(color: colors.textSecondary, fontSize: 12),
                       )
                     else
                       for (final token in user.fcmTokens)
@@ -281,8 +284,8 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                             token,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
+                            style: TextStyle(
+                              color: colors.textSecondary,
                               fontSize: 11,
                               fontFamily: 'monospace',
                             ),
@@ -301,6 +304,7 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
 }
 
 Future<void> _showCreateUserDialog(BuildContext context) async {
+  final colors = context.colors;
   final authService = context.read<AuthService>();
   final catalog = context.read<CatalogProvider>();
   final formKey = GlobalKey<FormState>();
@@ -327,7 +331,7 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                     TextFormField(
                       controller: nameController,
                       autofocus: true,
-                      style: const TextStyle(color: AppColors.textPrimary),
+                      style: TextStyle(color: colors.textPrimary),
                       decoration: const InputDecoration(labelText: 'Nombre'),
                       validator: (v) => Validators.required(v, fieldName: 'El nombre'),
                     ),
@@ -335,7 +339,7 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                     TextFormField(
                       controller: emailController,
                       keyboardType: TextInputType.emailAddress,
-                      style: const TextStyle(color: AppColors.textPrimary),
+                      style: TextStyle(color: colors.textPrimary),
                       decoration: const InputDecoration(labelText: 'Email'),
                       validator: Validators.email,
                     ),
@@ -343,14 +347,14 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                     TextFormField(
                       controller: passwordController,
                       obscureText: true,
-                      style: const TextStyle(color: AppColors.textPrimary),
+                      style: TextStyle(color: colors.textPrimary),
                       decoration: const InputDecoration(labelText: 'Contraseña temporal'),
                       validator: Validators.password,
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       initialValue: role,
-                      dropdownColor: AppColors.surface,
+                      dropdownColor: colors.surface,
                       decoration: const InputDecoration(labelText: 'Rol'),
                       items: [
                         DropdownMenuItem(
@@ -367,7 +371,7 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String?>(
                       initialValue: groupId,
-                      dropdownColor: AppColors.surface,
+                      dropdownColor: colors.surface,
                       decoration: const InputDecoration(labelText: 'Grupo (opcional)'),
                       items: [
                         const DropdownMenuItem<String?>(value: null, child: Text('Sin grupo')),

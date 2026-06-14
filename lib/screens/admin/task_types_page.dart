@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/theme_colors.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../models/task_type_model.dart';
 import '../../providers/catalog_provider.dart';
@@ -34,6 +34,7 @@ class TaskTypesPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
     final taskTypes = catalog.taskTypes;
+    final colors = context.colors;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Tipos de tarea')),
@@ -50,9 +51,9 @@ class TaskTypesPage extends StatelessWidget {
                 final type = taskTypes[index];
                 return Container(
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
+                    color: colors.surface,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.gold.withValues(alpha: 0.2)),
+                    border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
                   ),
                   child: ListTile(
                     leading: Container(
@@ -60,23 +61,23 @@ class TaskTypesPage extends StatelessWidget {
                       height: 16,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: type.color != null ? _parseHexColor(type.color!) : AppColors.gold,
+                        color: type.color != null ? _parseHexColor(type.color!) : colors.primary,
                       ),
                     ),
-                    title: Text(type.name, style: const TextStyle(color: AppColors.textPrimary)),
+                    title: Text(type.name, style: TextStyle(color: colors.textPrimary)),
                     subtitle: Text(
                       'Orden: ${type.order}',
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      style: TextStyle(color: colors.textSecondary, fontSize: 12),
                     ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: const Icon(LucideIcons.pencil, color: AppColors.gold, size: 18),
+                          icon: Icon(LucideIcons.pencil, color: colors.primary, size: 18),
                           onPressed: () => _showTaskTypeFormDialog(context, existing: type),
                         ),
                         IconButton(
-                          icon: const Icon(LucideIcons.trash2, color: AppColors.error, size: 18),
+                          icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
                           onPressed: () => _deleteTaskType(context, type),
                         ),
                       ],
@@ -94,6 +95,7 @@ class TaskTypesPage extends StatelessWidget {
 }
 
 Future<void> _showTaskTypeFormDialog(BuildContext context, {TaskTypeModel? existing}) async {
+  final colors = context.colors;
   final repo = context.read<CatalogRepository>();
   final catalog = context.read<CatalogProvider>();
   final nameController = TextEditingController(text: existing?.name ?? '');
@@ -121,7 +123,7 @@ Future<void> _showTaskTypeFormDialog(BuildContext context, {TaskTypeModel? exist
                     TextFormField(
                       controller: nameController,
                       autofocus: true,
-                      style: const TextStyle(color: AppColors.textPrimary),
+                      style: TextStyle(color: colors.textPrimary),
                       decoration: const InputDecoration(labelText: 'Nombre'),
                       validator: (v) =>
                           (v == null || v.trim().isEmpty) ? 'El nombre es requerido' : null,
@@ -130,13 +132,13 @@ Future<void> _showTaskTypeFormDialog(BuildContext context, {TaskTypeModel? exist
                     TextFormField(
                       controller: orderController,
                       keyboardType: TextInputType.number,
-                      style: const TextStyle(color: AppColors.textPrimary),
+                      style: TextStyle(color: colors.textPrimary),
                       decoration: const InputDecoration(labelText: 'Orden'),
                       validator: (v) =>
                           int.tryParse(v ?? '') == null ? 'Ingresa un número' : null,
                     ),
                     const SizedBox(height: 16),
-                    const Text('Color', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                    Text('Color', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 10,
@@ -153,7 +155,7 @@ Future<void> _showTaskTypeFormDialog(BuildContext context, {TaskTypeModel? exist
                                 color: _parseHexColor(hex),
                                 border: Border.all(
                                   color: selectedColor == hex
-                                      ? AppColors.textPrimary
+                                      ? colors.textPrimary
                                       : Colors.transparent,
                                   width: 2,
                                 ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/theme_colors.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../core/utils/validators.dart';
 import '../../providers/auth_provider.dart';
@@ -49,6 +49,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Scaffold(
       appBar: AppBar(title: const Text('Recuperar contraseña')),
       body: Center(
@@ -61,21 +62,21 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(Icons.lock_reset, color: AppColors.gold, size: 56),
+                  Icon(Icons.lock_reset, color: colors.primary, size: 56),
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'Ingresa tu email y te enviaremos un enlace para restablecer tu contraseña.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.textSecondary),
+                    style: TextStyle(color: colors.textSecondary),
                   ),
                   const SizedBox(height: 24),
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
-                    style: const TextStyle(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(
+                    style: TextStyle(color: colors.textPrimary),
+                    decoration: InputDecoration(
                       labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined, color: AppColors.gold),
+                      prefixIcon: Icon(Icons.email_outlined, color: colors.primary),
                     ),
                     validator: Validators.email,
                   ),

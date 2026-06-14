@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../models/app_user.dart';
 import '../../../providers/catalog_provider.dart';
@@ -15,6 +15,7 @@ class StreakReportTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
+    final colors = context.colors;
     final users = List<AppUser>.from(catalog.users)
       ..sort((a, b) => b.streakDays.compareTo(a.streakDays));
 
@@ -33,22 +34,22 @@ class StreakReportTab extends StatelessWidget {
         final user = users[index];
         return Container(
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: colors.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.gold.withValues(alpha: 0.2)),
+            border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
           ),
           child: ListTile(
             leading: CircleAvatar(
-              backgroundColor: AppColors.background,
+              backgroundColor: colors.background,
               child: Text(
                 '${index + 1}',
-                style: const TextStyle(color: AppColors.gold, fontWeight: FontWeight.bold),
+                style: TextStyle(color: colors.primary, fontWeight: FontWeight.bold),
               ),
             ),
-            title: Text(user.name, style: const TextStyle(color: AppColors.textPrimary)),
+            title: Text(user.name, style: TextStyle(color: colors.textPrimary)),
             subtitle: Text(
               '${user.email}\nÚltimo ingreso: ${AppDateUtils.formatDateTimeOrDash(user.lastLogin)}',
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              style: TextStyle(color: colors.textSecondary, fontSize: 12),
             ),
             isThreeLine: true,
             trailing: Column(
@@ -58,12 +59,12 @@ class StreakReportTab extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(LucideIcons.flame, color: AppColors.gold, size: 14),
+                    Icon(LucideIcons.flame, color: colors.primary, size: 14),
                     const SizedBox(width: 4),
                     Text(
                       '${user.streakDays}',
-                      style: const TextStyle(
-                        color: AppColors.gold,
+                      style: TextStyle(
+                        color: colors.primary,
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
                       ),
@@ -73,7 +74,7 @@ class StreakReportTab extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   'Mejor: ${user.maxStreakDays}',
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                  style: TextStyle(color: colors.textSecondary, fontSize: 11),
                 ),
               ],
             ),

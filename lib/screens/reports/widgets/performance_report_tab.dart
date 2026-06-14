@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/task_visibility.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/auth_provider.dart';
@@ -22,6 +22,7 @@ class PerformanceReportTab extends StatelessWidget {
     final repo = context.read<TaskRepository>();
     final catalog = context.watch<CatalogProvider>();
     final currentUser = context.watch<AuthProvider>().appUser;
+    final colors = context.colors;
 
     if (currentUser == null) return const LoadingIndicator();
 
@@ -103,35 +104,35 @@ class PerformanceReportTab extends StatelessWidget {
                     icon: LucideIcons.trophy,
                     label: 'Más completadas',
                     highlight: mostCompleted,
-                    color: AppColors.success,
+                    color: colors.success,
                   ),
                 if (leastCompleted != null)
                   _HighlightCard(
                     icon: LucideIcons.trendingDown,
                     label: 'Menos completadas',
                     highlight: leastCompleted,
-                    color: AppColors.error,
+                    color: colors.error,
                   ),
                 if (mostAssigned != null)
                   _HighlightCard(
                     icon: LucideIcons.briefcase,
                     label: 'Más asignadas',
                     highlight: mostAssigned,
-                    color: AppColors.gold,
+                    color: colors.primary,
                   ),
                 if (leastAssigned != null)
                   _HighlightCard(
                     icon: LucideIcons.briefcase,
                     label: 'Menos asignadas',
                     highlight: leastAssigned,
-                    color: AppColors.textSecondary,
+                    color: colors.textSecondary,
                   ),
                 if (mostRescheduled != null)
                   _HighlightCard(
                     icon: LucideIcons.repeat,
                     label: 'Más reprogramaciones',
                     highlight: mostRescheduled,
-                    color: AppColors.error,
+                    color: colors.error,
                   ),
               ],
             ),
@@ -191,13 +192,14 @@ class _HighlightCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       width: 160,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.divider),
+        border: Border.all(color: colors.divider),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -209,7 +211,7 @@ class _HighlightCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                  style: TextStyle(color: colors.textSecondary, fontSize: 11),
                 ),
               ),
             ],
@@ -219,8 +221,8 @@ class _HighlightCard extends StatelessWidget {
             highlight.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
+            style: TextStyle(
+              color: colors.textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../core/theme/app_colors.dart';
+import '../core/theme/theme_colors.dart';
 
 /// Shows a gold-themed confirmation dialog. Returns true if the user
 /// confirmed, false/null otherwise.
@@ -10,7 +10,9 @@ Future<bool> showConfirmDialog(
   String confirmLabel = 'Confirmar',
   String cancelLabel = 'Cancelar',
   bool destructive = false,
+  Color? confirmForegroundColor,
 }) async {
+  final colors = context.colors;
   final result = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
@@ -24,8 +26,8 @@ Future<bool> showConfirmDialog(
         ElevatedButton(
           style: destructive
               ? ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.error,
-                  foregroundColor: AppColors.textPrimary,
+                  backgroundColor: colors.error,
+                  foregroundColor: confirmForegroundColor ?? colors.textPrimary,
                 )
               : null,
           onPressed: () => Navigator.of(context).pop(true),
