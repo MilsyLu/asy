@@ -15,6 +15,7 @@ class AppStatusNames {
   static const String pendiente = 'Pendiente';
   static const String completada = 'Completada';
   static const String reprogramada = 'Reprogramada';
+  static const String cancelada = 'Cancelada';
 }
 
 /// Well-known task type names used by reports & business logic.

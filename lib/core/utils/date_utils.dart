@@ -24,6 +24,12 @@ class AppDateUtils {
     return DateFormat('EEEE d MMMM yyyy', 'es').format(date);
   }
 
+  /// Header date without year, e.g. "viernes 12 de junio". Callers
+  /// capitalize the first letter for display.
+  static String formatHeaderDate(DateTime date) {
+    return DateFormat("EEEE d 'de' MMMM", 'es').format(date);
+  }
+
   /// Short date, e.g. "09/06/2026".
   static String formatShortDate(DateTime date) {
     return DateFormat('dd/MM/yyyy').format(date);

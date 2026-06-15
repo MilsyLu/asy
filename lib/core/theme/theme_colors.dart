@@ -69,6 +69,8 @@ class ThemeColors {
     required this.error,
     required this.success,
     required this.divider,
+    required this.statusPending,
+    required this.statusRescheduled,
   });
 
   final Color background;
@@ -82,6 +84,14 @@ class ThemeColors {
   final Color error;
   final Color success;
   final Color divider;
+
+  /// Soft amber used for the "Pendiente" status (FASE 3B). Fixed across
+  /// accent colors, like [error]/[success], and only varies by brightness.
+  final Color statusPending;
+
+  /// Soft blue used for the "Reprogramada" status (FASE 3B). Fixed across
+  /// accent colors, like [error]/[success], and only varies by brightness.
+  final Color statusRescheduled;
 
   /// Returns the palette for [accent] + [brightness].
   static ThemeColors forAccent(AppAccentColor accent, Brightness brightness) {
@@ -102,6 +112,8 @@ class ThemeColors {
       error: Color(0xFFCF6679),
       success: Color(0xFF4CAF50),
       divider: Color(0x33D4AF37),
+      statusPending: Color(0xFFFFC107),
+      statusRescheduled: Color(0xFF64B5F6),
     ),
     AppAccentColor.blue: ThemeColors(
       background: Color(0xFF0A0A0A),
@@ -115,6 +127,8 @@ class ThemeColors {
       error: Color(0xFFCF6679),
       success: Color(0xFF4CAF50),
       divider: Color(0x334FA3F7),
+      statusPending: Color(0xFFFFC107),
+      statusRescheduled: Color(0xFF64B5F6),
     ),
     AppAccentColor.green: ThemeColors(
       background: Color(0xFF0A0A0A),
@@ -128,6 +142,8 @@ class ThemeColors {
       error: Color(0xFFCF6679),
       success: Color(0xFF4CAF50),
       divider: Color(0x3343C97A),
+      statusPending: Color(0xFFFFC107),
+      statusRescheduled: Color(0xFF64B5F6),
     ),
     AppAccentColor.purple: ThemeColors(
       background: Color(0xFF0A0A0A),
@@ -141,6 +157,8 @@ class ThemeColors {
       error: Color(0xFFCF6679),
       success: Color(0xFF4CAF50),
       divider: Color(0x33B388F5),
+      statusPending: Color(0xFFFFC107),
+      statusRescheduled: Color(0xFF64B5F6),
     ),
   };
 
@@ -158,6 +176,8 @@ class ThemeColors {
         error: error,
         success: success,
         divider: divider,
+        statusPending: statusPending,
+        statusRescheduled: statusRescheduled,
       );
 
   static const Map<AppAccentColor, ThemeColors> _light = {
@@ -173,6 +193,8 @@ class ThemeColors {
       error: Color(0xFFC62828),
       success: Color(0xFF2E7D32),
       divider: Color(0x33B8860B),
+      statusPending: Color(0xFFFF8F00),
+      statusRescheduled: Color(0xFF1976D2),
     ),
     AppAccentColor.blue: ThemeColors(
       background: Color(0xFFF5F5F5),
@@ -186,6 +208,8 @@ class ThemeColors {
       error: Color(0xFFC62828),
       success: Color(0xFF2E7D32),
       divider: Color(0x331565C0),
+      statusPending: Color(0xFFFF8F00),
+      statusRescheduled: Color(0xFF1976D2),
     ),
     AppAccentColor.green: ThemeColors(
       background: Color(0xFFF5F5F5),
@@ -199,6 +223,8 @@ class ThemeColors {
       error: Color(0xFFC62828),
       success: Color(0xFF2E7D32),
       divider: Color(0x332E7D32),
+      statusPending: Color(0xFFFF8F00),
+      statusRescheduled: Color(0xFF1976D2),
     ),
     AppAccentColor.purple: ThemeColors(
       background: Color(0xFFF5F5F5),
@@ -212,6 +238,8 @@ class ThemeColors {
       error: Color(0xFFC62828),
       success: Color(0xFF2E7D32),
       divider: Color(0x337E3FF2),
+      statusPending: Color(0xFFFF8F00),
+      statusRescheduled: Color(0xFF1976D2),
     ),
   };
 }
@@ -238,6 +266,8 @@ class AppColorsExtension extends ThemeExtension<AppColorsExtension> {
     required this.error,
     required this.success,
     required this.divider,
+    required this.statusPending,
+    required this.statusRescheduled,
   });
 
   final Color background;
@@ -251,6 +281,8 @@ class AppColorsExtension extends ThemeExtension<AppColorsExtension> {
   final Color error;
   final Color success;
   final Color divider;
+  final Color statusPending;
+  final Color statusRescheduled;
 
   @override
   AppColorsExtension copyWith({
@@ -265,6 +297,8 @@ class AppColorsExtension extends ThemeExtension<AppColorsExtension> {
     Color? error,
     Color? success,
     Color? divider,
+    Color? statusPending,
+    Color? statusRescheduled,
   }) {
     return AppColorsExtension(
       background: background ?? this.background,
@@ -278,6 +312,8 @@ class AppColorsExtension extends ThemeExtension<AppColorsExtension> {
       error: error ?? this.error,
       success: success ?? this.success,
       divider: divider ?? this.divider,
+      statusPending: statusPending ?? this.statusPending,
+      statusRescheduled: statusRescheduled ?? this.statusRescheduled,
     );
   }
 
@@ -296,6 +332,8 @@ class AppColorsExtension extends ThemeExtension<AppColorsExtension> {
       error: Color.lerp(error, other.error, t)!,
       success: Color.lerp(success, other.success, t)!,
       divider: Color.lerp(divider, other.divider, t)!,
+      statusPending: Color.lerp(statusPending, other.statusPending, t)!,
+      statusRescheduled: Color.lerp(statusRescheduled, other.statusRescheduled, t)!,
     );
   }
 }

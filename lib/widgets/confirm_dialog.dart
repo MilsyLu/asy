@@ -38,3 +38,27 @@ Future<bool> showConfirmDialog(
   );
   return result ?? false;
 }
+
+/// Shows a gold-themed informational dialog with a single acknowledgement
+/// button. Unlike [showConfirmDialog], there is no "cancel" path — it only
+/// informs the user, who can then continue with whatever action triggered it.
+Future<void> showInfoDialog(
+  BuildContext context, {
+  required String title,
+  required String message,
+  String acknowledgeLabel = 'Continuar',
+}) {
+  return showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        ElevatedButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(acknowledgeLabel),
+        ),
+      ],
+    ),
+  );
+}

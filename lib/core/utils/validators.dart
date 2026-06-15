@@ -24,13 +24,43 @@ class Validators {
     return null;
   }
 
-  /// Allows only digits, '+' and spaces (e.g. "+56 9 1234 5678").
+  /// Removes everything except digits, keeping a leading '+' (if any).
+  /// E.g. "300 225 7755" -> "3002257755", "+57 300 225 7755" -> "+573002257755".
+  static String cleanPhone(String value) {
+    final trimmed = value.trim();
+    final digits = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
+    return trimmed.startsWith('+') ? '+$digits' : digits;
+  }
+
+  /// Formats a phone number for display by grouping its last 10 digits as
+  /// "XXX XXX XXXX" and showing any leading country code separately.
+  /// E.g. "3002257755" -> "300 225 7755", "+573002257755" -> "+57 300 225 7755".
+  static String formatPhone(String value) {
+    final cleaned = cleanPhone(value);
+    final hasPlus = cleaned.startsWith('+');
+    final digits = hasPlus ? cleaned.substring(1) : cleaned;
+    if (digits.length < 10) return cleaned;
+    final local = digits.substring(digits.length - 10);
+    final countryCode = digits.substring(0, digits.length - 10);
+    final formattedLocal =
+        '${local.substring(0, 3)} ${local.substring(3, 6)} ${local.substring(6)}';
+    return countryCode.isEmpty ? formattedLocal : '+$countryCode $formattedLocal';
+  }
+
+  /// Allows only digits, '+' and spaces, and requires at least 10 digits —
+  /// with or without a country code (e.g. "3002257755" or "+573002257755").
   static String? phone(String? value) {
     if (value == null || value.trim().isEmpty) {
       return 'El teléfono es requerido';
     }
-    if (!_phoneRegex.hasMatch(value.trim())) {
+    final trimmed = value.trim();
+    if (!_phoneRegex.hasMatch(trimmed)) {
       return 'Solo se permiten números, "+" y espacios';
+    }
+    final cleaned = cleanPhone(trimmed);
+    final digits = cleaned.startsWith('+') ? cleaned.substring(1) : cleaned;
+    if (digits.length < 10) {
+      return 'El teléfono debe tener al menos 10 dígitos';
     }
     return null;
   }

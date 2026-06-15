@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/snackbar_utils.dart';
+import '../../../core/utils/validators.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/catalog_provider.dart';
@@ -13,6 +14,7 @@ import '../../../services/task_repository.dart';
 import '../../../widgets/confirm_dialog.dart';
 import '../add_edit_task_page.dart';
 import 'reschedule_dialog.dart';
+import 'task_detail_dialog.dart';
 
 /// Card representation of a single task, used on Home / Calendar / Week.
 /// Shows a thin gold left border, client info, status chip and the
@@ -23,41 +25,12 @@ class TaskCard extends StatelessWidget {
   final TaskModel task;
 
   Future<void> _callClient(BuildContext context) async {
-    final phone = task.clientPhone.replaceAll(' ', '');
+    final phone = Validators.cleanPhone(task.clientPhone);
     if (phone.isEmpty) return;
     final uri = Uri(scheme: 'tel', path: phone);
     final ok = await launchUrl(uri);
     if (!ok && context.mounted) {
       SnackbarUtils.showError(context, 'No se pudo iniciar la llamada');
-    }
-  }
-
-  Future<void> _completeTask(BuildContext context) async {
-    final catalog = context.read<CatalogProvider>();
-    final repo = context.read<TaskRepository>();
-    final completedId = catalog.completedStatusId;
-    if (completedId == null) {
-      SnackbarUtils.showError(
-          context, 'No existe un estado "Completada" configurado');
-      return;
-    }
-    final confirm = await showConfirmDialog(
-      context,
-      title: 'Completar tarea',
-      message:
-          '¿Marcar la tarea de ${task.clientName} a las ${task.hour} como completada?',
-      confirmLabel: 'Completar',
-    );
-    if (!confirm) return;
-    try {
-      await repo.completeTask(task.id, completedId);
-      if (context.mounted) {
-        SnackbarUtils.showSuccess(context, 'Tarea completada');
-      }
-    } catch (e) {
-      if (context.mounted) {
-        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
-      }
     }
   }
 
@@ -151,7 +124,7 @@ class TaskCard extends StatelessWidget {
                             Icon(LucideIcons.phone, size: 15, color: colors.primary),
                             const SizedBox(width: 6),
                             Text(
-                              task.clientPhone,
+                              Validators.formatPhone(task.clientPhone),
                               style: TextStyle(
                                 color: colors.primary,
                                 fontSize: 13,
@@ -218,7 +191,7 @@ class TaskCard extends StatelessWidget {
                             ),
                           if (canComplete)
                             TextButton.icon(
-                              onPressed: () => _completeTask(context),
+                              onPressed: () => completeTaskWithConfirm(context, task),
                               style: TextButton.styleFrom(foregroundColor: colors.success),
                               icon: const Icon(LucideIcons.checkCircle, size: 16),
                               label: const Text('Completar'),
@@ -268,6 +241,36 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
+/// Marks [task] as completed after confirmation, showing a success/error
+/// snackbar. Shared by [TaskCard]'s action row and the Home agenda widgets
+/// (quick "Completar" buttons on the next-task card and agenda tiles).
+Future<void> completeTaskWithConfirm(BuildContext context, TaskModel task) async {
+  final catalog = context.read<CatalogProvider>();
+  final repo = context.read<TaskRepository>();
+  final completedId = catalog.completedStatusId;
+  if (completedId == null) {
+    SnackbarUtils.showError(context, 'No existe un estado "Completada" configurado');
+    return;
+  }
+  final confirm = await showConfirmDialog(
+    context,
+    title: 'Completar tarea',
+    message: '¿Marcar la tarea de ${task.clientName} a las ${task.hour} como completada?',
+    confirmLabel: 'Completar',
+  );
+  if (!confirm) return;
+  try {
+    await repo.completeTask(task.id, completedId);
+    if (context.mounted) {
+      SnackbarUtils.showSuccess(context, 'Tarea completada');
+    }
+  } catch (e) {
+    if (context.mounted) {
+      SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+    }
+  }
+}
+
 /// Bottom sheet with quick actions (Editar / Reprogramar / Completar) for
 /// a task, used by long-press gestures on the Calendar and Week views.
 Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
@@ -312,6 +315,14 @@ Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
               ),
             ),
             const Divider(height: 1),
+            ListTile(
+              leading: Icon(LucideIcons.fileText, color: colors.primary),
+              title: const Text('Ver detalle completo'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                showTaskDetailDialog(context, task);
+              },
+            ),
             if (canEdit)
               ListTile(
                 leading: Icon(LucideIcons.pencil, color: colors.primary),

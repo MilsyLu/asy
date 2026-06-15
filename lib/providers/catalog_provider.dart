@@ -136,6 +136,8 @@ class CatalogProvider extends ChangeNotifier {
   String? get rescheduledStatusId =>
       statusByName(AppStatusNames.reprogramada)?.id;
 
+  String? get cancelledStatusId => statusByName(AppStatusNames.cancelada)?.id;
+
   @override
   void dispose() {
     _groupsSub.cancel();

@@ -163,28 +163,30 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
 
     setState(() => _isSaving = true);
     try {
+      final ignoreStatusIds = <String>{
+        if (catalog.completedStatusId != null) catalog.completedStatusId!,
+        if (catalog.cancelledStatusId != null) catalog.cancelledStatusId!,
+      }.toList();
+
       final hasConflict = await repo.hasConflict(
         assignedUserId: _assignedUserId!,
         date: dateKey,
         hour: _selectedHour!,
         excludeTaskId: widget.existingTask?.id,
+        ignoreStatusIds: ignoreStatusIds,
       );
 
       if (hasConflict) {
         if (!mounted) return;
-        final proceed = await showConfirmDialog(
+        await showInfoDialog(
           context,
-          title: 'Conflicto de horario',
+          title: 'Horario duplicado',
           message:
-              '${catalog.userName(_assignedUserId)} ya tiene una tarea asignada el '
+              '${catalog.userName(_assignedUserId)} ya tiene otra tarea activa el '
               '${AppDateUtils.formatShortDate(_selectedDate)} a las $_selectedHour. '
-              '¿Deseas continuar de todas formas?',
-          confirmLabel: 'Continuar',
+              'Puedes continuar: ambas tareas quedarán programadas.',
         );
-        if (!proceed) {
-          setState(() => _isSaving = false);
-          return;
-        }
+        if (!mounted) return;
       }
 
       final statusId = _statusId ?? catalog.pendingStatusId ?? '';
@@ -197,7 +199,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
           'taskTypeId': _taskTypeId,
           'statusId': statusId,
           'clientName': _clientNameController.text.trim(),
-          'clientPhone': _clientPhoneController.text.trim(),
+          'clientPhone': Validators.cleanPhone(_clientPhoneController.text),
           'observations': _observationsController.text.trim(),
           'reminderTime': _reminderDateTime,
           'reminderSent': false,
@@ -218,7 +220,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
           assignedUserId: _assignedUserId!,
           taskTypeId: _taskTypeId!,
           clientName: _clientNameController.text.trim(),
-          clientPhone: _clientPhoneController.text.trim(),
+          clientPhone: Validators.cleanPhone(_clientPhoneController.text),
           statusId: statusId,
           observations: _observationsController.text.trim(),
           reminderTime: _reminderDateTime,
@@ -402,7 +404,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
               decoration: InputDecoration(
                 labelText: 'Teléfono del cliente',
                 prefixIcon: Icon(LucideIcons.phone, color: colors.primary),
-                hintText: '+56 9 1234 5678',
+                hintText: '300 225 7755 o +57 300 225 7755',
               ),
               validator: Validators.phone,
             ),

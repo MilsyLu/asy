@@ -29,6 +29,38 @@ void main() {
     test('accepts digits, "+" and spaces', () {
       expect(Validators.phone('+56 9 1234 5678'), isNull);
     });
+
+    test('accepts a Colombian number without country code', () {
+      expect(Validators.phone('3002257755'), isNull);
+    });
+
+    test('accepts a Colombian number with country code', () {
+      expect(Validators.phone('+573002257755'), isNull);
+    });
+
+    test('rejects numbers with fewer than 10 digits', () {
+      expect(Validators.phone('300225'), isNotNull);
+    });
+  });
+
+  group('Validators.cleanPhone', () {
+    test('removes spaces from a local number', () {
+      expect(Validators.cleanPhone('300 225 7755'), '3002257755');
+    });
+
+    test('removes spaces but keeps the leading "+"', () {
+      expect(Validators.cleanPhone('+57 300 225 7755'), '+573002257755');
+    });
+  });
+
+  group('Validators.formatPhone', () {
+    test('groups a local Colombian number as XXX XXX XXXX', () {
+      expect(Validators.formatPhone('3002257755'), '300 225 7755');
+    });
+
+    test('groups a number with country code as +CC XXX XXX XXXX', () {
+      expect(Validators.formatPhone('+573002257755'), '+57 300 225 7755');
+    });
   });
 
   group('Validators.password', () {

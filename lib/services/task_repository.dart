@@ -58,19 +58,28 @@ class TaskRepository {
   }
 
   /// Checks whether [assignedUserId] already has a task at [date] + [hour].
-  /// Pass [excludeTaskId] when editing to ignore the task being edited.
+  /// Pass [excludeTaskId] when editing to ignore the task being edited, and
+  /// [ignoreStatusIds] to skip tasks in statuses that shouldn't count as a
+  /// conflict (e.g. "Completada" or "Cancelada").
   Future<bool> hasConflict({
     required String assignedUserId,
     required String date,
     required String hour,
     String? excludeTaskId,
+    List<String>? ignoreStatusIds,
   }) async {
     final snap = await _collection
         .where('assignedUserId', isEqualTo: assignedUserId)
         .where('date', isEqualTo: date)
         .where('hour', isEqualTo: hour)
         .get();
-    return snap.docs.any((d) => d.id != excludeTaskId);
+    return snap.docs.any((d) {
+      if (d.id == excludeTaskId) return false;
+      if (ignoreStatusIds != null && ignoreStatusIds.contains(d.data()['statusId'])) {
+        return false;
+      }
+      return true;
+    });
   }
 
   Future<String> createTask(TaskModel task) async {
