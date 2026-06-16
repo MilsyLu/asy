@@ -5,16 +5,30 @@ import 'package:provider/provider.dart';
 
 import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/utils/snackbar_utils.dart';
 import '../../../core/utils/validators.dart';
 import '../../../models/task_model.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/catalog_provider.dart';
+import '../../../services/task_repository.dart';
+import '../../../widgets/confirm_dialog.dart';
+import '../add_edit_task_page.dart';
+import 'reschedule_dialog.dart';
 
 /// Read-only dialog with the full details of [task]: client, phone
 /// (highlighted, with a copy-to-clipboard button), type, date, hour,
 /// assignee, group and observations.
 Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
   final catalog = context.read<CatalogProvider>();
+  final auth = context.read<AuthProvider>();
+  final repo = context.read<TaskRepository>();
   final formattedPhone = Validators.formatPhone(task.clientPhone);
+
+  final isPending = task.statusId == catalog.pendingStatusId;
+  final isCompleted = task.statusId == catalog.completedStatusId;
+  final canEdit = auth.isSuperAdmin || isPending;
+  final canComplete = !isCompleted;
+  final canReschedule = !isCompleted;
 
   return showDialog<void>(
     context: context,
@@ -100,6 +114,75 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
                 label: 'Observaciones',
                 value: task.observations.isEmpty ? 'Sin observaciones' : task.observations,
               ),
+              if (canEdit || canComplete || canReschedule) ...[
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 4),
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 4,
+                  children: [
+                    if (canEdit)
+                      TextButton.icon(
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => AddEditTaskPage(existingTask: task),
+                            ),
+                          );
+                        },
+                        icon: const Icon(LucideIcons.pencil, size: 16),
+                        label: const Text('Editar'),
+                      ),
+                    if (canReschedule)
+                      TextButton.icon(
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop();
+                          showRescheduleDialog(context, task);
+                        },
+                        icon: const Icon(LucideIcons.repeat, size: 16),
+                        label: const Text('Reprogramar'),
+                      ),
+                    if (canComplete)
+                      TextButton.icon(
+                        style: TextButton.styleFrom(foregroundColor: colors.success),
+                        onPressed: () async {
+                          Navigator.of(dialogContext).pop();
+                          final completedId = catalog.completedStatusId;
+                          if (completedId == null) {
+                            if (context.mounted) {
+                              SnackbarUtils.showError(
+                                  context, 'No existe un estado "Completada" configurado');
+                            }
+                            return;
+                          }
+                          final confirm = await showConfirmDialog(
+                            context,
+                            title: 'Completar tarea',
+                            message:
+                                '¿Marcar la tarea de ${task.clientName} a las ${task.hour} como completada?',
+                            confirmLabel: 'Completar',
+                          );
+                          if (!confirm) return;
+                          try {
+                            await repo.completeTask(task.id, completedId);
+                            if (context.mounted) {
+                              SnackbarUtils.showSuccess(context, 'Tarea completada');
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              SnackbarUtils.showError(
+                                  context, SnackbarUtils.firebaseErrorMessage(e));
+                            }
+                          }
+                        },
+                        icon: const Icon(LucideIcons.checkCircle, size: 16),
+                        label: const Text('Completar'),
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
