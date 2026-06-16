@@ -181,7 +181,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 uploading: _uploading,
                 onAvatarTap: () => _showPhotoOptions(user),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               _StreakCard(
                 streakDays: user.streakDays,
                 message: _streakMessage(user.streakDays),
@@ -327,7 +327,7 @@ class _HeroCard extends StatelessWidget {
             child: Stack(
               alignment: Alignment.bottomRight,
               children: [
-                UserAvatarDisplay(user: user, size: 80, borderWidth: 2.5),
+                UserAvatarDisplay(user: user, size: 112, borderWidth: 3),
                 Container(
                   width: 28,
                   height: 28,
@@ -444,45 +444,63 @@ class _StreakCard extends StatelessWidget {
     final colors = context.colors;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       decoration: BoxDecoration(
         color: colors.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: colors.primary.withValues(alpha: 0.4)),
       ),
-      child: Column(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(LucideIcons.flame, color: colors.primary, size: 48),
-          const SizedBox(height: 12),
-          Text(
-            '$streakDays',
-            style: TextStyle(
-              color: colors.primary,
-              fontSize: 72,
-              fontWeight: FontWeight.bold,
-              height: 1,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            streakDays == 1 ? 'día de racha' : 'días de racha',
-            style: TextStyle(color: colors.textSecondary, fontSize: 17),
-          ),
-          const SizedBox(height: 14),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
-            decoration: BoxDecoration(
-              color: colors.primary.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              message,
-              style: TextStyle(
-                color: colors.primary,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.flame, color: colors.primary, size: 30),
+              const SizedBox(height: 2),
+              Text(
+                '$streakDays',
+                style: TextStyle(
+                  color: colors.primary,
+                  fontSize: 48,
+                  fontWeight: FontWeight.bold,
+                  height: 1,
+                ),
               ),
+            ],
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  streakDays == 1 ? 'día de racha' : 'días de racha',
+                  style: TextStyle(
+                    color: colors.textSecondary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: colors.primary.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    message,
+                    style: TextStyle(
+                      color: colors.primary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
