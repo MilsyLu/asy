@@ -12,11 +12,14 @@ import '../../providers/catalog_provider.dart';
 import '../../services/task_repository.dart';
 import '../../widgets/loading_indicator.dart';
 import '../home/add_edit_task_page.dart';
+import '../home/widgets/compact_task_card.dart';
 import '../home/widgets/task_card.dart';
+import '../home/widgets/task_detail_dialog.dart';
 
 /// Monthly calendar: each day shows a bubble with the task count.
-/// Tapping a day lists its tasks below; long-pressing a task opens
-/// quick actions (editar / reprogramar / completar).
+/// Tapping a day lists its tasks below as [CompactTaskCard] rows.
+/// Tapping a task card opens the full detail dialog; long-pressing
+/// opens the quick-actions sheet (editar / reprogramar / completar).
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
 
@@ -189,8 +192,9 @@ class _CalendarPageState extends State<CalendarPage> {
                         itemBuilder: (context, index) {
                           final task = selectedTasks[index];
                           return GestureDetector(
+                            onTap: () => showTaskDetailDialog(context, task),
                             onLongPress: () => showTaskQuickActionsSheet(context, task),
-                            child: TaskCard(task: task),
+                            child: CompactTaskCard(task: task),
                           );
                         },
                       ),
