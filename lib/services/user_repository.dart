@@ -71,6 +71,15 @@ class UserRepository {
     return _collection.doc(uid).set(data, SetOptions(merge: true));
   }
 
+  /// Saves or removes the user's profile photo URL.
+  /// Passing null deletes the field so [AppUser.photoUrl] falls back to null.
+  Future<void> updatePhotoUrl(String uid, String? photoUrl) {
+    if (photoUrl == null) {
+      return _collection.doc(uid).update({'photoUrl': FieldValue.delete()});
+    }
+    return _collection.doc(uid).set({'photoUrl': photoUrl}, SetOptions(merge: true));
+  }
+
   /// Registers an FCM token for push notifications (idempotent).
   Future<void> addFcmToken(String uid, String token) {
     return _collection.doc(uid).set({

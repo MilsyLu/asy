@@ -72,5 +72,10 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- Required by image_picker: camera and photo library access for profile photo. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Necesario para tomar tu foto de perfil.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Necesario para elegir tu foto de perfil de la galería.</string>
 </dict>
 </plist>

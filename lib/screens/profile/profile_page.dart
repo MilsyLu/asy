@@ -1,28 +1,167 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/snackbar_utils.dart';
+import '../../models/app_user.dart';
 import '../../models/task_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/auth_service.dart';
+import '../../services/storage_service.dart';
 import '../../services/task_repository.dart';
+import '../../services/user_repository.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/loading_indicator.dart';
-import '../home/widgets/task_card.dart';
+import '../../widgets/user_avatar.dart';
+import 'settings_page.dart';
 
-/// Profile tab: account info, streak stats and the user's upcoming tasks.
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  bool _uploading = false;
+  Future<List<TaskModel>>? _thirtyDaysFuture;
+  Future<List<TaskModel>>? _ninetyDaysFuture;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_thirtyDaysFuture == null) {
+      final repo = context.read<TaskRepository>();
+      final now = DateTime.now();
+      _thirtyDaysFuture =
+          repo.getTasksInRange(now.subtract(const Duration(days: 30)), now);
+      _ninetyDaysFuture =
+          repo.getTasksInRange(now.subtract(const Duration(days: 90)), now);
+    }
+  }
+
+  String _streakMessage(int days) {
+    if (days == 0) return '¡Comienza hoy!';
+    if (days <= 3) return '¡Buen comienzo!';
+    if (days <= 6) return '¡Vas muy bien!';
+    if (days <= 13) return '¡Una semana seguida!';
+    if (days <= 29) return '¡Sigue así!';
+    return '¡Increíble constancia!';
+  }
+
+  Future<void> _showPhotoOptions(AppUser user) async {
+    final colors = context.colors;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: Text(
+                  'Foto de perfil',
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              const Divider(),
+              ListTile(
+                leading: Icon(LucideIcons.camera, color: colors.primary),
+                title: const Text('Tomar foto'),
+                onTap: () {
+                  Navigator.of(sheetCtx).pop();
+                  _pickPhoto(ImageSource.camera, user.id);
+                },
+              ),
+              ListTile(
+                leading: Icon(LucideIcons.image, color: colors.primary),
+                title: const Text('Elegir de galería'),
+                onTap: () {
+                  Navigator.of(sheetCtx).pop();
+                  _pickPhoto(ImageSource.gallery, user.id);
+                },
+              ),
+              if (user.photoUrl != null && user.photoUrl!.isNotEmpty)
+                ListTile(
+                  leading: Icon(LucideIcons.trash2, color: colors.error),
+                  title: Text(
+                    'Eliminar foto',
+                    style: TextStyle(color: colors.error),
+                  ),
+                  onTap: () {
+                    Navigator.of(sheetCtx).pop();
+                    _deletePhoto(user.id);
+                  },
+                ),
+              ListTile(
+                leading:
+                    Icon(LucideIcons.x, color: colors.textSecondary),
+                title: const Text('Cancelar'),
+                onTap: () => Navigator.of(sheetCtx).pop(),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickPhoto(ImageSource source, String uid) async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: source,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
+      if (picked == null || !mounted) return;
+      setState(() => _uploading = true);
+      final url =
+          await StorageService.uploadProfilePhoto(uid, File(picked.path));
+      if (!mounted) return;
+      await context.read<UserRepository>().updatePhotoUrl(uid, url);
+      if (mounted) SnackbarUtils.showSuccess(context, 'Foto actualizada');
+    } catch (_) {
+      if (mounted) SnackbarUtils.showError(context, 'Error al subir la foto');
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<void> _deletePhoto(String uid) async {
+    try {
+      setState(() => _uploading = true);
+      await StorageService.deleteProfilePhoto(uid);
+      if (!mounted) return;
+      await context.read<UserRepository>().updatePhotoUrl(uid, null);
+      if (mounted) SnackbarUtils.showSuccess(context, 'Foto eliminada');
+    } catch (_) {
+      if (mounted) SnackbarUtils.showError(context, 'Error al eliminar la foto');
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final catalog = context.watch<CatalogProvider>();
-    final repo = context.read<TaskRepository>();
     final user = auth.appUser;
     final colors = context.colors;
 
@@ -30,245 +169,343 @@ class ProfilePage extends StatelessWidget {
       return const Scaffold(body: LoadingIndicator());
     }
 
-    final today = DateTime.now();
-    final rangeEnd = today.add(const Duration(days: 14));
-
     return Scaffold(
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Stack(
         children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: colors.surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: colors.primary.withValues(alpha: 0.3)),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: colors.primary, width: 2),
-                  ),
-                  child: Icon(LucideIcons.userCircle, color: colors.primary, size: 40),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  user.name,
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  user.email,
-                  style: TextStyle(color: colors.textSecondary, fontSize: 13),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    _InfoChip(
-                      icon: LucideIcons.userCheck,
-                      label: AuthService.roleLabel(user.role),
-                    ),
-                    if (user.groupId != null)
-                      _InfoChip(
-                        icon: LucideIcons.users,
-                        label: catalog.groupName(user.groupId),
+          ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _HeroCard(
+                user: user,
+                catalog: catalog,
+                uploading: _uploading,
+                onAvatarTap: () => _showPhotoOptions(user),
+              ),
+              const SizedBox(height: 12),
+              _StreakCard(
+                streakDays: user.streakDays,
+                message: _streakMessage(user.streakDays),
+              ),
+              const SizedBox(height: 12),
+              FutureBuilder<List<TaskModel>>(
+                future: _ninetyDaysFuture,
+                builder: (context, snapshot) {
+                  final completedCount = snapshot.hasData
+                      ? snapshot.data!
+                          .where((t) =>
+                              t.assignedUserId == user.id &&
+                              t.statusId == catalog.completedStatusId)
+                          .length
+                      : null;
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: _MiniStatCard(
+                          icon: LucideIcons.trophy,
+                          value: '${user.maxStreakDays}',
+                          label: 'Mejor racha',
+                          suffix:
+                              user.maxStreakDays == 1 ? 'día' : 'días',
+                        ),
                       ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _StatCard(
-                  icon: LucideIcons.flame,
-                  label: 'Racha actual',
-                  value: '${user.streakDays}',
-                  suffix: user.streakDays == 1 ? 'día' : 'días',
-                ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _MiniStatCard(
+                          icon: LucideIcons.checkCircle,
+                          value: completedCount != null
+                              ? '$completedCount'
+                              : '—',
+                          label: 'Completadas',
+                          suffix: '90 días',
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _StatCard(
-                  icon: LucideIcons.barChart3,
-                  label: 'Mejor racha',
-                  value: '${user.maxStreakDays}',
-                  suffix: user.maxStreakDays == 1 ? 'día' : 'días',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: colors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: colors.divider),
-            ),
-            child: Row(
-              children: [
-                Icon(LucideIcons.clock, color: colors.primary, size: 18),
-                const SizedBox(width: 10),
-                Text(
-                  'Último ingreso: ',
-                  style: TextStyle(color: colors.textSecondary, fontSize: 13),
-                ),
-                Text(
-                  AppDateUtils.formatDateTimeOrDash(user.lastLogin),
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Icon(LucideIcons.listChecks, color: colors.primary, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                'Próximas tareas',
-                style: TextStyle(
-                  color: colors.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          StreamBuilder<List<TaskModel>>(
-            stream: repo.watchTasksInRange(today, rangeEnd),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: LoadingIndicator(),
-                );
-              }
-
-              final pendingId = catalog.pendingStatusId;
-              final upcoming = (snapshot.data ?? [])
-                  .where((t) =>
-                      t.assignedUserId == user.id &&
-                      t.statusId != catalog.completedStatusId &&
-                      (t.date != AppDateUtils.formatDateKey(today) ||
-                          t.statusId == pendingId ||
-                          t.statusId == catalog.rescheduledStatusId))
-                  .toList()
-                ..sort((a, b) {
-                  final cmp = a.date.compareTo(b.date);
-                  return cmp != 0 ? cmp : a.hour.compareTo(b.hour);
-                });
-
-              final limited = upcoming.take(5).toList();
-
-              if (limited.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: EmptyState(
-                    message: 'No tienes tareas próximas pendientes.',
-                    icon: LucideIcons.calendarDays,
-                  ),
-                );
-              }
-
-              return Column(
-                children: [
-                  for (final task in limited) TaskCard(task: task),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 16),
-          OutlinedButton.icon(
-            onPressed: () async {
-              final confirm = await showConfirmDialog(
-                context,
-                title: 'Cerrar sesión',
-                message: '¿Estás seguro que deseas cerrar sesión?',
-                confirmLabel: 'Cerrar sesión',
-                destructive: true,
-                confirmForegroundColor: Colors.white,
-              );
-              if (confirm && context.mounted) {
-                try {
-                  await context.read<AuthProvider>().signOut();
-                } catch (e) {
-                  if (context.mounted) {
-                    SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+              const SizedBox(height: 12),
+              FutureBuilder<List<TaskModel>>(
+                future: _thirtyDaysFuture,
+                builder: (context, snapshot) {
+                  int? compliance;
+                  if (snapshot.hasData) {
+                    final userTasks = snapshot.data!
+                        .where((t) => t.assignedUserId == user.id)
+                        .toList();
+                    if (userTasks.isNotEmpty) {
+                      final completed = userTasks
+                          .where(
+                              (t) => t.statusId == catalog.completedStatusId)
+                          .length;
+                      compliance =
+                          (completed / userTasks.length * 100).round();
+                    }
                   }
-                }
-              }
-            },
-            style: OutlinedButton.styleFrom(foregroundColor: colors.error),
-            icon: const Icon(LucideIcons.logOut),
-            label: const Text('Cerrar sesión'),
+                  return _ComplianceCard(
+                    compliance: compliance,
+                    lastLogin: user.lastLogin,
+                    isLoading:
+                        snapshot.connectionState != ConnectionState.done,
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              const _SettingsCard(),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final confirm = await showConfirmDialog(
+                    context,
+                    title: 'Cerrar sesión',
+                    message: '¿Estás seguro que deseas cerrar sesión?',
+                    confirmLabel: 'Cerrar sesión',
+                    destructive: true,
+                    confirmForegroundColor: Colors.white,
+                  );
+                  if (confirm && context.mounted) {
+                    try {
+                      await context.read<AuthProvider>().signOut();
+                    } catch (e) {
+                      if (context.mounted) {
+                        SnackbarUtils.showError(
+                            context, SnackbarUtils.firebaseErrorMessage(e));
+                      }
+                    }
+                  }
+                },
+                style: OutlinedButton.styleFrom(foregroundColor: colors.error),
+                icon: const Icon(LucideIcons.logOut),
+                label: const Text('Cerrar sesión'),
+              ),
+              const SizedBox(height: 24),
+            ],
           ),
-          const SizedBox(height: 24),
+          if (_uploading)
+            const Positioned.fill(
+              child: ColoredBox(
+                color: Color(0x44000000),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-class _InfoChip extends StatelessWidget {
-  const _InfoChip({required this.icon, required this.label});
+// ---------------------------------------------------------------------------
+// Hero card: avatar + name + email + role/group badges
+// ---------------------------------------------------------------------------
 
-  final IconData icon;
-  final String label;
+class _HeroCard extends StatelessWidget {
+  const _HeroCard({
+    required this.user,
+    required this.catalog,
+    required this.uploading,
+    required this.onAvatarTap,
+  });
+
+  final AppUser user;
+  final CatalogProvider catalog;
+  final bool uploading;
+  final VoidCallback onAvatarTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: colors.background,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colors.primary.withValues(alpha: 0.4)),
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.3)),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Column(
         children: [
-          Icon(icon, size: 14, color: colors.primary),
-          const SizedBox(width: 6),
-          Text(label, style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+          GestureDetector(
+            onTap: uploading ? null : onAvatarTap,
+            child: Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                UserAvatarDisplay(user: user, size: 80, borderWidth: 2.5),
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: colors.primary,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: colors.surface, width: 2),
+                  ),
+                  child: Icon(
+                    LucideIcons.camera,
+                    color: colors.onPrimary,
+                    size: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            user.name,
+            style: TextStyle(
+              color: colors.textPrimary,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            user.email,
+            style: TextStyle(color: colors.textSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
+            children: [
+              _ProfileBadge(
+                icon: LucideIcons.shieldCheck,
+                label: AuthService.roleLabel(user.role),
+              ),
+              user.groupId != null
+                  ? _ProfileBadge(
+                      icon: LucideIcons.users,
+                      label: catalog.groupName(user.groupId),
+                    )
+                  : const _ProfileBadge(
+                      icon: LucideIcons.users,
+                      label: 'Sin grupo',
+                      muted: true,
+                    ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({
+class _ProfileBadge extends StatelessWidget {
+  const _ProfileBadge({
     required this.icon,
     required this.label,
-    required this.value,
-    required this.suffix,
+    this.muted = false,
   });
 
   final IconData icon;
   final String label;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final color = muted ? colors.textSecondary : colors.primary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: muted ? colors.textSecondary : colors.textPrimary,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Streak protagonist card — intentionally the largest element on the screen
+// ---------------------------------------------------------------------------
+
+class _StreakCard extends StatelessWidget {
+  const _StreakCard({required this.streakDays, required this.message});
+
+  final int streakDays;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      decoration: BoxDecoration(
+        color: colors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        children: [
+          Icon(LucideIcons.flame, color: colors.primary, size: 48),
+          const SizedBox(height: 12),
+          Text(
+            '$streakDays',
+            style: TextStyle(
+              color: colors.primary,
+              fontSize: 72,
+              fontWeight: FontWeight.bold,
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            streakDays == 1 ? 'día de racha' : 'días de racha',
+            style: TextStyle(color: colors.textSecondary, fontSize: 17),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+            decoration: BoxDecoration(
+              color: colors.primary.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              message,
+              style: TextStyle(
+                color: colors.primary,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Mini stat card: best streak / completed tasks
+// ---------------------------------------------------------------------------
+
+class _MiniStatCard extends StatelessWidget {
+  const _MiniStatCard({
+    required this.icon,
+    required this.value,
+    required this.label,
+    required this.suffix,
+  });
+
+  final IconData icon;
   final String value;
+  final String label;
   final String suffix;
 
   @override
@@ -278,7 +515,74 @@ class _StatCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: colors.primary, size: 20),
+          const SizedBox(height: 10),
+          Text(
+            value,
+            style: TextStyle(
+              color: colors.primary,
+              fontSize: 30,
+              fontWeight: FontWeight.bold,
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: colors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Text(
+            suffix,
+            style: TextStyle(color: colors.textSecondary, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Compliance card: % completed tasks + progress bar + last login
+// ---------------------------------------------------------------------------
+
+class _ComplianceCard extends StatelessWidget {
+  const _ComplianceCard({
+    required this.compliance,
+    required this.lastLogin,
+    required this.isLoading,
+  });
+
+  final int? compliance;
+  final DateTime? lastLogin;
+  final bool isLoading;
+
+  Color _barColor(AppColorsExtension colors) {
+    if (compliance == null) return colors.textSecondary;
+    if (compliance! >= 80) return colors.success;
+    if (compliance! >= 60) return colors.statusPending;
+    return colors.error;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final barColor = _barColor(colors);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: colors.divider),
       ),
       child: Column(
@@ -286,29 +590,167 @@ class _StatCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, color: colors.primary, size: 16),
-              const SizedBox(width: 6),
-              Text(label, style: TextStyle(color: colors.textSecondary, fontSize: 12)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
+              Icon(LucideIcons.pieChart, color: colors.primary, size: 16),
+              const SizedBox(width: 8),
               Text(
-                value,
+                'Cumplimiento',
                 style: TextStyle(
-                  color: colors.primary,
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
+                  color: colors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
                 ),
               ),
-              const SizedBox(width: 6),
-              Text(suffix, style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+              const Spacer(),
+              Text(
+                '30 días',
+                style: TextStyle(color: colors.textSecondary, fontSize: 11),
+              ),
             ],
           ),
+          const SizedBox(height: 12),
+          if (isLoading)
+            LinearProgressIndicator(
+              backgroundColor: colors.divider,
+              color: colors.primary,
+            )
+          else if (compliance == null) ...[
+            Text(
+              'Sin datos',
+              style: TextStyle(
+                color: colors.textSecondary,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'No hay tareas asignadas en los últimos 30 días.',
+              style: TextStyle(color: colors.textSecondary, fontSize: 12),
+            ),
+          ] else ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  '$compliance%',
+                  style: TextStyle(
+                    color: barColor,
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'completadas',
+                  style:
+                      TextStyle(color: colors.textSecondary, fontSize: 12),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: compliance! / 100.0,
+                minHeight: 8,
+                backgroundColor: colors.divider,
+                valueColor: AlwaysStoppedAnimation<Color>(barColor),
+              ),
+            ),
+          ],
+          if (lastLogin != null) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(LucideIcons.clock,
+                    color: colors.textSecondary, size: 14),
+                const SizedBox(width: 6),
+                Text(
+                  'Último ingreso: ',
+                  style:
+                      TextStyle(color: colors.textSecondary, fontSize: 12),
+                ),
+                Flexible(
+                  child: Text(
+                    AppDateUtils.formatDateTimeOrDash(lastLogin),
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Settings navigation card
+// ---------------------------------------------------------------------------
+
+class _SettingsCard extends StatelessWidget {
+  const _SettingsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return InkWell(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const SettingsPage()),
+      ),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: colors.divider),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: colors.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(LucideIcons.settings,
+                  color: colors.primary, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Configuración',
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    'Personaliza apariencia y preferencias',
+                    style: TextStyle(
+                        color: colors.textSecondary, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            Icon(LucideIcons.chevronRight,
+                color: colors.textSecondary, size: 18),
+          ],
+        ),
       ),
     );
   }

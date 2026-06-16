@@ -1,6 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Required on Android 13+ to display push/local notifications. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Required by image_picker: camera capture for profile photo. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Gallery access: READ_MEDIA_IMAGES (Android 13+) or READ_EXTERNAL_STORAGE (≤12). -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"/>
 
     <application
         android:label="taskflow_executive"

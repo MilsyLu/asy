@@ -22,6 +22,10 @@ class AppUser {
   /// Visual preferences (FASE 3): 'gold' | 'blue' | 'green' | 'purple'.
   final String accentColor;
 
+  /// URL of the user's profile photo stored in Firebase Storage. Null when
+  /// no photo has been uploaded; the UI falls back to initials in that case.
+  final String? photoUrl;
+
   const AppUser({
     required this.id,
     required this.email,
@@ -35,6 +39,7 @@ class AppUser {
     this.createdAt,
     this.themeMode = 'dark',
     this.accentColor = 'gold',
+    this.photoUrl,
   });
 
   bool get isSuperAdmin => role == AppRoles.superAdmin;
@@ -56,6 +61,7 @@ class AppUser {
       createdAt: (map['createdAt'] as Timestamp?)?.toDate(),
       themeMode: map['themeMode'] as String? ?? 'dark',
       accentColor: map['accentColor'] as String? ?? 'gold',
+      photoUrl: map['photoUrl'] as String?,
     );
   }
 
@@ -77,6 +83,7 @@ class AppUser {
           createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
       'themeMode': themeMode,
       'accentColor': accentColor,
+      'photoUrl': photoUrl,
     };
   }
 
@@ -90,6 +97,7 @@ class AppUser {
     int? maxStreakDays,
     String? themeMode,
     String? accentColor,
+    String? photoUrl,
   }) {
     return AppUser(
       id: id,
@@ -104,6 +112,7 @@ class AppUser {
       createdAt: createdAt,
       themeMode: themeMode ?? this.themeMode,
       accentColor: accentColor ?? this.accentColor,
+      photoUrl: photoUrl ?? this.photoUrl,
     );
   }
 }

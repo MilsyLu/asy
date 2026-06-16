@@ -10,6 +10,7 @@ import '../screens/admin/admin_panel_page.dart';
 import '../screens/profile/settings_page.dart';
 import '../services/auth_service.dart';
 import 'confirm_dialog.dart';
+import 'user_avatar.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -39,16 +40,20 @@ class AppDrawer extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: colors.primary, width: 1.5),
-                        ),
-                        child: Icon(LucideIcons.userCircle,
-                            color: colors.primary, size: 28),
-                      ),
+                      user != null
+                        ? UserAvatarDisplay(
+                            user: user, size: 48, borderWidth: 1.5)
+                        : Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border:
+                                  Border.all(color: colors.primary, width: 1.5),
+                            ),
+                            child: Icon(LucideIcons.userCircle,
+                                color: colors.primary, size: 28),
+                          ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(

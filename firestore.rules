@@ -54,7 +54,7 @@ service cloud.firestore {
       allow update: if isSuperAdmin()
         || (isOwner(userId)
             && request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['fcmTokens', 'lastLogin', 'streakDays', 'maxStreakDays', 'name', 'themeMode', 'accentColor']));
+                .hasOnly(['fcmTokens', 'lastLogin', 'streakDays', 'maxStreakDays', 'name', 'themeMode', 'accentColor',  'photoUrl']));
       allow delete: if isSuperAdmin();
     }
 
