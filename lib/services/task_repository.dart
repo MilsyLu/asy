@@ -15,17 +15,22 @@ class TaskRepository {
       _firestore.collection(FirestoreCollections.tasks);
 
   /// Tasks scheduled for a single day, ordered by hour.
+  /// Soft-deleted tasks are excluded client-side (no index change required).
   Stream<List<TaskModel>> watchTasksForDate(DateTime date) {
     final dateKey = AppDateUtils.formatDateKey(date);
     return _collection
         .where('date', isEqualTo: dateKey)
         .orderBy('hour')
         .snapshots()
-        .map((snap) => snap.docs.map((d) => TaskModel.fromDoc(d)).toList());
+        .map((snap) => snap.docs
+            .map((d) => TaskModel.fromDoc(d))
+            .where((t) => !t.isDeleted)
+            .toList());
   }
 
   /// Tasks scheduled within an inclusive date range (`YYYY-MM-DD` keys),
   /// used by the calendar/week views and reports.
+  /// Soft-deleted tasks are excluded client-side.
   Stream<List<TaskModel>> watchTasksInRange(DateTime start, DateTime end) {
     final startKey = AppDateUtils.formatDateKey(start);
     final endKey = AppDateUtils.formatDateKey(end);
@@ -35,7 +40,10 @@ class TaskRepository {
         .orderBy('date')
         .orderBy('hour')
         .snapshots()
-        .map((snap) => snap.docs.map((d) => TaskModel.fromDoc(d)).toList());
+        .map((snap) => snap.docs
+            .map((d) => TaskModel.fromDoc(d))
+            .where((t) => !t.isDeleted)
+            .toList());
   }
 
   Future<List<TaskModel>> getTasksInRange(DateTime start, DateTime end) async {
@@ -47,7 +55,10 @@ class TaskRepository {
         .orderBy('date')
         .orderBy('hour')
         .get();
-    return snap.docs.map((d) => TaskModel.fromDoc(d)).toList();
+    return snap.docs
+        .map((d) => TaskModel.fromDoc(d))
+        .where((t) => !t.isDeleted)
+        .toList();
   }
 
   Stream<TaskModel?> watchTask(String taskId) {
@@ -75,7 +86,9 @@ class TaskRepository {
         .get();
     return snap.docs.any((d) {
       if (d.id == excludeTaskId) return false;
-      if (ignoreStatusIds != null && ignoreStatusIds.contains(d.data()['statusId'])) {
+      if (d.data()['isDeleted'] == true) return false;
+      if (ignoreStatusIds != null &&
+          ignoreStatusIds.contains(d.data()['statusId'])) {
         return false;
       }
       return true;
@@ -93,6 +106,60 @@ class TaskRepository {
 
   Future<void> deleteTask(String taskId) {
     return _collection.doc(taskId).delete();
+  }
+
+  // -------------------------------------------------------------------------
+  // Trash-bin operations
+  // -------------------------------------------------------------------------
+
+  /// Marks a task as deleted without removing it from Firestore.
+  Future<void> softDeleteTask(String taskId, String deletedBy) {
+    return _collection.doc(taskId).update({
+      'isDeleted': true,
+      'deletedAt': Timestamp.fromDate(DateTime.now()),
+      'deletedBy': deletedBy,
+    });
+  }
+
+  /// Restores a soft-deleted task, clearing all deletion metadata.
+  Future<void> restoreTask(String taskId) {
+    return _collection.doc(taskId).update({
+      'isDeleted': false,
+      'deletedAt': FieldValue.delete(),
+      'deletedBy': FieldValue.delete(),
+    });
+  }
+
+  /// Permanently removes a task document from Firestore (irreversible).
+  Future<void> permanentlyDeleteTask(String taskId) {
+    return _collection.doc(taskId).delete();
+  }
+
+  /// Stream of all soft-deleted tasks, ordered by deletion date (newest first).
+  /// Requires composite index (isDeleted ASC, deletedAt DESC) — deploy before
+  /// enabling the trash-bin screen in Sprint 2.
+  Stream<List<TaskModel>> watchDeletedTasks() {
+    return _collection
+        .where('isDeleted', isEqualTo: true)
+        .orderBy('deletedAt', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => TaskModel.fromDoc(d)).toList());
+  }
+
+  /// Stream of soft-deleted tasks within an inclusive date range.
+  /// Requires composite index (isDeleted ASC, date ASC) — deploy before
+  /// enabling the trash-bin screen in Sprint 2.
+  Stream<List<TaskModel>> watchDeletedTasksByDateRange(
+      DateTime start, DateTime end) {
+    final startKey = AppDateUtils.formatDateKey(start);
+    final endKey = AppDateUtils.formatDateKey(end);
+    return _collection
+        .where('isDeleted', isEqualTo: true)
+        .where('date', isGreaterThanOrEqualTo: startKey)
+        .where('date', isLessThanOrEqualTo: endKey)
+        .orderBy('date')
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => TaskModel.fromDoc(d)).toList());
   }
 
   /// Marks a task as completed by the worker.

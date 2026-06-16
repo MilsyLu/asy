@@ -19,6 +19,9 @@ class TaskModel {
   final String date; // "YYYY-MM-DD"
   final String? groupId;
   final bool visibleToAllGroups;
+  final bool isDeleted;
+  final DateTime? deletedAt;
+  final String? deletedBy;
 
   const TaskModel({
     required this.id,
@@ -37,6 +40,9 @@ class TaskModel {
     this.rescheduledCount = 0,
     this.groupId,
     this.visibleToAllGroups = false,
+    this.isDeleted = false,
+    this.deletedAt,
+    this.deletedBy,
   });
 
   /// The full scheduled [DateTime] obtained by combining [date] and [hour].
@@ -66,6 +72,9 @@ class TaskModel {
       date: map['date'] as String? ?? '',
       groupId: map['groupId'] as String?,
       visibleToAllGroups: map['visibleToAllGroups'] as bool? ?? false,
+      isDeleted: map['isDeleted'] as bool? ?? false,
+      deletedAt: (map['deletedAt'] as Timestamp?)?.toDate(),
+      deletedBy: map['deletedBy'] as String?,
     );
   }
 
@@ -94,6 +103,9 @@ class TaskModel {
       'date': date,
       'groupId': groupId,
       'visibleToAllGroups': visibleToAllGroups,
+      'isDeleted': isDeleted,
+      'deletedAt': deletedAt != null ? Timestamp.fromDate(deletedAt!) : null,
+      'deletedBy': deletedBy,
     };
   }
 
@@ -114,6 +126,11 @@ class TaskModel {
     String? date,
     String? groupId,
     bool? visibleToAllGroups,
+    bool? isDeleted,
+    DateTime? deletedAt,
+    bool? clearDeletedAt,
+    String? deletedBy,
+    bool? clearDeletedBy,
   }) {
     return TaskModel(
       id: id,
@@ -135,6 +152,11 @@ class TaskModel {
       date: date ?? this.date,
       groupId: groupId ?? this.groupId,
       visibleToAllGroups: visibleToAllGroups ?? this.visibleToAllGroups,
+      isDeleted: isDeleted ?? this.isDeleted,
+      deletedAt:
+          clearDeletedAt == true ? null : (deletedAt ?? this.deletedAt),
+      deletedBy:
+          clearDeletedBy == true ? null : (deletedBy ?? this.deletedBy),
     );
   }
 }
