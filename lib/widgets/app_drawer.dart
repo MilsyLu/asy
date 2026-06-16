@@ -8,6 +8,7 @@ import '../providers/auth_provider.dart';
 import '../providers/catalog_provider.dart';
 import '../screens/admin/admin_panel_page.dart';
 import '../screens/profile/settings_page.dart';
+import '../screens/trash/trash_page.dart';
 import '../services/auth_service.dart';
 import 'confirm_dialog.dart';
 import 'user_avatar.dart';
@@ -105,7 +106,7 @@ class AppDrawer extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            if (auth.isSuperAdmin)
+            if (auth.isSuperAdmin) ...[
               ListTile(
                 leading: Icon(LucideIcons.layoutDashboard, color: colors.primary),
                 title: const Text('Panel de administración'),
@@ -116,6 +117,17 @@ class AppDrawer extends StatelessWidget {
                   );
                 },
               ),
+              ListTile(
+                leading: Icon(LucideIcons.trash2, color: colors.primary),
+                title: const Text('Papelera'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const TrashPage()),
+                  );
+                },
+              ),
+            ],
             ListTile(
               leading: Icon(LucideIcons.settings, color: colors.primary),
               title: const Text('Configuración'),

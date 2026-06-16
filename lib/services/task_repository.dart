@@ -113,11 +113,13 @@ class TaskRepository {
   // -------------------------------------------------------------------------
 
   /// Marks a task as deleted without removing it from Firestore.
-  Future<void> softDeleteTask(String taskId, String deletedBy) {
+  Future<void> softDeleteTask(
+      String taskId, String deletedBy, String deletedByName) {
     return _collection.doc(taskId).update({
       'isDeleted': true,
       'deletedAt': Timestamp.fromDate(DateTime.now()),
       'deletedBy': deletedBy,
+      'deletedByName': deletedByName,
     });
   }
 
@@ -127,6 +129,7 @@ class TaskRepository {
       'isDeleted': false,
       'deletedAt': FieldValue.delete(),
       'deletedBy': FieldValue.delete(),
+      'deletedByName': FieldValue.delete(),
     });
   }
 

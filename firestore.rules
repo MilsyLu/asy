@@ -79,7 +79,10 @@ service cloud.firestore {
       allow update: if isSignedIn()
         && canAccessTask(resource.data)
         && canAccessTask(request.resource.data);
-      allow delete: if isSignedIn() && canAccessTask(resource.data);
+      // Permanent delete is restricted to super_admin.
+      // Soft delete uses update() above and is available to any signed-in user
+      // who can access the task.
+      allow delete: if isSuperAdmin();
     }
 
     // -----------------------------------------------------------------

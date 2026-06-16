@@ -12,6 +12,7 @@ import '../../../providers/auth_provider.dart';
 import '../../../providers/catalog_provider.dart';
 import '../../../services/task_repository.dart';
 import '../../../widgets/confirm_dialog.dart';
+import '../../../widgets/trash_dialog.dart';
 import '../add_edit_task_page.dart';
 import 'reschedule_dialog.dart';
 
@@ -114,7 +115,7 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
                 label: 'Observaciones',
                 value: task.observations.isEmpty ? 'Sin observaciones' : task.observations,
               ),
-              if (canEdit || canComplete || canReschedule) ...[
+              ...[
                 const SizedBox(height: 12),
                 const Divider(height: 1),
                 const SizedBox(height: 4),
@@ -180,6 +181,33 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
                         icon: const Icon(LucideIcons.checkCircle, size: 16),
                         label: const Text('Completar'),
                       ),
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                          foregroundColor: colors.error),
+                      onPressed: () async {
+                        Navigator.of(dialogContext).pop();
+                        final user = auth.appUser;
+                        if (user == null) return;
+                        final confirm =
+                            await showSendToTrashDialog(context);
+                        if (!confirm) return;
+                        try {
+                          await repo.softDeleteTask(
+                              task.id, user.id, user.name);
+                          if (context.mounted) {
+                            SnackbarUtils.showSuccess(
+                                context, 'Tarea enviada a la papelera');
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            SnackbarUtils.showError(context,
+                                SnackbarUtils.firebaseErrorMessage(e));
+                          }
+                        }
+                      },
+                      icon: const Icon(LucideIcons.trash2, size: 16),
+                      label: const Text('Papelera'),
+                    ),
                   ],
                 ),
               ],

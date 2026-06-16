@@ -22,6 +22,7 @@ class TaskModel {
   final bool isDeleted;
   final DateTime? deletedAt;
   final String? deletedBy;
+  final String? deletedByName;
 
   const TaskModel({
     required this.id,
@@ -43,6 +44,7 @@ class TaskModel {
     this.isDeleted = false,
     this.deletedAt,
     this.deletedBy,
+    this.deletedByName,
   });
 
   /// The full scheduled [DateTime] obtained by combining [date] and [hour].
@@ -75,6 +77,7 @@ class TaskModel {
       isDeleted: map['isDeleted'] as bool? ?? false,
       deletedAt: (map['deletedAt'] as Timestamp?)?.toDate(),
       deletedBy: map['deletedBy'] as String?,
+      deletedByName: map['deletedByName'] as String?,
     );
   }
 
@@ -106,6 +109,7 @@ class TaskModel {
       'isDeleted': isDeleted,
       'deletedAt': deletedAt != null ? Timestamp.fromDate(deletedAt!) : null,
       'deletedBy': deletedBy,
+      'deletedByName': deletedByName,
     };
   }
 
@@ -131,6 +135,8 @@ class TaskModel {
     bool? clearDeletedAt,
     String? deletedBy,
     bool? clearDeletedBy,
+    String? deletedByName,
+    bool? clearDeletedByName,
   }) {
     return TaskModel(
       id: id,
@@ -157,6 +163,8 @@ class TaskModel {
           clearDeletedAt == true ? null : (deletedAt ?? this.deletedAt),
       deletedBy:
           clearDeletedBy == true ? null : (deletedBy ?? this.deletedBy),
+      deletedByName:
+          clearDeletedByName == true ? null : (deletedByName ?? this.deletedByName),
     );
   }
 }

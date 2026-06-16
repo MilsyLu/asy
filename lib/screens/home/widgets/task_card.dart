@@ -12,6 +12,7 @@ import '../../../providers/auth_provider.dart';
 import '../../../providers/catalog_provider.dart';
 import '../../../services/task_repository.dart';
 import '../../../widgets/confirm_dialog.dart';
+import '../../../widgets/trash_dialog.dart';
 import '../add_edit_task_page.dart';
 import 'reschedule_dialog.dart';
 import 'task_detail_dialog.dart';
@@ -163,7 +164,7 @@ class TaskCard extends StatelessWidget {
                           ),
                       ],
                     ),
-                    if (canEdit || canComplete || canReschedule) ...[
+                    ...[
                       const SizedBox(height: 10),
                       const Divider(height: 1),
                       const SizedBox(height: 6),
@@ -196,6 +197,14 @@ class TaskCard extends StatelessWidget {
                               icon: const Icon(LucideIcons.checkCircle, size: 16),
                               label: const Text('Completar'),
                             ),
+                          TextButton.icon(
+                            style: TextButton.styleFrom(
+                                foregroundColor: colors.error),
+                            onPressed: () =>
+                                sendTaskToTrashWithConfirm(context, task),
+                            icon: const Icon(LucideIcons.trash2, size: 16),
+                            label: const Text('Papelera'),
+                          ),
                         ],
                       ),
                     ],
@@ -263,6 +272,30 @@ Future<void> completeTaskWithConfirm(BuildContext context, TaskModel task) async
     await repo.completeTask(task.id, completedId);
     if (context.mounted) {
       SnackbarUtils.showSuccess(context, 'Tarea completada');
+    }
+  } catch (e) {
+    if (context.mounted) {
+      SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+    }
+  }
+}
+
+/// Soft-deletes [task] after showing the standard trash confirmation dialog.
+/// Shared by [TaskCard]'s action row and [showTaskQuickActionsSheet].
+Future<void> sendTaskToTrashWithConfirm(
+    BuildContext context, TaskModel task) async {
+  final auth = context.read<AuthProvider>();
+  final repo = context.read<TaskRepository>();
+  final user = auth.appUser;
+  if (user == null) return;
+
+  final confirm = await showSendToTrashDialog(context);
+  if (!confirm) return;
+
+  try {
+    await repo.softDeleteTask(task.id, user.id, user.name);
+    if (context.mounted) {
+      SnackbarUtils.showSuccess(context, 'Tarea enviada a la papelera');
     }
   } catch (e) {
     if (context.mounted) {
@@ -371,14 +404,17 @@ Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
                   }
                 },
               ),
-            if (!canEdit && !canComplete && !canReschedule)
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Text(
-                  'Esta tarea ya fue completada.',
-                  style: TextStyle(color: colors.textSecondary),
-                ),
+            ListTile(
+              leading: Icon(LucideIcons.trash2, color: colors.error),
+              title: Text(
+                'Enviar a papelera',
+                style: TextStyle(color: colors.error),
               ),
+              onTap: () async {
+                Navigator.of(sheetContext).pop();
+                await sendTaskToTrashWithConfirm(context, task);
+              },
+            ),
             const SizedBox(height: 8),
           ],
         ),
