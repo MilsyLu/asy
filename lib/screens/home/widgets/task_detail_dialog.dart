@@ -17,6 +17,36 @@ import '../../../widgets/trash_dialog.dart';
 import '../add_edit_task_page.dart';
 import 'reschedule_dialog.dart';
 
+/// Returns a human-readable label for the reminder stored in [task].
+///
+/// Matches the quick-option offsets defined in `_ReminderOption` so the
+/// detail dialog shows "15 minutos antes" instead of a raw timestamp when
+/// the reminder was set via a quick option.
+String _reminderLabel(TaskModel task) {
+  final reminderTime = task.reminderTime;
+  if (reminderTime == null) return 'Sin recordatorio';
+
+  final parts = task.hour.split(':');
+  if (parts.length != 2) return AppDateUtils.formatTime12h(reminderTime);
+  final hour = int.tryParse(parts[0]);
+  final minute = int.tryParse(parts[1]);
+  if (hour == null || minute == null) {
+    return AppDateUtils.formatTime12h(reminderTime);
+  }
+
+  final taskDate = AppDateUtils.parseDateKey(task.date);
+  final taskDt =
+      DateTime(taskDate.year, taskDate.month, taskDate.day, hour, minute);
+  final diff = taskDt.difference(reminderTime);
+
+  if (diff == const Duration(minutes: 5)) return '5 minutos antes';
+  if (diff == const Duration(minutes: 10)) return '10 minutos antes';
+  if (diff == const Duration(minutes: 15)) return '15 minutos antes';
+  if (diff == const Duration(minutes: 30)) return '30 minutos antes';
+  if (diff == const Duration(hours: 1)) return '1 hora antes';
+  return AppDateUtils.formatTime12h(reminderTime);
+}
+
 /// Read-only dialog with the full details of [task]: client, phone
 /// (highlighted, with a copy-to-clipboard button), type, date, hour,
 /// assignee, group and observations.
@@ -115,6 +145,12 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
                 icon: LucideIcons.fileText,
                 label: 'Observaciones',
                 value: task.observations.isEmpty ? 'Sin observaciones' : task.observations,
+              ),
+              const SizedBox(height: 12),
+              _DetailRow(
+                icon: LucideIcons.bell,
+                label: 'Recordatorio',
+                value: _reminderLabel(task),
               ),
               ...[
                 const SizedBox(height: 12),

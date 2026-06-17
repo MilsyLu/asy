@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
@@ -15,6 +16,54 @@ import '../../services/notification_service.dart';
 import '../../services/task_repository.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/gold_button.dart';
+
+enum _ReminderOption {
+  none,
+  min5,
+  min10,
+  min15,
+  min30,
+  hour1,
+  custom;
+
+  String get label {
+    switch (this) {
+      case _ReminderOption.none:
+        return 'Sin recordatorio';
+      case _ReminderOption.min5:
+        return '5 minutos antes';
+      case _ReminderOption.min10:
+        return '10 minutos antes';
+      case _ReminderOption.min15:
+        return '15 minutos antes';
+      case _ReminderOption.min30:
+        return '30 minutos antes';
+      case _ReminderOption.hour1:
+        return '1 hora antes';
+      case _ReminderOption.custom:
+        return 'Personalizado';
+    }
+  }
+
+  Duration? get offsetFromTask {
+    switch (this) {
+      case _ReminderOption.none:
+        return null;
+      case _ReminderOption.min5:
+        return const Duration(minutes: 5);
+      case _ReminderOption.min10:
+        return const Duration(minutes: 10);
+      case _ReminderOption.min15:
+        return const Duration(minutes: 15);
+      case _ReminderOption.min30:
+        return const Duration(minutes: 30);
+      case _ReminderOption.hour1:
+        return const Duration(hours: 1);
+      case _ReminderOption.custom:
+        return null;
+    }
+  }
+}
 
 /// Form used to both create and edit a task.
 ///
@@ -44,6 +93,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
   String? _groupId;
   bool _visibleToAllGroups = false;
   DateTime? _reminderDateTime;
+  _ReminderOption _reminderOption = _ReminderOption.none;
   bool _isSaving = false;
 
   bool get _isEditing => widget.existingTask != null;
@@ -64,6 +114,10 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
       _reminderDateTime = task.reminderTime;
       _groupId = task.groupId;
       _visibleToAllGroups = task.visibleToAllGroups;
+      _reminderOption = _detectOption(
+        _reminderDateTime,
+        _taskDateTimeFromHour(_selectedDate, _selectedHour),
+      );
     } else {
       _selectedDate = widget.initialDate ?? DateTime.now();
     }
@@ -76,6 +130,316 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     _observationsController.dispose();
     super.dispose();
   }
+
+  // ---------------------------------------------------------------------------
+  // Reminder helpers
+  // ---------------------------------------------------------------------------
+
+  static _ReminderOption _detectOption(
+      DateTime? reminderTime, DateTime? taskDt) {
+    if (reminderTime == null) return _ReminderOption.none;
+    if (taskDt == null) return _ReminderOption.custom;
+    final diff = taskDt.difference(reminderTime);
+    for (final opt in _ReminderOption.values) {
+      final offset = opt.offsetFromTask;
+      if (offset != null && diff == offset) return opt;
+    }
+    return _ReminderOption.custom;
+  }
+
+  static DateTime? _taskDateTimeFromHour(DateTime date, String? hourStr) {
+    if (hourStr == null) return null;
+    final parts = hourStr.split(':');
+    if (parts.length != 2) return null;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null) return null;
+    return DateTime(date.year, date.month, date.day, hour, minute);
+  }
+
+  DateTime? _taskDateTime() =>
+      _taskDateTimeFromHour(_selectedDate, _selectedHour);
+
+  String _reminderLabel() {
+    switch (_reminderOption) {
+      case _ReminderOption.none:
+        return 'Sin recordatorio';
+      case _ReminderOption.custom:
+        return _reminderDateTime != null
+            ? AppDateUtils.formatTime12h(_reminderDateTime!)
+            : 'Sin recordatorio';
+      default:
+        return _reminderOption.label;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Picker sheets
+  // ---------------------------------------------------------------------------
+
+  Future<void> _showReminderSheet() async {
+    final current = _reminderOption;
+    final reminderDt = _reminderDateTime;
+
+    final result = await showModalBottomSheet<_ReminderOption>(
+      context: context,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        final colors = sheetCtx.colors;
+        return SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 4),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colors.textSecondary.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.bell, color: colors.primary, size: 20),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Recordatorio',
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(color: colors.divider, height: 16),
+              for (final opt in _ReminderOption.values)
+                InkWell(
+                  onTap: () => Navigator.pop(sheetCtx, opt),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 14),
+                    child: Row(
+                      children: [
+                        Icon(
+                          current == opt
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_unchecked,
+                          color: current == opt
+                              ? colors.primary
+                              : colors.textSecondary,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Text(
+                            opt.label,
+                            style: TextStyle(
+                              color: current == opt
+                                  ? colors.primary
+                                  : colors.textPrimary,
+                              fontSize: 15,
+                              fontWeight: current == opt
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                        if (opt == _ReminderOption.custom &&
+                            current == _ReminderOption.custom &&
+                            reminderDt != null)
+                          Text(
+                            AppDateUtils.formatTime12h(reminderDt),
+                            style: TextStyle(
+                                color: colors.textSecondary, fontSize: 13),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (!mounted || result == null) return;
+
+    if (result == _ReminderOption.custom) {
+      await _showCustomTimePicker();
+      return;
+    }
+
+    final taskDt = _taskDateTime();
+    setState(() {
+      _reminderOption = result;
+      if (result == _ReminderOption.none) {
+        _reminderDateTime = null;
+      } else if (taskDt != null) {
+        _reminderDateTime = taskDt.subtract(result.offsetFromTask!);
+      }
+    });
+  }
+
+  Future<void> _showCustomTimePicker() async {
+    DateTime picked = _reminderDateTime ?? DateTime.now();
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        final colors = dialogCtx.colors;
+        return Dialog(
+          backgroundColor: colors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 40,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Icon(LucideIcons.clock,
+                          color: colors.primary, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Hora personalizada',
+                            style: TextStyle(
+                              color: colors.textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Selecciona la hora exacta del recordatorio',
+                            style: TextStyle(
+                              color: colors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Divider(color: colors.divider, height: 1),
+              ),
+              SizedBox(
+                height: 200,
+                child: CupertinoTheme(
+                  data: CupertinoThemeData(
+                    brightness: Theme.of(dialogCtx).brightness,
+                    textTheme: CupertinoTextThemeData(
+                      pickerTextStyle: TextStyle(
+                        color: colors.textPrimary,
+                        fontSize: 21,
+                      ),
+                    ),
+                  ),
+                  child: CupertinoDatePicker(
+                    mode: CupertinoDatePickerMode.time,
+                    initialDateTime: picked,
+                    use24hFormat: false,
+                    onDateTimeChanged: (dt) => picked = dt,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          foregroundColor: colors.textSecondary,
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: () => Navigator.pop(dialogCtx),
+                        child: const Text(
+                          'Cancelar',
+                          style: TextStyle(fontSize: 14),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colors.primary,
+                          foregroundColor: colors.onPrimary,
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: () {
+                          final taskDt = _taskDateTime();
+                          final reminderDt = DateTime(
+                            taskDt?.year ?? picked.year,
+                            taskDt?.month ?? picked.month,
+                            taskDt?.day ?? picked.day,
+                            picked.hour,
+                            picked.minute,
+                          );
+                          setState(() {
+                            _reminderOption = _ReminderOption.custom;
+                            _reminderDateTime = reminderDt;
+                          });
+                          Navigator.pop(dialogCtx);
+                        },
+                        child: const Text(
+                          'Confirmar',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Other helpers
+  // ---------------------------------------------------------------------------
 
   List<AppUser> _assignableUsers(CatalogProvider catalog, AppUser current) {
     if (current.groupId != null) {
@@ -93,36 +457,6 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
       lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
     );
     if (picked != null) setState(() => _selectedDate = picked);
-  }
-
-  Future<void> _pickReminder() async {
-    final initialDate = _reminderDateTime ?? _selectedDate;
-    final pickedDate = await showDatePicker(
-      context: context,
-      initialDate: initialDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
-    );
-    if (pickedDate == null || !mounted) return;
-
-    final initialTime = _reminderDateTime != null
-        ? TimeOfDay.fromDateTime(_reminderDateTime!)
-        : TimeOfDay.now();
-    final pickedTime = await showTimePicker(
-      context: context,
-      initialTime: initialTime,
-    );
-    if (pickedTime == null) return;
-
-    setState(() {
-      _reminderDateTime = DateTime(
-        pickedDate.year,
-        pickedDate.month,
-        pickedDate.day,
-        pickedTime.hour,
-        pickedTime.minute,
-      );
-    });
   }
 
   Future<void> _save() async {
@@ -208,9 +542,8 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
           'visibleToAllGroups': _visibleToAllGroups,
         }.map((key, value) {
           if (key == 'reminderTime') {
-            return MapEntry(key, value == null
-                ? null
-                : Timestamp.fromDate(value as DateTime));
+            return MapEntry(key,
+                value == null ? null : Timestamp.fromDate(value as DateTime));
           }
           return MapEntry(key, value);
         }));
@@ -290,7 +623,8 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     // Default to the assigned worker's group (covers both brand-new tasks
     // and legacy tasks being edited for the first time after this
     // feature shipped, which have groupId == null).
-    _groupId ??= catalog.userById(_assignedUserId)?.groupId ?? currentUser.groupId;
+    _groupId ??=
+        catalog.userById(_assignedUserId)?.groupId ?? currentUser.groupId;
 
     final assignableUsers = _assignableUsers(catalog, currentUser);
     // Non-admins can only assign tasks to their own group; admins may
@@ -318,46 +652,53 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              initialValue: catalog.availableHours.any((h) => h.hour == _selectedHour)
-                  ? _selectedHour
-                  : null,
+              initialValue:
+                  catalog.availableHours.any((h) => h.hour == _selectedHour)
+                      ? _selectedHour
+                      : null,
               decoration: InputDecoration(
                 labelText: 'Hora',
                 prefixIcon: Icon(LucideIcons.clock, color: colors.primary),
               ),
               dropdownColor: colors.surface,
               items: catalog.availableHours
-                  .map((h) => DropdownMenuItem(value: h.hour, child: Text(h.hour)))
+                  .map((h) =>
+                      DropdownMenuItem(value: h.hour, child: Text(h.hour)))
                   .toList(),
               onChanged: (v) => setState(() => _selectedHour = v),
               validator: (v) => v == null ? 'Selecciona una hora' : null,
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              initialValue: assignableUsers.any((u) => u.id == _assignedUserId)
-                  ? _assignedUserId
-                  : null,
+              initialValue:
+                  assignableUsers.any((u) => u.id == _assignedUserId)
+                      ? _assignedUserId
+                      : null,
               decoration: InputDecoration(
                 labelText: 'Encargado',
-                prefixIcon: Icon(LucideIcons.userCheck, color: colors.primary),
+                prefixIcon:
+                    Icon(LucideIcons.userCheck, color: colors.primary),
               ),
               dropdownColor: colors.surface,
               items: assignableUsers
-                  .map((u) => DropdownMenuItem(value: u.id, child: Text(u.name)))
+                  .map((u) =>
+                      DropdownMenuItem(value: u.id, child: Text(u.name)))
                   .toList(),
               onChanged: (v) => setState(() => _assignedUserId = v),
               validator: (v) => v == null ? 'Selecciona un encargado' : null,
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              initialValue: groupOptions.any((g) => g.id == _groupId) ? _groupId : null,
+              initialValue:
+                  groupOptions.any((g) => g.id == _groupId) ? _groupId : null,
               decoration: InputDecoration(
                 labelText: 'Grupo',
                 prefixIcon: Icon(LucideIcons.users, color: colors.primary),
               ),
               dropdownColor: colors.surface,
               items: groupOptions
-                  .map((g) => DropdownMenuItem(value: g.id, child: Text(g.name)))
+                  .map((g) =>
+                      DropdownMenuItem(value: g.id, child: Text(g.name)))
                   .toList(),
               onChanged: (v) => setState(() => _groupId = v),
               validator: (v) => v == null ? 'Selecciona un grupo' : null,
@@ -377,33 +718,39 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              initialValue: catalog.taskTypes.any((t) => t.id == _taskTypeId)
-                  ? _taskTypeId
-                  : null,
+              initialValue:
+                  catalog.taskTypes.any((t) => t.id == _taskTypeId)
+                      ? _taskTypeId
+                      : null,
               decoration: InputDecoration(
                 labelText: 'Tipo de tarea',
                 prefixIcon: Icon(LucideIcons.tag, color: colors.primary),
               ),
               dropdownColor: colors.surface,
               items: catalog.taskTypes
-                  .map((t) => DropdownMenuItem(value: t.id, child: Text(t.name)))
+                  .map((t) =>
+                      DropdownMenuItem(value: t.id, child: Text(t.name)))
                   .toList(),
               onChanged: (v) => setState(() => _taskTypeId = v),
-              validator: (v) => v == null ? 'Selecciona un tipo de tarea' : null,
+              validator: (v) =>
+                  v == null ? 'Selecciona un tipo de tarea' : null,
             ),
             if (isAdmin) ...[
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                initialValue: catalog.statuses.any((s) => s.id == _statusId)
-                    ? _statusId
-                    : null,
+                initialValue:
+                    catalog.statuses.any((s) => s.id == _statusId)
+                        ? _statusId
+                        : null,
                 decoration: InputDecoration(
                   labelText: 'Estado',
-                  prefixIcon: Icon(LucideIcons.listChecks, color: colors.primary),
+                  prefixIcon:
+                      Icon(LucideIcons.listChecks, color: colors.primary),
                 ),
                 dropdownColor: colors.surface,
                 items: catalog.statuses
-                    .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name)))
+                    .map((s) =>
+                        DropdownMenuItem(value: s.id, child: Text(s.name)))
                     .toList(),
                 onChanged: (v) => setState(() => _statusId = v),
               ),
@@ -414,9 +761,11 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
               style: TextStyle(color: colors.textPrimary),
               decoration: InputDecoration(
                 labelText: 'Nombre del cliente',
-                prefixIcon: Icon(LucideIcons.userCircle, color: colors.primary),
+                prefixIcon:
+                    Icon(LucideIcons.userCircle, color: colors.primary),
               ),
-              validator: (v) => Validators.required(v, fieldName: 'El nombre del cliente'),
+              validator: (v) =>
+                  Validators.required(v, fieldName: 'El nombre del cliente'),
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -446,23 +795,23 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
             ),
             const SizedBox(height: 16),
             InkWell(
-              onTap: _pickReminder,
+              onTap: _showReminderSheet,
               child: InputDecorator(
                 decoration: InputDecoration(
                   labelText: 'Recordatorio (opcional)',
-                  prefixIcon: Icon(LucideIcons.barChart3, color: colors.primary),
-                  suffixIcon: _reminderDateTime != null
+                  prefixIcon: Icon(LucideIcons.bell, color: colors.primary),
+                  suffixIcon: _reminderOption != _ReminderOption.none
                       ? IconButton(
-                          icon: Icon(LucideIcons.xCircle, color: colors.textSecondary),
-                          onPressed: () => setState(() => _reminderDateTime = null),
+                          icon: Icon(LucideIcons.xCircle,
+                              color: colors.textSecondary),
+                          onPressed: () => setState(() {
+                            _reminderDateTime = null;
+                            _reminderOption = _ReminderOption.none;
+                          }),
                         )
                       : null,
                 ),
-                child: Text(
-                  _reminderDateTime != null
-                      ? AppDateUtils.formatDateTimeOrDash(_reminderDateTime)
-                      : 'Sin recordatorio',
-                ),
+                child: Text(_reminderLabel()),
               ),
             ),
             Padding(

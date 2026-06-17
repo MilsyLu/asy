@@ -45,4 +45,13 @@ class AppDateUtils {
     if (date == null) return '-';
     return DateFormat('dd/MM/yyyy HH:mm').format(date);
   }
+
+  /// Formats a [DateTime] as 12-hour time with Spanish am/pm, e.g. "07:59 a. m.".
+  static String formatTime12h(DateTime dt) {
+    final h = dt.hour;
+    final m = dt.minute;
+    final ampm = h < 12 ? 'a. m.' : 'p. m.';
+    final h12 = h % 12 == 0 ? 12 : h % 12;
+    return '${h12.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')} $ampm';
+  }
 }
