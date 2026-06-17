@@ -5,152 +5,123 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/theme_colors.dart';
-import '../../../core/utils/task_visibility.dart';
 import '../../../models/task_model.dart';
-import '../../../providers/auth_provider.dart';
 import '../../../providers/catalog_provider.dart';
-import '../../../services/task_repository.dart';
 import '../../../widgets/loading_indicator.dart';
 
 /// Report 2: pie chart summarizing rescheduled / installed / installation
-/// / pending task counts within the selected range.
+/// / pending task counts within the selected range. [tasks] is the
+/// already-loaded, visibility-filtered list shared by every report tab.
 class StatusReportTab extends StatelessWidget {
-  const StatusReportTab({super.key, required this.range});
+  const StatusReportTab({super.key, required this.tasks});
 
-  final DateTimeRange range;
+  final List<TaskModel> tasks;
 
   @override
   Widget build(BuildContext context) {
-    final repo = context.read<TaskRepository>();
     final catalog = context.watch<CatalogProvider>();
-    final currentUser = context.watch<AuthProvider>().appUser;
     final colors = context.colors;
 
-    if (currentUser == null) return const LoadingIndicator();
+    if (tasks.isEmpty) {
+      return const EmptyState(
+        message: 'No hay tareas registradas en el rango seleccionado.',
+        icon: LucideIcons.pieChart,
+      );
+    }
 
-    return StreamBuilder<List<TaskModel>>(
-      stream: repo.watchTasksInRange(range.start, range.end),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const LoadingIndicator();
-        }
-        if (snapshot.hasError) {
-          return EmptyState(
-            message: 'No se pudieron cargar las tareas.\n${snapshot.error}',
-            icon: LucideIcons.alertCircle,
-          );
-        }
+    final installationTypeId = catalog.taskTypeByName(AppTaskTypeNames.instalacion)?.id;
+    final pendingId = catalog.pendingStatusId;
+    final completedId = catalog.completedStatusId;
+    final rescheduledId = catalog.rescheduledStatusId;
 
-        final tasks = (snapshot.data ?? [])
-            .where((t) => isTaskVisibleToUser(
-                  task: t,
-                  user: currentUser,
-                  catalog: catalog,
-                ))
-            .toList();
+    final metrics = <_Metric>[
+      _Metric(
+        'Reprogramadas',
+        tasks.where((t) => t.statusId == rescheduledId).length,
+        colors.error,
+      ),
+      _Metric(
+        'Instaladas',
+        tasks
+            .where((t) => t.statusId == completedId && t.taskTypeId == installationTypeId)
+            .length,
+        colors.success,
+      ),
+      _Metric(
+        'Tareas de instalación',
+        tasks.where((t) => t.taskTypeId == installationTypeId).length,
+        colors.primary,
+      ),
+      _Metric(
+        'Pendientes',
+        tasks.where((t) => t.statusId == pendingId).length,
+        colors.primaryLight,
+      ),
+    ];
 
-        if (tasks.isEmpty) {
-          return const EmptyState(
-            message: 'No hay tareas registradas en el rango seleccionado.',
-            icon: LucideIcons.pieChart,
-          );
-        }
+    final total = metrics.fold<int>(0, (sum, m) => sum + m.value);
 
-        final installationTypeId = catalog.taskTypeByName(AppTaskTypeNames.instalacion)?.id;
-        final pendingId = catalog.pendingStatusId;
-        final completedId = catalog.completedStatusId;
-        final rescheduledId = catalog.rescheduledStatusId;
+    if (total == 0) {
+      return const EmptyState(
+        message: 'No hay datos suficientes para mostrar el gráfico.',
+        icon: LucideIcons.pieChart,
+      );
+    }
 
-        final metrics = <_Metric>[
-          _Metric(
-            'Reprogramadas',
-            tasks.where((t) => t.statusId == rescheduledId).length,
-            colors.error,
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        SizedBox(
+          height: 220,
+          child: PieChart(
+            PieChartData(
+              sectionsSpace: 2,
+              centerSpaceRadius: 48,
+              sections: [
+                for (final m in metrics)
+                  if (m.value > 0)
+                    PieChartSectionData(
+                      value: m.value.toDouble(),
+                      title: '${m.value}',
+                      color: m.color,
+                      radius: 64,
+                      titleStyle: TextStyle(
+                        color: colors.background,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+              ],
+            ),
           ),
-          _Metric(
-            'Instaladas',
-            tasks
-                .where((t) => t.statusId == completedId && t.taskTypeId == installationTypeId)
-                .length,
-            colors.success,
+        ),
+        const SizedBox(height: 24),
+        for (final m in metrics) _LegendRow(metric: m, total: total),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colors.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
           ),
-          _Metric(
-            'Tareas de instalación',
-            tasks.where((t) => t.taskTypeId == installationTypeId).length,
-            colors.primary,
-          ),
-          _Metric(
-            'Pendientes',
-            tasks.where((t) => t.statusId == pendingId).length,
-            colors.primaryLight,
-          ),
-        ];
-
-        final total = metrics.fold<int>(0, (sum, m) => sum + m.value);
-
-        if (total == 0) {
-          return const EmptyState(
-            message: 'No hay datos suficientes para mostrar el gráfico.',
-            icon: LucideIcons.pieChart,
-          );
-        }
-
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            SizedBox(
-              height: 220,
-              child: PieChart(
-                PieChartData(
-                  sectionsSpace: 2,
-                  centerSpaceRadius: 48,
-                  sections: [
-                    for (final m in metrics)
-                      if (m.value > 0)
-                        PieChartSectionData(
-                          value: m.value.toDouble(),
-                          title: '${m.value}',
-                          color: m.color,
-                          radius: 64,
-                          titleStyle: TextStyle(
-                            color: colors.background,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                  ],
+          child: Row(
+            children: [
+              Icon(LucideIcons.info, color: colors.primary, size: 16),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Las categorías pueden superponerse (por ejemplo, una '
+                  'instalación completada también cuenta como "tarea de '
+                  'instalación"), por lo que el total puede no coincidir '
+                  'con el número de tareas.',
+                  style: TextStyle(color: colors.textSecondary, fontSize: 12),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            for (final m in metrics) _LegendRow(metric: m, total: total),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: colors.surface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
-              ),
-              child: Row(
-                children: [
-                  Icon(LucideIcons.info, color: colors.primary, size: 16),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Las categorías pueden superponerse (por ejemplo, una '
-                      'instalación completada también cuenta como "tarea de '
-                      'instalación"), por lo que el total puede no coincidir '
-                      'con el número de tareas.',
-                      style: TextStyle(color: colors.textSecondary, fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        );
-      },
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
