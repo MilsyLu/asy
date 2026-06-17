@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/snackbar_utils.dart';
+import '../../../core/utils/task_type_colors.dart';
 import '../../../core/utils/validators.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/auth_provider.dart';
@@ -13,14 +14,15 @@ import '../../../providers/catalog_provider.dart';
 import '../../../services/notification_service.dart';
 import '../../../services/task_repository.dart';
 import '../../../widgets/confirm_dialog.dart';
+import '../../../widgets/task_type_chip.dart';
 import '../../../widgets/trash_dialog.dart';
 import '../add_edit_task_page.dart';
 import 'reschedule_dialog.dart';
 import 'task_detail_dialog.dart';
 
 /// Card representation of a single task, used on Home / Calendar / Week.
-/// Shows a thin gold left border, client info, status chip and the
-/// Editar / Completar / Reprogramar action row.
+/// Shows a left border colored by the task type (Sprint 5.5), client info,
+/// status chip and the Editar / Completar / Reprogramar action row.
 class TaskCard extends StatelessWidget {
   const TaskCard({super.key, required this.task});
 
@@ -51,6 +53,8 @@ class TaskCard extends StatelessWidget {
     final statusName = catalog.statusName(task.statusId);
     final assignedName = catalog.userName(task.assignedUserId);
     final colors = context.colors;
+    final typeColor =
+        catalog.taskTypeById(task.taskTypeId)?.parsedColor ?? colors.primary;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -67,7 +71,7 @@ class TaskCard extends StatelessWidget {
             Container(
               width: 4,
               decoration: BoxDecoration(
-                color: colors.primary,
+                color: typeColor,
                 borderRadius: const BorderRadius.horizontal(left: Radius.circular(10)),
               ),
             ),
@@ -90,16 +94,14 @@ class TaskCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            taskType,
-                            style: TextStyle(
-                              color: colors.primaryLight,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                        Flexible(
+                          child: TaskTypeChip(
+                            label: taskType,
+                            color: typeColor,
+                            dense: true,
                           ),
                         ),
+                        const SizedBox(width: 8),
                         _StatusChip(statusName: statusName, isCompleted: isCompleted),
                       ],
                     ),

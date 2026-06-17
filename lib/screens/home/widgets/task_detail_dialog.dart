@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../core/utils/snackbar_utils.dart';
+import '../../../core/utils/task_type_colors.dart';
 import '../../../core/utils/validators.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/auth_provider.dart';
@@ -13,6 +14,7 @@ import '../../../providers/catalog_provider.dart';
 import '../../../services/task_repository.dart';
 import '../../../services/notification_service.dart';
 import '../../../widgets/confirm_dialog.dart';
+import '../../../widgets/task_type_chip.dart';
 import '../../../widgets/trash_dialog.dart';
 import '../add_edit_task_page.dart';
 import 'reschedule_dialog.dart';
@@ -118,7 +120,11 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
               _DetailRow(
                 icon: LucideIcons.tag,
                 label: 'Tipo',
-                value: catalog.taskTypeName(task.taskTypeId),
+                valueWidget: TaskTypeChip(
+                  label: catalog.taskTypeName(task.taskTypeId),
+                  color: catalog.taskTypeById(task.taskTypeId)?.parsedColor ??
+                      colors.primary,
+                ),
               ),
               const SizedBox(height: 12),
               _DetailRow(
@@ -267,11 +273,16 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.icon, required this.label, required this.value});
+  const _DetailRow({required this.icon, required this.label, this.value, this.valueWidget})
+      : assert(value != null || valueWidget != null);
 
   final IconData icon;
   final String label;
-  final String value;
+  final String? value;
+
+  /// Overrides the default value [Text] with a custom widget (e.g. a
+  /// [TaskTypeChip] for the "Tipo" row — Sprint 5.5).
+  final Widget? valueWidget;
 
   @override
   Widget build(BuildContext context) {
@@ -286,15 +297,16 @@ class _DetailRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(label, style: TextStyle(color: colors.textSecondary, fontSize: 11)),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: TextStyle(
-                  color: colors.textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              const SizedBox(height: 4),
+              valueWidget ??
+                  Text(
+                    value!,
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
             ],
           ),
         ),

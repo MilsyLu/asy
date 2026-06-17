@@ -4,19 +4,25 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/theme_colors.dart';
+import '../../../core/utils/task_type_colors.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/catalog_provider.dart';
 
 /// Compact single-task card for the Calendar day-list view.
 ///
 /// Visual layout (top → bottom):
-///   1. Hour (accent color) + status chip (right-aligned)
+///   1. Hour (status accent) + status chip (right-aligned)
 ///   2. Client name — largest, most prominent
 ///   3. Task type · assignee — secondary, muted
 ///
-/// The left accent strip encodes the task status at a glance:
-///   amber → Pendiente, green → Completada, blue → Reprogramada, grey → other.
-/// Pass [accentColor] to override (e.g. [AppColorsExtension.error] for overdue).
+/// The left strip identifies the task TYPE at a glance (Sprint 5.5),
+/// using the color configured in Administración → Tipos de tarea, falling
+/// back to the theme's accent color for types without one. The hour text
+/// and status chip keep encoding status (amber → Pendiente, green →
+/// Completada, blue → Reprogramada, grey → other) so status legibility is
+/// unaffected by the type color change.
+/// Pass [accentColor] to override the status accent (e.g.
+/// [AppColorsExtension.error] for overdue).
 ///
 /// Gestures are not wired inside — the caller handles onTap / onLongPress.
 class CompactTaskCard extends StatelessWidget {
@@ -24,7 +30,7 @@ class CompactTaskCard extends StatelessWidget {
 
   final TaskModel task;
 
-  /// Overrides the status-derived accent color for the strip, hour and chip.
+  /// Overrides the status-derived accent color for the hour and chip.
   final Color? accentColor;
 
   @override
@@ -33,6 +39,8 @@ class CompactTaskCard extends StatelessWidget {
     final colors = context.colors;
     final statusName = catalog.statusName(task.statusId);
     final accent = accentColor ?? taskStatusColor(colors, statusName);
+    final typeColor =
+        catalog.taskTypeById(task.taskTypeId)?.parsedColor ?? colors.primary;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -45,11 +53,11 @@ class CompactTaskCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Colored left strip — status at a glance.
+            // Colored left strip — task type at a glance (Sprint 5.5).
             Container(
               width: 4,
               decoration: BoxDecoration(
-                color: accent,
+                color: typeColor,
                 borderRadius: const BorderRadius.horizontal(left: Radius.circular(10)),
               ),
             ),
@@ -92,7 +100,7 @@ class CompactTaskCard extends StatelessWidget {
                     // Type · Assignee.
                     Row(
                       children: [
-                        Icon(LucideIcons.tag, size: 12, color: colors.textSecondary),
+                        Icon(LucideIcons.tag, size: 12, color: typeColor),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(

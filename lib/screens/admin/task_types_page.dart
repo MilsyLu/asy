@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/snackbar_utils.dart';
+import '../../core/utils/task_type_colors.dart';
 import '../../models/task_type_model.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/catalog_repository.dart';
@@ -20,11 +21,6 @@ const _colorPresets = <String>[
   '#E67E22', // orange
   '#1ABC9C', // teal
 ];
-
-Color _parseHexColor(String hex) {
-  final cleaned = hex.replaceFirst('#', '');
-  return Color(int.parse('FF$cleaned', radix: 16));
-}
 
 /// Human-readable summary of which groups [type] is offered for.
 String _groupsLabel(CatalogProvider catalog, TaskTypeModel type) {
@@ -67,7 +63,7 @@ class TaskTypesPage extends StatelessWidget {
                       height: 16,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: type.color != null ? _parseHexColor(type.color!) : colors.primary,
+                        color: type.parsedColor ?? colors.primary,
                       ),
                     ),
                     title: Text(type.name, style: TextStyle(color: colors.textPrimary)),
@@ -159,7 +155,7 @@ Future<void> _showTaskTypeFormDialog(BuildContext context, {TaskTypeModel? exist
                               height: 32,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: _parseHexColor(hex),
+                                color: parseHexColor(hex),
                                 border: Border.all(
                                   color: selectedColor == hex
                                       ? colors.textPrimary

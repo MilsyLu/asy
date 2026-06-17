@@ -5,12 +5,14 @@ import 'package:provider/provider.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/snackbar_utils.dart';
+import '../../core/utils/task_type_colors.dart';
 import '../../models/task_model.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/notification_service.dart';
 import '../../services/task_repository.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/task_type_chip.dart';
 
 enum _TrashFilter { all, sevenDays, thirtyDays }
 
@@ -284,6 +286,8 @@ class _TrashCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final taskType = catalog.taskTypeName(task.taskTypeId);
+    final typeColor =
+        catalog.taskTypeById(task.taskTypeId)?.parsedColor ?? colors.primary;
     final formattedDate = AppDateUtils.formatShortDate(
       AppDateUtils.parseDateKey(task.date),
     );
@@ -342,17 +346,14 @@ class _TrashCard extends StatelessWidget {
                         Icon(
                           LucideIcons.tag,
                           size: 13,
-                          color: colors.textSecondary,
+                          color: typeColor,
                         ),
                         const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            taskType,
-                            style: TextStyle(
-                              color: colors.textSecondary,
-                              fontSize: 13,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                        Flexible(
+                          child: TaskTypeChip(
+                            label: taskType,
+                            color: typeColor,
+                            dense: true,
                           ),
                         ),
                       ],

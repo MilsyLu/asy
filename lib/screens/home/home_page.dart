@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
+import '../../core/utils/task_type_colors.dart';
 import '../../core/utils/task_visibility.dart';
 import '../../models/app_user.dart';
 import '../../models/task_model.dart';
@@ -12,6 +13,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/task_repository.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/task_type_chip.dart';
 import 'add_edit_task_page.dart';
 import 'widgets/reschedule_dialog.dart';
 import 'widgets/task_card.dart';
@@ -825,6 +827,8 @@ class _AgendaTaskTile extends StatelessWidget {
     final statusName = catalog.statusName(task.statusId);
     final chipColor = overrideChipColor ?? _statusChipColor(colors, statusName);
     final isCompleted = task.statusId == catalog.completedStatusId;
+    final typeColor =
+        catalog.taskTypeById(task.taskTypeId)?.parsedColor ?? colors.primary;
 
     return InkWell(
       borderRadius: BorderRadius.circular(12),
@@ -835,7 +839,16 @@ class _AgendaTaskTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: colors.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: colors.divider),
+          // Only the left side is visible (others default to BorderSide.none)
+          // so this stays a single-visible-color border, same as
+          // _CounterCard above it. A Border with two different *visible*
+          // colors (e.g. adding colors.divider on the other 3 sides) plus a
+          // borderRadius throws a FlutterError at paint time ("A borderRadius
+          // can only be given on borders with uniform colors") — the
+          // RenderObject's content never paints, while layout/hit-testing
+          // (and thus tap-to-open-detail) are unaffected, which is exactly
+          // the "card looks blank but is still tappable" Sprint 5.5 regression.
+          border: Border(left: BorderSide(color: typeColor, width: 4)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -895,12 +908,12 @@ class _AgendaTaskTile extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        catalog.taskTypeName(task.taskTypeId),
-                        style: TextStyle(color: colors.textSecondary, fontSize: 12),
-                        overflow: TextOverflow.ellipsis,
+                      TaskTypeChip(
+                        label: catalog.taskTypeName(task.taskTypeId),
+                        color: typeColor,
+                        dense: true,
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 4),
                       Row(
                         children: [
                           Icon(LucideIcons.userCheck, size: 12, color: colors.textSecondary),
