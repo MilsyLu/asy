@@ -30,19 +30,19 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   bool _uploading = false;
-  Future<List<TaskModel>>? _thirtyDaysFuture;
-  Future<List<TaskModel>>? _ninetyDaysFuture;
+  Stream<List<TaskModel>>? _thirtyDayStream;
+  Stream<List<TaskModel>>? _ninetyDayStream;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_thirtyDaysFuture == null) {
+    if (_thirtyDayStream == null) {
       final repo = context.read<TaskRepository>();
       final now = DateTime.now();
-      _thirtyDaysFuture =
-          repo.getTasksInRange(now.subtract(const Duration(days: 30)), now);
-      _ninetyDaysFuture =
-          repo.getTasksInRange(now.subtract(const Duration(days: 90)), now);
+      _thirtyDayStream =
+          repo.watchTasksInRange(now.subtract(const Duration(days: 30)), now);
+      _ninetyDayStream =
+          repo.watchTasksInRange(now.subtract(const Duration(days: 90)), now);
     }
   }
 
@@ -187,8 +187,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 message: _streakMessage(user.streakDays),
               ),
               const SizedBox(height: 12),
-              FutureBuilder<List<TaskModel>>(
-                future: _ninetyDaysFuture,
+              StreamBuilder<List<TaskModel>>(
+                stream: _ninetyDayStream,
                 builder: (context, snapshot) {
                   final completedCount = snapshot.hasData
                       ? snapshot.data!
@@ -224,8 +224,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 },
               ),
               const SizedBox(height: 12),
-              FutureBuilder<List<TaskModel>>(
-                future: _thirtyDaysFuture,
+              StreamBuilder<List<TaskModel>>(
+                stream: _thirtyDayStream,
                 builder: (context, snapshot) {
                   int? compliance;
                   if (snapshot.hasData) {
@@ -244,8 +244,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   return _ComplianceCard(
                     compliance: compliance,
                     lastLogin: user.lastLogin,
-                    isLoading:
-                        snapshot.connectionState != ConnectionState.done,
+                    isLoading: !snapshot.hasData,
                   );
                 },
               ),
