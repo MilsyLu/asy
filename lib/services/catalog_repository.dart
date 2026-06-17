@@ -55,20 +55,23 @@ class CatalogRepository {
     return snap.docs.map((d) => TaskTypeModel.fromDoc(d)).toList();
   }
 
-  Future<void> addTaskType(String name, int order, {String? color}) {
+  Future<void> addTaskType(String name, int order,
+      {String? color, List<String> groupIds = const []}) {
     return _taskTypes.add({
       'name': name,
       'order': order,
       'color': ?color,
+      'groupIds': groupIds,
     });
   }
 
   Future<void> updateTaskType(String id, String name, int order,
-      {String? color}) {
+      {String? color, List<String> groupIds = const []}) {
     return _taskTypes.doc(id).update({
       'name': name,
       'order': order,
       'color': ?color,
+      'groupIds': groupIds,
     });
   }
 

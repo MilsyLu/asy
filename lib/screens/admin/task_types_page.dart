@@ -26,6 +26,12 @@ Color _parseHexColor(String hex) {
   return Color(int.parse('FF$cleaned', radix: 16));
 }
 
+/// Human-readable summary of which groups [type] is offered for.
+String _groupsLabel(CatalogProvider catalog, TaskTypeModel type) {
+  if (type.groupIds.isEmpty) return 'Todos';
+  return type.groupIds.map((id) => catalog.groupById(id)?.name ?? '?').join(', ');
+}
+
 /// Admin: CRUD for `taskTypes` (name, order, optional color).
 class TaskTypesPage extends StatelessWidget {
   const TaskTypesPage({super.key});
@@ -66,7 +72,7 @@ class TaskTypesPage extends StatelessWidget {
                     ),
                     title: Text(type.name, style: TextStyle(color: colors.textPrimary)),
                     subtitle: Text(
-                      'Orden: ${type.order}',
+                      'Orden: ${type.order} • Grupos: ${_groupsLabel(catalog, type)}',
                       style: TextStyle(color: colors.textSecondary, fontSize: 12),
                     ),
                     trailing: Row(
@@ -104,6 +110,7 @@ Future<void> _showTaskTypeFormDialog(BuildContext context, {TaskTypeModel? exist
   );
   final formKey = GlobalKey<FormState>();
   String? selectedColor = existing?.color;
+  final selectedGroupIds = <String>{...?existing?.groupIds};
   bool isSaving = false;
 
   await showDialog<void>(
@@ -167,6 +174,30 @@ Future<void> _showTaskTypeFormDialog(BuildContext context, {TaskTypeModel? exist
                           ),
                       ],
                     ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Grupos (ninguno seleccionado = todos)',
+                      style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final group in catalog.groups)
+                          FilterChip(
+                            label: Text(group.name),
+                            selected: selectedGroupIds.contains(group.id),
+                            onSelected: (selected) => setState(() {
+                              if (selected) {
+                                selectedGroupIds.add(group.id);
+                              } else {
+                                selectedGroupIds.remove(group.id);
+                              }
+                            }),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -189,6 +220,7 @@ Future<void> _showTaskTypeFormDialog(BuildContext context, {TaskTypeModel? exist
                               nameController.text.trim(),
                               order,
                               color: selectedColor,
+                              groupIds: selectedGroupIds.toList(),
                             );
                           } else {
                             await repo.updateTaskType(
@@ -196,6 +228,7 @@ Future<void> _showTaskTypeFormDialog(BuildContext context, {TaskTypeModel? exist
                               nameController.text.trim(),
                               order,
                               color: selectedColor,
+                              groupIds: selectedGroupIds.toList(),
                             );
                           }
                           if (dialogContext.mounted) Navigator.of(dialogContext).pop();

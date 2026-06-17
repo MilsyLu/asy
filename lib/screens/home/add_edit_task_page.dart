@@ -611,9 +611,6 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     final colors = context.colors;
 
     _assignedUserId ??= currentUser.id;
-    if (_taskTypeId == null && catalog.taskTypes.isNotEmpty) {
-      _taskTypeId = catalog.taskTypes.first.id;
-    }
     if (_statusId == null && !_isEditing) {
       _statusId = catalog.pendingStatusId;
     }
@@ -626,11 +623,28 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     _groupId ??=
         catalog.userById(_assignedUserId)?.groupId ?? currentUser.groupId;
 
+    // Sprint 5.4: only task types associated with the selected group are
+    // offered (types with no groups assigned are universal, see
+    // TaskTypeModel.appliesToGroup). The currently selected type is always
+    // kept so it isn't silently dropped if it no longer matches.
+    final availableTaskTypes = catalog.taskTypes
+        .where((t) => t.appliesToGroup(_groupId) || t.id == _taskTypeId)
+        .toList();
+    if (_taskTypeId == null && availableTaskTypes.isNotEmpty) {
+      _taskTypeId = availableTaskTypes.first.id;
+    }
+
     final assignableUsers = _assignableUsers(catalog, currentUser);
-    // Non-admins can only assign tasks to their own group; admins may
-    // pick any group (e.g. to share a task across groups).
-    final groupOptions = (!isAdmin && currentUser.groupId != null)
-        ? catalog.groups.where((g) => g.id == currentUser.groupId).toList()
+    // Non-admins can only create/edit tasks for their own group, so the
+    // selector is fully locked (Sprint 5.4); admins may pick any group
+    // (e.g. to share a task across groups). The task's current _groupId is
+    // always included in the options so editing a legacy/shared task
+    // doesn't show an empty field while locked.
+    final isGroupLocked = !isAdmin && currentUser.groupId != null;
+    final groupOptions = isGroupLocked
+        ? catalog.groups
+            .where((g) => g.id == currentUser.groupId || g.id == _groupId)
+            .toList()
         : catalog.groups;
 
     return Scaffold(
@@ -694,13 +708,22 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
               decoration: InputDecoration(
                 labelText: 'Grupo',
                 prefixIcon: Icon(LucideIcons.users, color: colors.primary),
+                suffixIcon: isGroupLocked
+                    ? Icon(LucideIcons.lock,
+                        color: colors.textSecondary, size: 18)
+                    : null,
               ),
               dropdownColor: colors.surface,
               items: groupOptions
                   .map((g) =>
                       DropdownMenuItem(value: g.id, child: Text(g.name)))
                   .toList(),
-              onChanged: (v) => setState(() => _groupId = v),
+              onChanged: isGroupLocked
+                  ? null
+                  : (v) => setState(() {
+                        _groupId = v;
+                        _taskTypeId = null;
+                      }),
               validator: (v) => v == null ? 'Selecciona un grupo' : null,
             ),
             const SizedBox(height: 8),
@@ -719,7 +742,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               initialValue:
-                  catalog.taskTypes.any((t) => t.id == _taskTypeId)
+                  availableTaskTypes.any((t) => t.id == _taskTypeId)
                       ? _taskTypeId
                       : null,
               decoration: InputDecoration(
@@ -727,7 +750,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                 prefixIcon: Icon(LucideIcons.tag, color: colors.primary),
               ),
               dropdownColor: colors.surface,
-              items: catalog.taskTypes
+              items: availableTaskTypes
                   .map((t) =>
                       DropdownMenuItem(value: t.id, child: Text(t.name)))
                   .toList(),
