@@ -7,6 +7,7 @@ import '../../core/utils/date_utils.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../models/task_model.dart';
 import '../../providers/catalog_provider.dart';
+import '../../services/notification_service.dart';
 import '../../services/task_repository.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/loading_indicator.dart';
@@ -35,10 +36,22 @@ class _TrashPageState extends State<TrashPage> {
     }).toList();
   }
 
-  Future<void> _restore(String taskId) async {
+  Future<void> _restore(TaskModel task) async {
     final repo = context.read<TaskRepository>();
+    final catalog = context.read<CatalogProvider>();
     try {
-      await repo.restoreTask(taskId);
+      await repo.restoreTask(task.id);
+      // Re-schedule the local reminder if the task is still in the future.
+      final reminder = task.reminderTime;
+      if (reminder != null && reminder.isAfter(DateTime.now())) {
+        await NotificationService.instance.scheduleReminder(
+          taskId: task.id,
+          clientName: task.clientName,
+          taskTypeName: catalog.taskTypeName(task.taskTypeId),
+          taskHour: task.hour,
+          reminderTime: reminder,
+        );
+      }
       if (mounted) SnackbarUtils.showSuccess(context, 'Tarea restaurada');
     } catch (e) {
       if (mounted) {
@@ -60,6 +73,8 @@ class _TrashPageState extends State<TrashPage> {
     );
     if (!confirm || !mounted) return;
     try {
+      // Cancel any pending reminder before removing the document.
+      await NotificationService.instance.cancelReminder(task.id);
       await repo.permanentlyDeleteTask(task.id);
       if (mounted) {
         SnackbarUtils.showSuccess(context, 'Tarea eliminada definitivamente');
@@ -192,7 +207,7 @@ class _TrashPageState extends State<TrashPage> {
                         itemBuilder: (context, i) => _TrashCard(
                           task: tasks[i],
                           catalog: catalog,
-                          onRestore: () => _restore(tasks[i].id),
+                          onRestore: () => _restore(tasks[i]),
                           onDelete: () => _permanentlyDelete(tasks[i]),
                         ),
                       ),

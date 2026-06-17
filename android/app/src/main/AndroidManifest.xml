@@ -1,6 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Required on Android 13+ to display push/local notifications. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Required by flutter_local_notifications to schedule exact alarms
+         (zonedSchedule with exactAllowWhileIdle) on Android 12+ (API 31+).
+         Granted automatically on API < 31; on API 31+ the system may require
+         user approval via Special App Access > Alarms & Reminders. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <!-- Required by ScheduledNotificationBootReceiver to reschedule alarms
+         after device reboot or app update. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <!-- Required by image_picker: camera capture for profile photo. -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <!-- Gallery access: READ_MEDIA_IMAGES (Android 13+) or READ_EXTERNAL_STORAGE (≤12). -->
@@ -12,6 +20,27 @@
         android:label="taskflow_executive"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+
+        <!-- flutter_local_notifications: fires the scheduled local alarm.
+             Must be explicit on devices where Gradle manifest merger skips
+             the plugin's own AndroidManifest (observed on Samsung/Motorola). -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
+            android:exported="false"/>
+
+        <!-- flutter_local_notifications: reschedules alarms after device reboot
+             or app update (optional but recommended for robustness). -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.PACKAGE_REPLACED"/>
+                <data android:scheme="package"/>
+            </intent-filter>
+        </receiver>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

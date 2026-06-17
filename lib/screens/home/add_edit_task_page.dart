@@ -11,6 +11,7 @@ import '../../models/app_user.dart';
 import '../../models/task_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
+import '../../services/notification_service.dart';
 import '../../services/task_repository.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/gold_button.dart';
@@ -213,6 +214,18 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
           }
           return MapEntry(key, value);
         }));
+        // Cancel previous local notification, then schedule the new one (if any).
+        await NotificationService.instance
+            .cancelReminder(widget.existingTask!.id);
+        if (_reminderDateTime != null) {
+          await NotificationService.instance.scheduleReminder(
+            taskId: widget.existingTask!.id,
+            clientName: _clientNameController.text.trim(),
+            taskTypeName: catalog.taskTypeName(_taskTypeId),
+            taskHour: _selectedHour!,
+            reminderTime: _reminderDateTime!,
+          );
+        }
       } else {
         final newTask = TaskModel(
           id: '',
@@ -228,7 +241,16 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
           groupId: _groupId,
           visibleToAllGroups: _visibleToAllGroups,
         );
-        await repo.createTask(newTask);
+        final taskId = await repo.createTask(newTask);
+        if (_reminderDateTime != null) {
+          await NotificationService.instance.scheduleReminder(
+            taskId: taskId,
+            clientName: _clientNameController.text.trim(),
+            taskTypeName: catalog.taskTypeName(_taskTypeId),
+            taskHour: _selectedHour!,
+            reminderTime: _reminderDateTime!,
+          );
+        }
       }
 
       if (mounted) {
