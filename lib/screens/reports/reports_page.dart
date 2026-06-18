@@ -4,11 +4,13 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
+import '../../core/utils/report_metrics.dart';
 import '../../core/utils/task_visibility.dart';
 import '../../models/task_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/task_repository.dart';
+import '../../widgets/kpi_card.dart';
 import '../../widgets/loading_indicator.dart';
 import 'widgets/groups_report_tab.dart';
 import 'widgets/performance_report_tab.dart';
@@ -130,7 +132,10 @@ class _ReportsPageState extends State<ReportsPage>
                 ),
               ),
               const SizedBox(height: 12),
-              _KpiSummaryRow(tasks: tasks, catalog: catalog),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: KpiSummaryRow(kpis: computeTaskKpis(tasks, catalog)),
+              ),
               const SizedBox(height: 8),
               TabBar(
                 controller: _tabController,
@@ -164,78 +169,6 @@ class _ReportsPageState extends State<ReportsPage>
             ],
           );
         },
-      ),
-    );
-  }
-}
-
-/// Part 1 (Sprint 6.1): top KPI summary row — total/completadas/pendientes/
-/// reprogramadas/cumplimiento for the selected date range. Computed from the
-/// already-loaded [tasks] list, no extra query.
-class _KpiSummaryRow extends StatelessWidget {
-  const _KpiSummaryRow({required this.tasks, required this.catalog});
-
-  final List<TaskModel> tasks;
-  final CatalogProvider catalog;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final total = tasks.length;
-    final completed = tasks.where((t) => t.statusId == catalog.completedStatusId).length;
-    final pending = tasks.where((t) => t.statusId == catalog.pendingStatusId).length;
-    final rescheduled = tasks.where((t) => t.statusId == catalog.rescheduledStatusId).length;
-    final compliance = total == 0 ? 0 : (completed * 100 / total).round();
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            _KpiChip(label: 'Tareas', value: '$total', color: colors.primary),
-            const SizedBox(width: 8),
-            _KpiChip(label: 'Completadas', value: '$completed', color: colors.success),
-            const SizedBox(width: 8),
-            _KpiChip(label: 'Pendientes', value: '$pending', color: colors.statusPending),
-            const SizedBox(width: 8),
-            _KpiChip(label: 'Reprogramadas', value: '$rescheduled', color: colors.statusRescheduled),
-            const SizedBox(width: 8),
-            _KpiChip(label: 'Cumplimiento', value: '$compliance%', color: colors.success),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _KpiChip extends StatelessWidget {
-  const _KpiChip({required this.label, required this.value, required this.color});
-
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: TextStyle(color: colors.textSecondary, fontSize: 11)),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-        ],
       ),
     );
   }

@@ -7,6 +7,7 @@ import '../core/theme/theme_colors.dart';
 import '../providers/auth_provider.dart';
 import '../providers/catalog_provider.dart';
 import '../screens/admin/admin_panel_page.dart';
+import '../screens/home/home_page.dart';
 import '../screens/profile/settings_page.dart';
 import '../screens/trash/trash_page.dart';
 import '../services/auth_service.dart';
@@ -107,6 +108,25 @@ class AppDrawer extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             if (auth.isSuperAdmin) ...[
+              ListTile(
+                leading: Icon(LucideIcons.clipboardList, color: colors.primary),
+                title: const Text('Agenda diaria'),
+                onTap: () {
+                  // Reuses the unmodified former Inicio screen (HomePage) —
+                  // it has no AppBar of its own (it's designed to be hosted
+                  // as a MainShell tab body), so it's wrapped here with a
+                  // title bar/back button rather than touched/duplicated.
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => Scaffold(
+                        appBar: AppBar(title: const Text('Agenda diaria')),
+                        body: const HomePage(),
+                      ),
+                    ),
+                  );
+                },
+              ),
               ListTile(
                 leading: Icon(LucideIcons.layoutDashboard, color: colors.primary),
                 title: const Text('Panel de administración'),

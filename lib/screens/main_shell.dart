@@ -9,13 +9,19 @@ import '../services/notification_service.dart';
 import '../services/task_repository.dart';
 import '../widgets/app_drawer.dart';
 import 'calendar/calendar_page.dart';
+import 'dashboard/dashboard_page.dart';
 import 'home/home_page.dart';
 import 'profile/profile_page.dart';
 import 'reports/reports_page.dart';
 import 'week/week_page.dart';
 
 /// Root authenticated shell: Drawer + BottomNavigationBar.
-/// Tabs shown: Inicio, Calendario, Semana, Reportes (solo admin), Perfil.
+///
+/// Tabs shown (Sprint 6.2):
+/// - Trabajador: Inicio, Calendario, Semana, Perfil — unchanged.
+/// - Administrador: Dashboard (replaces Inicio), Calendario, Semana,
+///   Reportes, Perfil. The old Inicio screen ([HomePage]) is not removed —
+///   it's still reachable for admins as "Agenda diaria" from [AppDrawer].
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -27,7 +33,7 @@ class _MainShellState extends State<MainShell> {
   int _index = 0;
   bool _startupRemindersDone = false;
 
-  static const _titles = ['Inicio', 'Calendario', 'Semana', 'Reportes', 'Perfil'];
+  static const _titles = ['Dashboard', 'Calendario', 'Semana', 'Reportes', 'Perfil'];
 
   @override
   void didChangeDependencies() {
@@ -76,7 +82,7 @@ class _MainShellState extends State<MainShell> {
     final isAdmin = context.watch<AuthProvider>().isSuperAdmin;
 
     final pages = <Widget>[
-      const HomePage(),
+      isAdmin ? const DashboardPage() : const HomePage(),
       const CalendarPage(),
       const WeekPage(),
       if (isAdmin) const ReportsPage(),
@@ -84,7 +90,9 @@ class _MainShellState extends State<MainShell> {
     ];
 
     final items = <BottomNavigationBarItem>[
-      const BottomNavigationBarItem(icon: Icon(LucideIcons.home), label: 'Inicio'),
+      isAdmin
+          ? const BottomNavigationBarItem(icon: Icon(LucideIcons.gauge), label: 'Dashboard')
+          : const BottomNavigationBarItem(icon: Icon(LucideIcons.home), label: 'Inicio'),
       const BottomNavigationBarItem(icon: Icon(LucideIcons.calendar), label: 'Calendario'),
       const BottomNavigationBarItem(icon: Icon(LucideIcons.calendarDays), label: 'Semana'),
       if (isAdmin)
