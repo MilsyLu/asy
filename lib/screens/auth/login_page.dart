@@ -24,6 +24,21 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showDeactivationMessageIfAny());
+  }
+
+  void _showDeactivationMessageIfAny() {
+    if (!mounted) return;
+    final auth = context.read<AuthProvider>();
+    final message = auth.deactivationMessage;
+    if (message == null) return;
+    auth.clearDeactivationMessage();
+    SnackbarUtils.showError(context, message);
+  }
+
+  @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();

@@ -4,6 +4,23 @@ import '../core/constants/firestore_paths.dart';
 import '../core/utils/date_utils.dart';
 import '../models/task_model.dart';
 
+/// Snapshot of how many tasks have ever been assigned to a user, broken
+/// down by status. Used by the admin "Eliminar permanentemente" flow
+/// (Sprint 7.3.1) to decide whether deleting the user is safe.
+class UserTaskHistory {
+  const UserTaskHistory({
+    required this.assigned,
+    required this.completed,
+    required this.rescheduled,
+  });
+
+  final int assigned;
+  final int completed;
+  final int rescheduled;
+
+  bool get hasHistory => assigned > 0;
+}
+
 /// CRUD + queries for the `tasks` collection.
 class TaskRepository {
   TaskRepository({FirebaseFirestore? firestore})
@@ -106,6 +123,35 @@ class TaskRepository {
 
   Future<void> deleteTask(String taskId) {
     return _collection.doc(taskId).delete();
+  }
+
+  /// Counts every task ever assigned to [userId] — including soft-deleted
+  /// (papelera) ones, since historical data must be preserved regardless of
+  /// trash state — broken down by completed/rescheduled status. Used to
+  /// decide whether permanently deleting a user is safe (Sprint 7.3.1).
+  Future<UserTaskHistory> getUserTaskHistory(
+    String userId, {
+    String? completedStatusId,
+    String? rescheduledStatusId,
+  }) async {
+    final snap =
+        await _collection.where('assignedUserId', isEqualTo: userId).get();
+    var completed = 0;
+    var rescheduled = 0;
+    for (final doc in snap.docs) {
+      final statusId = doc.data()['statusId'] as String?;
+      if (completedStatusId != null && statusId == completedStatusId) {
+        completed++;
+      }
+      if (rescheduledStatusId != null && statusId == rescheduledStatusId) {
+        rescheduled++;
+      }
+    }
+    return UserTaskHistory(
+      assigned: snap.docs.length,
+      completed: completed,
+      rescheduled: rescheduled,
+    );
   }
 
   // -------------------------------------------------------------------------

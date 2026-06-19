@@ -26,6 +26,12 @@ class AppUser {
   /// no photo has been uploaded; the UI falls back to initials in that case.
   final String? photoUrl;
 
+  /// Whether the user may sign in and receive new task assignments/
+  /// notifications (Sprint 7.3.1). Documents written before this field
+  /// existed have no `isActive` key at all; [fromMap] defaults those to
+  /// `true` so legacy users aren't locked out without an explicit action.
+  final bool isActive;
+
   const AppUser({
     required this.id,
     required this.email,
@@ -40,6 +46,7 @@ class AppUser {
     this.themeMode = 'dark',
     this.accentColor = 'gold',
     this.photoUrl,
+    this.isActive = true,
   });
 
   bool get isSuperAdmin => role == AppRoles.superAdmin;
@@ -62,6 +69,7 @@ class AppUser {
       themeMode: map['themeMode'] as String? ?? 'dark',
       accentColor: map['accentColor'] as String? ?? 'gold',
       photoUrl: map['photoUrl'] as String?,
+      isActive: map['isActive'] as bool? ?? true,
     );
   }
 
@@ -84,6 +92,7 @@ class AppUser {
       'themeMode': themeMode,
       'accentColor': accentColor,
       'photoUrl': photoUrl,
+      'isActive': isActive,
     };
   }
 
@@ -98,6 +107,7 @@ class AppUser {
     String? themeMode,
     String? accentColor,
     String? photoUrl,
+    bool? isActive,
   }) {
     return AppUser(
       id: id,
@@ -113,6 +123,7 @@ class AppUser {
       themeMode: themeMode ?? this.themeMode,
       accentColor: accentColor ?? this.accentColor,
       photoUrl: photoUrl ?? this.photoUrl,
+      isActive: isActive ?? this.isActive,
     );
   }
 }

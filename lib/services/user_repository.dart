@@ -101,4 +101,13 @@ class UserRepository {
   Future<void> deleteUserDoc(String uid) {
     return _collection.doc(uid).delete();
   }
+
+  /// Toggles whether [uid] may sign in and receive new task assignments/
+  /// notifications (Sprint 7.3.1). Uses `merge: true` so legacy documents
+  /// without the field are upgraded in place.
+  Future<void> setActive(String uid, bool isActive) {
+    return _collection
+        .doc(uid)
+        .set({'isActive': isActive}, SetOptions(merge: true));
+  }
 }

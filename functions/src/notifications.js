@@ -26,6 +26,11 @@ async function sendNotificationToUser(userId, { title, body, data = {} }) {
     const userSnap = await userRef.get();
     if (!userSnap.exists) return 0;
 
+    if (userSnap.get("isActive") === false) {
+      console.log(`[FCM] Skipped: user ${userId} is inactive`);
+      return 0;
+    }
+
     const tokens = sanitizeTokens(userSnap.get("fcmTokens"));
     if (tokens.length === 0) return 0;
 

@@ -30,6 +30,11 @@ class AuthProvider extends ChangeNotifier {
   AppUser? appUser;
   bool isLoading = true;
 
+  /// Set right before a forced sign-out caused by [AppUser.isActive] being
+  /// `false`, so [LoginPage] can show why the session was closed. Cleared
+  /// once consumed via [clearDeactivationMessage].
+  String? deactivationMessage;
+
   bool get isAuthenticated => firebaseUser != null;
   bool get isSuperAdmin => appUser?.isSuperAdmin ?? false;
 
@@ -47,7 +52,18 @@ class AuthProvider extends ChangeNotifier {
     isLoading = true;
     notifyListeners();
 
-    _userSub = _userRepository.watchUser(user.uid).listen((profile) {
+    _userSub = _userRepository.watchUser(user.uid).listen((profile) async {
+      if (profile != null && !profile.isActive) {
+        // Set without notifyListeners() so MainShell never gets a chance to
+        // render for a deactivated account — signOut() below reads
+        // appUser.id for FCM cleanup, then the resulting auth state change
+        // (user == null) is what actually triggers the rebuild into LoginPage.
+        appUser = profile;
+        deactivationMessage =
+            'Tu cuenta ha sido desactivada. Contacta a un administrador.';
+        await signOut();
+        return;
+      }
       appUser = profile;
       isLoading = false;
       notifyListeners();
@@ -55,6 +71,10 @@ class AuthProvider extends ChangeNotifier {
         _registerFcmToken(profile.id);
       }
     });
+  }
+
+  void clearDeactivationMessage() {
+    deactivationMessage = null;
   }
 
   Future<void> _registerFcmToken(String uid) async {

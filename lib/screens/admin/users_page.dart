@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
@@ -10,62 +11,172 @@ import '../../models/app_user.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/auth_service.dart';
+import '../../services/task_repository.dart';
 import '../../services/user_repository.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/loading_indicator.dart';
 
-/// Admin: list of `users`, change role/group, reset password, view FCM tokens.
-class UsersPage extends StatelessWidget {
+enum _UserStatusFilter { all, active, inactive }
+
+/// Admin: list of `users`, change role/group, reset password, view FCM
+/// tokens, and manage the active/inactive lifecycle (Sprint 7.3.1).
+class UsersPage extends StatefulWidget {
   const UsersPage({super.key});
+
+  @override
+  State<UsersPage> createState() => _UsersPageState();
+}
+
+class _UsersPageState extends State<UsersPage> {
+  _UserStatusFilter _filter = _UserStatusFilter.all;
 
   @override
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
+    final colors = context.colors;
     final users = List<AppUser>.from(catalog.users)
       ..sort((a, b) => a.name.compareTo(b.name));
-    final colors = context.colors;
+    final filtered = users.where((u) {
+      switch (_filter) {
+        case _UserStatusFilter.active:
+          return u.isActive;
+        case _UserStatusFilter.inactive:
+          return !u.isActive;
+        case _UserStatusFilter.all:
+          return true;
+      }
+    }).toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Usuarios')),
-      body: users.isEmpty
-          ? const EmptyState(
-              message: 'No hay usuarios registrados todavía.',
-              icon: LucideIcons.users,
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-              itemCount: users.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
-              itemBuilder: (context, index) {
-                final user = users[index];
-                return Container(
-                  decoration: BoxDecoration(
-                    color: colors.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
-                  ),
-                  child: ListTile(
-                    leading: Icon(LucideIcons.userCircle, color: colors.primary, size: 28),
-                    title: Text(user.name, style: TextStyle(color: colors.textPrimary)),
-                    subtitle: Text(
-                      user.email,
-                      style: TextStyle(color: colors.textSecondary, fontSize: 12),
-                    ),
-                    trailing: Wrap(
-                      spacing: 6,
-                      children: [
-                        _Tag(label: AuthService.roleLabel(user.role)),
-                        if (user.groupId != null) _Tag(label: catalog.groupName(user.groupId)),
-                      ],
-                    ),
-                    onTap: () => _showUserDetailSheet(context, user),
-                  ),
-                );
-              },
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              children: [
+                _StatusFilterChip(
+                  label: 'Todos',
+                  selected: _filter == _UserStatusFilter.all,
+                  onTap: () => setState(() => _filter = _UserStatusFilter.all),
+                ),
+                const SizedBox(width: 8),
+                _StatusFilterChip(
+                  label: 'Activos',
+                  selected: _filter == _UserStatusFilter.active,
+                  onTap: () => setState(() => _filter = _UserStatusFilter.active),
+                ),
+                const SizedBox(width: 8),
+                _StatusFilterChip(
+                  label: 'Inactivos',
+                  selected: _filter == _UserStatusFilter.inactive,
+                  onTap: () => setState(() => _filter = _UserStatusFilter.inactive),
+                ),
+              ],
             ),
+          ),
+          Expanded(
+            child: filtered.isEmpty
+                ? const EmptyState(
+                    message: 'No hay usuarios para este filtro.',
+                    icon: LucideIcons.users,
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final user = filtered[index];
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: colors.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
+                        ),
+                        child: ListTile(
+                          leading: Icon(LucideIcons.userCircle, color: colors.primary, size: 28),
+                          title: Text(user.name, style: TextStyle(color: colors.textPrimary)),
+                          subtitle: Text(
+                            user.email,
+                            style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                          ),
+                          trailing: Wrap(
+                            spacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              _Tag(label: AuthService.roleLabel(user.role)),
+                              if (user.groupId != null) _Tag(label: catalog.groupName(user.groupId)),
+                              _StatusBadge(isActive: user.isActive),
+                            ],
+                          ),
+                          onTap: () => _showUserDetailSheet(context, user),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCreateUserDialog(context),
         child: const Icon(LucideIcons.userPlus),
+      ),
+    );
+  }
+}
+
+class _StatusFilterChip extends StatelessWidget {
+  const _StatusFilterChip({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? colors.primary.withValues(alpha: 0.2) : colors.background,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: selected ? colors.primary : colors.divider),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? colors.primary : colors.textSecondary,
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.isActive});
+
+  final bool isActive;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final color = isActive ? colors.success : colors.error;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        isActive ? 'Activo' : 'Inactivo',
+        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -96,11 +207,13 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
   final catalog = context.read<CatalogProvider>();
   final userRepo = context.read<UserRepository>();
   final authService = context.read<AuthService>();
+  final taskRepo = context.read<TaskRepository>();
   final currentUserId = context.read<AuthProvider>().appUser?.id;
 
   String selectedRole = user.role;
   String? selectedGroupId = user.groupId;
   bool tokensExpanded = false;
+  bool isUserActive = user.isActive;
 
   await showModalBottomSheet<void>(
     context: context,
@@ -249,6 +362,134 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                     icon: const Icon(LucideIcons.key),
                     label: const Text('Restablecer contraseña'),
                   ),
+                  const SizedBox(height: 12),
+                  if (isUserActive)
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: colors.error,
+                        side: BorderSide(color: colors.error),
+                      ),
+                      onPressed: () async {
+                        final confirm = await showConfirmDialog(
+                          sheetContext,
+                          title: 'Desactivar usuario',
+                          message: '¿Deseas desactivar este usuario?\n\n'
+                              'El usuario dejará de tener acceso a CheCu, '
+                              'no recibirá nuevas tareas ni notificaciones.',
+                          confirmLabel: 'Desactivar',
+                          destructive: true,
+                        );
+                        if (!confirm) return;
+                        try {
+                          await userRepo.setActive(user.id, false);
+                          setState(() => isUserActive = false);
+                          if (sheetContext.mounted) {
+                            SnackbarUtils.showSuccess(sheetContext, 'Usuario desactivado');
+                          }
+                        } catch (e) {
+                          if (sheetContext.mounted) {
+                            SnackbarUtils.showError(
+                                sheetContext, SnackbarUtils.firebaseErrorMessage(e));
+                          }
+                        }
+                      },
+                      icon: const Icon(LucideIcons.userX),
+                      label: const Text('Desactivar usuario'),
+                    )
+                  else ...[
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: colors.success,
+                        side: BorderSide(color: colors.success),
+                      ),
+                      onPressed: () async {
+                        final confirm = await showConfirmDialog(
+                          sheetContext,
+                          title: 'Reactivar usuario',
+                          message: '¿Deseas reactivar este usuario?\n\n'
+                              'Recuperará acceso a la plataforma.',
+                          confirmLabel: 'Reactivar',
+                        );
+                        if (!confirm) return;
+                        try {
+                          await userRepo.setActive(user.id, true);
+                          setState(() => isUserActive = true);
+                          if (sheetContext.mounted) {
+                            SnackbarUtils.showSuccess(sheetContext, 'Usuario reactivado');
+                          }
+                        } catch (e) {
+                          if (sheetContext.mounted) {
+                            SnackbarUtils.showError(
+                                sheetContext, SnackbarUtils.firebaseErrorMessage(e));
+                          }
+                        }
+                      },
+                      icon: const Icon(LucideIcons.userCheck),
+                      label: const Text('Reactivar usuario'),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: colors.error,
+                        side: BorderSide(color: colors.error),
+                      ),
+                      onPressed: () async {
+                        final history = await taskRepo.getUserTaskHistory(
+                          user.id,
+                          completedStatusId: catalog.completedStatusId,
+                          rescheduledStatusId: catalog.rescheduledStatusId,
+                        );
+
+                        if (history.hasHistory) {
+                          if (!sheetContext.mounted) return;
+                          await showInfoDialog(
+                            sheetContext,
+                            title: 'No es posible eliminar este usuario',
+                            message: 'Se encontraron registros históricos asociados:\n\n'
+                                '• Tareas asignadas: ${history.assigned}\n'
+                                '• Tareas completadas: ${history.completed}\n'
+                                '• Tareas reprogramadas: ${history.rescheduled}\n\n'
+                                'Para conservar la integridad de los datos, '
+                                'desactiva el usuario en lugar de eliminarlo.',
+                          );
+                          return;
+                        }
+
+                        if (!sheetContext.mounted) return;
+                        final confirm = await showConfirmDialog(
+                          sheetContext,
+                          title: 'Eliminar permanentemente',
+                          message:
+                              'Esta acción eliminará a ${user.name} de forma '
+                              'permanente y no se puede deshacer. ¿Deseas continuar?',
+                          confirmLabel: 'Eliminar',
+                          destructive: true,
+                        );
+                        if (!confirm) return;
+
+                        try {
+                          await authService.deleteUserPermanently(user.id);
+                          if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+                          if (context.mounted) {
+                            SnackbarUtils.showSuccess(
+                                context, 'Usuario eliminado permanentemente');
+                          }
+                        } on FirebaseFunctionsException catch (e) {
+                          if (sheetContext.mounted) {
+                            SnackbarUtils.showError(
+                                sheetContext, e.message ?? 'No se pudo eliminar el usuario');
+                          }
+                        } catch (e) {
+                          if (sheetContext.mounted) {
+                            SnackbarUtils.showError(
+                                sheetContext, SnackbarUtils.firebaseErrorMessage(e));
+                          }
+                        }
+                      },
+                      icon: const Icon(LucideIcons.trash2),
+                      label: const Text('Eliminar permanentemente'),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   InkWell(
                     onTap: () => setState(() => tokensExpanded = !tokensExpanded),

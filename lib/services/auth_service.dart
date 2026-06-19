@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
@@ -8,12 +9,17 @@ import '../core/constants/firestore_paths.dart';
 /// Wraps Firebase Auth and the side effects that must happen on
 /// sign-in (last login timestamp + streak recalculation).
 class AuthService {
-  AuthService({FirebaseAuth? auth, FirebaseFirestore? firestore})
-      : _auth = auth ?? FirebaseAuth.instance,
-        _firestore = firestore ?? FirebaseFirestore.instance;
+  AuthService({
+    FirebaseAuth? auth,
+    FirebaseFirestore? firestore,
+    FirebaseFunctions? functions,
+  })  : _auth = auth ?? FirebaseAuth.instance,
+        _firestore = firestore ?? FirebaseFirestore.instance,
+        _functions = functions ?? FirebaseFunctions.instance;
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
+  final FirebaseFunctions _functions;
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
@@ -79,10 +85,24 @@ class AuthService {
         'streakDays': 0,
         'maxStreakDays': 0,
         'createdAt': FieldValue.serverTimestamp(),
+        'isActive': true,
       });
     } finally {
       await secondaryAuth.signOut();
     }
+  }
+
+  /// Permanently deletes [uid]'s Firestore profile and Firebase Auth
+  /// account (Sprint 7.3.1, "Eliminación permanente segura"). Runs entirely
+  /// server-side via a callable Cloud Function: the client SDK can only
+  /// delete the *currently signed-in* account, not an arbitrary other
+  /// user's, and the function re-validates that the user has no task
+  /// history before deleting anything — the client-side check in the
+  /// Users admin screen is only there for instant UI feedback, never the
+  /// final authority.
+  Future<void> deleteUserPermanently(String uid) async {
+    final callable = _functions.httpsCallable('deleteUserPermanently');
+    await callable.call<void>({'uid': uid});
   }
 
   /// Recalculates `lastLogin` / `streakDays` / `maxStreakDays` for [uid].

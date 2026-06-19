@@ -441,12 +441,24 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
   // Other helpers
   // ---------------------------------------------------------------------------
 
+  /// Active users eligible for "Encargado" (Sprint 7.3.1 Part 6: deactivated
+  /// users must not appear in this selector for new assignments). The task's
+  /// already-assigned user is always included even if inactive, mirroring
+  /// the existing groupOptions pattern below — otherwise editing a task
+  /// previously assigned to a since-deactivated worker would silently blank
+  /// out the field.
   List<AppUser> _assignableUsers(CatalogProvider catalog, AppUser current) {
-    if (current.groupId != null) {
-      final inGroup = catalog.usersInGroup(current.groupId);
-      return inGroup.isNotEmpty ? inGroup : catalog.users;
+    final pool = current.groupId != null
+        ? (catalog.usersInGroup(current.groupId).isNotEmpty
+            ? catalog.usersInGroup(current.groupId)
+            : catalog.users)
+        : catalog.users;
+    final active = pool.where((u) => u.isActive).toList();
+    if (_assignedUserId != null && !active.any((u) => u.id == _assignedUserId)) {
+      final assignedUser = catalog.userById(_assignedUserId);
+      if (assignedUser != null) active.add(assignedUser);
     }
-    return catalog.users;
+    return active;
   }
 
   Future<void> _pickDate() async {
