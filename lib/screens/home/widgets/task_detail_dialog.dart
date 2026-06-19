@@ -226,35 +226,6 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
                         icon: const Icon(LucideIcons.checkCircle, size: 16),
                         label: const Text('Completar'),
                       ),
-                    TextButton.icon(
-                      style: TextButton.styleFrom(
-                          foregroundColor: colors.error),
-                      onPressed: () async {
-                        Navigator.of(dialogContext).pop();
-                        final user = auth.appUser;
-                        if (user == null) return;
-                        final confirm =
-                            await showSendToTrashDialog(context);
-                        if (!confirm) return;
-                        try {
-                          await repo.softDeleteTask(
-                              task.id, user.id, user.name);
-                          await NotificationService.instance
-                              .cancelReminder(task.id);
-                          if (context.mounted) {
-                            SnackbarUtils.showSuccess(
-                                context, 'Tarea enviada a la papelera');
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            SnackbarUtils.showError(context,
-                                SnackbarUtils.firebaseErrorMessage(e));
-                          }
-                        }
-                      },
-                      icon: const Icon(LucideIcons.trash2, size: 16),
-                      label: const Text('Papelera'),
-                    ),
                   ],
                 ),
               ],
@@ -262,6 +233,35 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
           ),
         ),
         actions: [
+          // Sprint 7.2.1: kept in `actions` (not the scrollable `content`
+          // column above) specifically so it can never end up below the
+          // fold — `content`'s SingleChildScrollView grew tall enough
+          // across recent sprints (type chip, phone box, recordatorio row)
+          // that this button needed scrolling to reach, which read as "the
+          // trash action disappeared" even though it was still present.
+          TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: colors.error),
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              final user = auth.appUser;
+              if (user == null) return;
+              final confirm = await showSendToTrashDialog(context);
+              if (!confirm) return;
+              try {
+                await repo.softDeleteTask(task.id, user.id, user.name);
+                await NotificationService.instance.cancelReminder(task.id);
+                if (context.mounted) {
+                  SnackbarUtils.showSuccess(context, 'Tarea enviada a la papelera');
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+                }
+              }
+            },
+            icon: const Icon(LucideIcons.trash2, size: 16),
+            label: const Text('Papelera'),
+          ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Cerrar'),

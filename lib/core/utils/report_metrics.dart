@@ -147,3 +147,67 @@ List<MapEntry<String, int>> computeDailyTrend(
   }
   return entries;
 }
+
+/// Tasks whose scheduled date/time has already passed [now] and that are
+/// not yet completed (Sprint 6.3, "⚠️ Tareas vencidas"). Sorted oldest-first
+/// so the most urgent items appear at the top of the detail sheet.
+List<TaskModel> computeOverdueTasks(
+  List<TaskModel> tasks,
+  CatalogProvider catalog,
+  DateTime now,
+) {
+  final completedId = catalog.completedStatusId;
+  final overdue = tasks
+      .where((t) => t.statusId != completedId && t.scheduledDateTime.isBefore(now))
+      .toList()
+    ..sort((a, b) => a.scheduledDateTime.compareTo(b.scheduledDateTime));
+  return overdue;
+}
+
+/// Tasks scheduled from [now] through the next 24 hours (Sprint 6.3,
+/// "📅 Próximas 24 horas"). Sorted chronologically.
+List<TaskModel> computeUpcomingTasks(List<TaskModel> tasks, DateTime now) {
+  final limit = now.add(const Duration(hours: 24));
+  final upcoming = tasks.where((t) {
+    final dt = t.scheduledDateTime;
+    return !dt.isBefore(now) && !dt.isAfter(limit);
+  }).toList()
+    ..sort((a, b) => a.scheduledDateTime.compareTo(b.scheduledDateTime));
+  return upcoming;
+}
+
+/// An [AppUser] paired with how many tasks they completed in the trailing
+/// 7-day window (Sprint 6.3, "👤 Sin actividad").
+class InactiveUserStat {
+  const InactiveUserStat({required this.user, required this.completedLast7Days});
+
+  final AppUser user;
+  final int completedLast7Days;
+}
+
+/// Users with zero completed tasks in the 7 days before [now] (Sprint 6.3,
+/// "👤 Usuarios sin actividad"). [allUsers] is the already-loaded
+/// [CatalogProvider.users] list — no new query. Completion is judged by
+/// [TaskModel.completedAt] (falling back to the scheduled time for legacy
+/// rows without it) so it reflects when the work actually happened rather
+/// than when it was scheduled.
+List<InactiveUserStat> computeInactiveUsers(
+  List<TaskModel> tasks,
+  List<AppUser> allUsers,
+  CatalogProvider catalog,
+  DateTime now,
+) {
+  final completedId = catalog.completedStatusId;
+  final since = now.subtract(const Duration(days: 7));
+  final completedCounts = <String, int>{};
+  for (final t in tasks) {
+    if (t.statusId != completedId) continue;
+    final completedAt = t.completedAt ?? t.scheduledDateTime;
+    if (completedAt.isBefore(since)) continue;
+    completedCounts[t.assignedUserId] = (completedCounts[t.assignedUserId] ?? 0) + 1;
+  }
+  return allUsers
+      .where((u) => (completedCounts[u.id] ?? 0) == 0)
+      .map((u) => InactiveUserStat(user: u, completedLast7Days: 0))
+      .toList();
+}

@@ -80,14 +80,19 @@ class UserRepository {
     return _collection.doc(uid).set({'photoUrl': photoUrl}, SetOptions(merge: true));
   }
 
-  /// Registers an FCM token for push notifications (idempotent).
+  /// Registers an FCM token for push notifications. Idempotent —
+  /// `arrayUnion` is a no-op if the token is already stored, so the same
+  /// device never produces duplicate entries. Empty tokens are rejected
+  /// (Sprint 7.1 Part 8).
   Future<void> addFcmToken(String uid, String token) {
+    if (token.isEmpty) return Future.value();
     return _collection.doc(uid).set({
       'fcmTokens': FieldValue.arrayUnion([token]),
     }, SetOptions(merge: true));
   }
 
   Future<void> removeFcmToken(String uid, String token) {
+    if (token.isEmpty) return Future.value();
     return _collection.doc(uid).update({
       'fcmTokens': FieldValue.arrayRemove([token]),
     });

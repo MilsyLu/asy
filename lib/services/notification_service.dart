@@ -18,10 +18,34 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint('Background FCM message received: ${message.messageId}');
 }
 
+/// Parsed `{type, taskId}` data payload carried by business push
+/// notifications (Sprint 7.1 Part 7 — `task_created` / `task_completed` /
+/// `task_reprogrammed`, etc., added in later sprints). Only the shape is
+/// established here; nothing currently dispatches on [type] — that's for
+/// whichever sprint adds in-app navigation on notification tap.
+class NotificationPayload {
+  const NotificationPayload({this.type, this.taskId});
+
+  final String? type;
+  final String? taskId;
+
+  factory NotificationPayload.fromMessage(RemoteMessage message) {
+    return NotificationPayload(
+      type: message.data['type'] as String?,
+      taskId: message.data['taskId'] as String?,
+    );
+  }
+
+  @override
+  String toString() => 'NotificationPayload(type: $type, taskId: $taskId)';
+}
+
 /// Wraps Firebase Cloud Messaging + flutter_local_notifications.
 ///
 /// Handles both:
-/// - FCM push notifications (foreground display via [_showForegroundNotification])
+/// - FCM push notifications (foreground display via [_showForegroundNotification],
+///   background/terminated via [firebaseMessagingBackgroundHandler], tap via
+///   [handleOpenedNotification])
 /// - Scheduled local reminders ([scheduleReminder] / [cancelReminder])
 class NotificationService {
   NotificationService._();
@@ -70,6 +94,31 @@ class NotificationService {
     }
 
     // --- FCM permissions (covers local notifications on iOS too) ---
+    await requestPermissions();
+
+    // --- Foreground messages: show a local banner ---
+    FirebaseMessaging.onMessage.listen(_showForegroundNotification);
+
+    // --- Background/terminated delivery: official Firebase entry point ---
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
+    // --- Opened-notification handling (Sprint 7.1 Parts 6-7) ---
+    // App was backgrounded and the user tapped the push to bring it forward.
+    FirebaseMessaging.onMessageOpenedApp.listen(handleOpenedNotification);
+
+    // App was terminated and got launched by tapping the push; FCM buffers
+    // that one message for retrieval right after startup.
+    final initialMessage = await _messaging.getInitialMessage();
+    if (initialMessage != null) {
+      handleOpenedNotification(initialMessage);
+    }
+  }
+
+  /// Requests notification permission from the OS — required on iOS and
+  /// Android 13+ (silently granted on older Android). Split out from
+  /// [initialize] as its own responsibility per the FCM service breakdown
+  /// (Sprint 7.1 Part 3).
+  Future<void> requestPermissions() async {
     await _messaging.requestPermission(
       alert: true,
       badge: true,
@@ -83,11 +132,16 @@ class NotificationService {
         sound: true,
       );
     }
+  }
 
-    // --- Foreground messages: show a local banner ---
-    FirebaseMessaging.onMessage.listen(_showForegroundNotification);
-
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  /// Called when the user taps a push notification that brought the app to
+  /// the foreground from background or terminated state (Sprint 7.1 Parts
+  /// 6-7). For now this only logs the parsed payload — no in-app navigation
+  /// happens yet; that's left for the sprint that adds business
+  /// notifications (task created/completed/reprogrammed) to dispatch on.
+  void handleOpenedNotification(RemoteMessage message) {
+    final payload = NotificationPayload.fromMessage(message);
+    debugPrint('Notification opened: $payload');
   }
 
   void _showForegroundNotification(RemoteMessage message) {
