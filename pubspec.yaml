@@ -86,6 +86,54 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.7
+
+# Sprint 7.3.2B — CheCu launcher icon, generated from the single official
+# source asset (assets/branding/logo_checu.png). The project has no adaptive
+# icon split (foreground/background) today, only legacy mipmap icons, so this
+# stays legacy-only rather than inventing a foreground/background split that
+# isn't part of the original asset. remove_alpha_ios/background_color_ios
+# flatten the source's transparent rounded-corner padding onto the same
+# institutional background color for iOS, which requires fully opaque icons.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/branding/logo_checu.png"
+  remove_alpha_ios: true
+  background_color_ios: "#F5F1E8"
+
+# Sprint 7.3.2B/D — native boot splash. Fixed institutional background/logo,
+# intentionally identical in color_dark/android_12 so it never depends on the
+# device theme, signed-in user, or role (it renders before any of that is
+# known). Web is left untouched here: out of this sprint's scope and avoids
+# re-touching web/index.html, which Sprint 7.3.2A already edited for the
+# visible app name.
+#
+# image/image_dark and android_12.image/image_dark point at *derived* copies
+# of assets/branding/logo_checu.png (same pixels, just resized/padded), not a
+# new logo: flutter_native_splash has no size/scale parameter — its own docs
+# say the source "should be sized for 4x pixel density" because the on-screen
+# logical size is computed as source_width / 4, so the original 1146px master
+# (meant for app icons) renders at ~286dp/286pt and looks oversized. The
+# 384x384 derivative below restores parity with BrandLogo's splash size (96).
+# android_12 additionally requires real transparent padding around the
+# visible content (Android masks the outer third of the icon on Android 12+),
+# which the 1146px master doesn't have, so it uses a separate 1152x1152
+# derivative with the logo confined to a 700x700 safe zone.
+flutter_native_splash:
+  color: "#F5F1E8"
+  color_dark: "#F5F1E8"
+  image: assets/branding/logo_checu_splash.png
+  image_dark: assets/branding/logo_checu_splash.png
+  android_12:
+    color: "#F5F1E8"
+    color_dark: "#F5F1E8"
+    image: assets/branding/logo_checu_splash_android12.png
+    image_dark: assets/branding/logo_checu_splash_android12.png
+  android: true
+  ios: true
+  web: false
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -102,6 +150,8 @@ flutter:
   # assets:
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
+  assets:
+    - assets/branding/logo_checu.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

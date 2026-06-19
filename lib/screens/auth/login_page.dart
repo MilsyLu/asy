@@ -5,17 +5,16 @@ import '../../core/constants/app_constants.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../core/utils/validators.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/brand_logo.dart';
 import 'forgot_password_page.dart';
 
-/// Fixed CheCu institutional colors (Sprint 7.3.2A).
-///
-/// Login has its own brand identity and must look identical regardless of
-/// the signed-out visitor's eventual light/dark mode or accent color
-/// preference — those are per-user settings stored on the Firestore profile,
-/// which isn't loaded yet at this screen. Deliberately not sourced from
-/// [ThemeColors]/`context.colors`.
-const _kLoginBackground = Color(0xFFF5F1E8);
-const _kLoginPrimary = Color(0xFF1A234A);
+/// Fixed CheCu institutional colors (Sprint 7.3.2A). Login has its own brand
+/// identity and must look identical regardless of the signed-out visitor's
+/// eventual light/dark mode or accent color preference — those are per-user
+/// settings stored on the Firestore profile, which isn't loaded yet at this
+/// screen. Deliberately not sourced from [ThemeColors]/`context.colors`.
+const _kLoginBackground = AppConstants.brandBackground;
+const _kLoginPrimary = AppConstants.brandPrimary;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -115,22 +114,7 @@ class _LoginPageState extends State<LoginPage> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           const SizedBox(height: 24),
-                          Container(
-                            alignment: Alignment.center,
-                            child: Container(
-                              width: 84,
-                              height: 84,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(color: _kLoginPrimary, width: 2),
-                              ),
-                              child: const Icon(
-                                Icons.task_alt_rounded,
-                                color: _kLoginPrimary,
-                                size: 42,
-                              ),
-                            ),
-                          ),
+                          const Center(child: BrandLogo(size: 84)),
                           const SizedBox(height: 24),
                           const Text(
                             AppConstants.appName,

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -12,7 +14,7 @@ import 'services/auth_service.dart';
 import 'services/catalog_repository.dart';
 import 'services/task_repository.dart';
 import 'services/user_repository.dart';
-import 'widgets/loading_indicator.dart';
+import 'widgets/brand_logo.dart';
 
 class TaskFlowApp extends StatelessWidget {
   const TaskFlowApp({super.key});
@@ -84,7 +86,7 @@ class AuthGate extends StatelessWidget {
     final auth = context.watch<AuthProvider>();
 
     if (auth.isLoading) {
-      return const Scaffold(body: LoadingIndicator(message: 'Cargando...'));
+      return const _BootSplash();
     }
 
     if (!auth.isAuthenticated || auth.appUser == null) {
@@ -92,5 +94,103 @@ class AuthGate extends StatelessWidget {
     }
 
     return const MainShell();
+  }
+}
+
+/// Branded boot screen shown only while [AuthProvider] resolves the signed-in
+/// user (Sprint 7.3.2B/C), right after the native splash hands off to the
+/// first Flutter frame. Uses the same fixed institutional colors/logo as
+/// Login — deliberately not [LoadingIndicator] (used by many in-app loading
+/// states that must keep following the user's selected theme) and
+/// deliberately not theme-dependent, since no user/role is known yet here.
+class _BootSplash extends StatefulWidget {
+  const _BootSplash();
+
+  @override
+  State<_BootSplash> createState() => _BootSplashState();
+}
+
+class _BootSplashState extends State<_BootSplash> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800))
+      ..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppConstants.brandBackground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedBuilder(
+                      animation: _controller,
+                      builder: (context, child) {
+                        // Coin-flip wobble: eases between 0 and half a turn
+                        // and back (never a continuous 360° spin), with a
+                        // matching subtle 1.00 -> 1.04 -> 1.00 scale pulse.
+                        final t = Curves.easeInOut.transform(_controller.value);
+                        final angle = t * math.pi;
+                        final scale = 1.0 + (t * 0.04);
+                        return Transform(
+                          alignment: Alignment.center,
+                          transform: Matrix4.identity()
+                            ..setEntry(3, 2, 0.001)
+                            ..rotateY(angle)
+                            ..scaleByDouble(scale, scale, scale, 1.0),
+                          child: child,
+                        );
+                      },
+                      child: const BrandLogo(size: 96),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      AppConstants.appName,
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: AppConstants.brandPrimary,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      AppConstants.appTagline,
+                      style: TextStyle(color: AppConstants.brandPrimary.withValues(alpha: 0.7)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                AppConstants.appDeveloper,
+                style: TextStyle(
+                  color: AppConstants.brandPrimary.withValues(alpha: 0.6),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

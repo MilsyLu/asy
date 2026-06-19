@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 /// User roles, stored in `users/{userId}.role`.
 class AppRoles {
   AppRoles._();
@@ -32,4 +34,10 @@ class AppConstants {
   static const String appTagline = 'Chequeo y Cumplimiento de tareas';
   static const String appVersion = '1.0';
   static const String appDeveloper = 'CustoDesk 2026';
+
+  /// Fixed institutional brand colors (Sprint 7.3.2A/B). Used by screens
+  /// whose identity must not depend on the signed-in user's theme
+  /// preference: Login and the app boot/splash hand-off in [TaskFlowApp].
+  static const Color brandBackground = Color(0xFFF5F1E8);
+  static const Color brandPrimary = Color(0xFF1A234A);
 }
