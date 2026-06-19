@@ -17,7 +17,7 @@
         android:maxSdkVersion="32"/>
 
     <application
-        android:label="taskflow_executive"
+        android:label="CheCu"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 

@@ -1,11 +1,11 @@
 {
-    "name": "taskflow_executive",
-    "short_name": "taskflow_executive",
+    "name": "CheCu",
+    "short_name": "CheCu",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "TaskFlow Executive - App de agendamiento de tareas para equipos",
+    "description": "CheCu - App de agendamiento de tareas para equipos",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

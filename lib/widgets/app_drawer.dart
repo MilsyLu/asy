@@ -162,12 +162,25 @@ class AppDrawer extends StatelessWidget {
             const Divider(),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text(
-                AppConstants.appName,
-                style: TextStyle(
-                  color: colors.textSecondary.withValues(alpha: 0.6),
-                  fontSize: 11,
-                ),
+              child: Column(
+                children: [
+                  Text(
+                    '${AppConstants.appName} v${AppConstants.appVersion}',
+                    style: TextStyle(
+                      color: colors.textSecondary.withValues(alpha: 0.8),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Desarrollado por ${AppConstants.appDeveloper}',
+                    style: TextStyle(
+                      color: colors.textSecondary.withValues(alpha: 0.6),
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
               ),
             ),
             ListTile(

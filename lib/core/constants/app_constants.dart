@@ -28,5 +28,8 @@ class AppTaskTypeNames {
 class AppConstants {
   AppConstants._();
 
-  static const String appName = 'TaskFlow Executive';
+  static const String appName = 'CheCu';
+  static const String appTagline = 'Chequeo y Cumplimiento de tareas';
+  static const String appVersion = '1.0';
+  static const String appDeveloper = 'CustoDesk 2026';
 }

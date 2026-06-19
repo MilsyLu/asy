@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/theme/theme_manager.dart';
 
@@ -70,6 +71,10 @@ class SettingsPage extends StatelessWidget {
           const _SectionTitle(icon: LucideIcons.eye, title: 'Vista previa'),
           const SizedBox(height: 8),
           const _ThemePreview(),
+          const SizedBox(height: 24),
+          const _SectionTitle(icon: LucideIcons.info, title: 'Acerca de'),
+          const SizedBox(height: 8),
+          const _AboutBlock(),
         ],
       ),
     );
@@ -178,7 +183,7 @@ class _ThemePreview extends StatelessWidget {
               children: [
                 Icon(LucideIcons.layoutDashboard, color: theme.appBarTheme.iconTheme?.color),
                 const SizedBox(width: 8),
-                Text('TaskFlow Executive', style: theme.appBarTheme.titleTextStyle),
+                Text(AppConstants.appName, style: theme.appBarTheme.titleTextStyle),
               ],
             ),
           ),
@@ -206,6 +211,54 @@ class _ThemePreview extends StatelessWidget {
                 child: const Icon(LucideIcons.plus),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Branding block (Sprint 7.3.2A Parte 4): reuses this existing
+/// "Configuración" screen instead of creating a separate "Acerca de" page.
+class _AboutBlock extends StatelessWidget {
+  const _AboutBlock();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            AppConstants.appName,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: colors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            AppConstants.appTagline,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: colors.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Versión ${AppConstants.appVersion}',
+            style: TextStyle(color: colors.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Desarrollado por ${AppConstants.appDeveloper}',
+            style: TextStyle(color: colors.textSecondary, fontSize: 12),
           ),
         ],
       ),
