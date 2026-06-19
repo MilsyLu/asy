@@ -75,9 +75,15 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="taskflow_high_importance" />
+        <!-- Sprint 7.3.3: Android status-bar icons must be a flat white-on-
+             transparent silhouette — the OS ignores RGB and renders only the
+             alpha channel as a solid color (the launcher icon, full-color, was
+             rendering as a featureless white block). @drawable/ic_notification
+             is the CheCu check-in-circle glyph derived for that constraint;
+             see assets/branding/README.md. -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@mipmap/ic_launcher" />
+            android:resource="@drawable/ic_notification" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_color"
             android:resource="@color/notification_gold" />

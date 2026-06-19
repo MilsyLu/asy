@@ -47,6 +47,42 @@ desde el nuevo `logo_checu.png` (resize directo a 384×384 para el primero;
 logo escalado a ~700×700 centrado en un lienzo transparente de 1152×1152 para
 el segundo).
 
+## android/app/src/main/res/drawable-*dpi/ic_notification.png (Sprint 7.3.3)
+
+Icono de notificación de Android (barra de estado), derivado de
+`logo_checu.png`. **No es el launcher icon ni un asset nuevo**: Android
+exige que los iconos de notificación sean una silueta monocromática
+(blanco puro sobre fondo transparente) — el sistema ignora el color real
+de los píxeles y solo usa el canal alfa para pintar el icono (con un tinte
+configurable vía `default_notification_color` / `notification_gold` en
+`colors.xml`, aplicado en la bandeja expandida). Usar directamente
+`logo_checu.png` (a todo color) producía un bloque blanco sin forma
+reconocible en la barra de estado.
+
+Generado con un script Dart de un solo uso (`package:image`, no es una
+dependencia del proyecto) que:
+
+1. Convierte el trazo navy (`#1A234A`) del logo en blanco sólido sobre
+   transparencia, usando luminancia para conservar el anti-aliasing.
+2. Separa por componentes conexos y descarta el anillo exterior fino del
+   logo (el aro "insignia" que rodea el círculo+check) — a 24-96px ambos
+   círculos concéntricos colapsan en una mancha ilegible, así que solo se
+   conserva el glifo interior (círculo + check).
+3. Recorta y centra ese glifo en un lienzo cuadrado con ~17% de margen
+   transparente por lado (convención de Android para iconos pequeños:
+   contenido ≈66% del lienzo).
+4. Exporta a los 5 buckets de densidad: `drawable-mdpi` (24px),
+   `-hdpi` (36px), `-xhdpi` (48px), `-xxhdpi` (72px), `-xxxhdpi` (96px).
+
+Usado por `com.google.firebase.messaging.default_notification_icon`
+(`AndroidManifest.xml`) y por los 3 sitios de `notification_service.dart`
+que referencian `@drawable/ic_notification` (inicialización de
+`flutter_local_notifications`, notificación en foreground, recordatorio
+programado) — los tres deben apuntar siempre al mismo recurso. Si el logo
+oficial cambia, regenerar repitiendo el mismo proceso (luminancia → mayor
+componente conexo descartado → recorte centrado con margen ~17%) sobre el
+nuevo `logo_checu.png`.
+
 ## Pendiente
 
 - El ícono adaptativo de Android (foreground/background separados) no se usa

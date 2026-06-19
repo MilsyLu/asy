@@ -76,7 +76,10 @@ class NotificationService {
     tz_data.initializeTimeZones();
 
     // --- Local notifications setup ---
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    // Sprint 7.3.3: must be a monochrome white-on-transparent drawable, not
+    // the full-color launcher mipmap — Android renders status-bar icons from
+    // the alpha channel only, so a color icon shows up as a solid block.
+    const androidInit = AndroidInitializationSettings('@drawable/ic_notification');
     const iosInit = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
@@ -159,7 +162,7 @@ class NotificationService {
           channelDescription: _channel.description,
           importance: Importance.high,
           priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
+          icon: '@drawable/ic_notification',
         ),
         iOS: const DarwinNotificationDetails(
           presentAlert: true,
@@ -207,7 +210,7 @@ class NotificationService {
             channelDescription: _channel.description,
             importance: Importance.high,
             priority: Priority.high,
-            icon: '@mipmap/ic_launcher',
+            icon: '@drawable/ic_notification',
           ),
           iOS: const DarwinNotificationDetails(
             presentAlert: true,
