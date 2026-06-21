@@ -164,14 +164,15 @@ class UserRepository {
         .set({'isActive': isActive}, SetOptions(merge: true));
   }
 
-  /// Toggles whether [uid] (a `super_admin`) receives an FCM push for the
-  /// "task_created_admin" global-visibility notification (Sprint 7.4.7
-  /// Objetivo C) — the in-app `notifications` record is always written
-  /// regardless of this preference. Uses `merge: true` so legacy documents
-  /// without the field are upgraded in place.
-  Future<void> updateReceiveTaskCreationPush(String uid, bool value) {
+  /// Toggles whether [uid] receives an FCM push for any notification type
+  /// (Sprint 7.4.8 Objetivo A — generalized from the admin-only
+  /// `receiveTaskCreationPush` of Sprint 7.4.7, now obsolete and no longer
+  /// written). The in-app `notifications` record is always written
+  /// server-side regardless of this preference. Uses `merge: true` so
+  /// legacy documents without the field are upgraded in place.
+  Future<void> updatePushNotificationsEnabled(String uid, bool value) {
     return _collection
         .doc(uid)
-        .set({'receiveTaskCreationPush': value}, SetOptions(merge: true));
+        .set({'pushNotificationsEnabled': value}, SetOptions(merge: true));
   }
 }

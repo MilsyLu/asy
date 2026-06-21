@@ -20,22 +20,20 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeManager = context.watch<ThemeManager>();
-    final auth = context.watch<AuthProvider>();
-    final isAdmin = auth.isSuperAdmin;
-    final adminUser = auth.appUser;
+    final user = context.watch<AuthProvider>().appUser;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Configuración')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
-          if (isAdmin && adminUser != null) ...[
+          if (user != null) ...[
             const _SectionTitle(
               icon: LucideIcons.bellRing,
-              title: 'Notificaciones administrativas',
+              title: 'Notificaciones',
             ),
             const SizedBox(height: 4),
-            _ReceiveTaskCreationPushOption(user: adminUser),
+            _PushNotificationsOption(user: user),
             const SizedBox(height: 24),
           ],
           const _SectionTitle(icon: LucideIcons.sunMoon, title: 'Apariencia'),
@@ -96,13 +94,14 @@ class SettingsPage extends StatelessWidget {
   }
 }
 
-/// Admin-only toggle (Sprint 7.4.7 Objetivo C): controls whether this
-/// admin gets an FCM push for the "task_created_admin" global-visibility
-/// notification. The in-app `notifications` record is always written
-/// server-side regardless of this preference — see
-/// `functions/src/notifications.js` `notifyAdminsOfTaskCreated`.
-class _ReceiveTaskCreationPushOption extends StatelessWidget {
-  const _ReceiveTaskCreationPushOption({required this.user});
+/// General toggle for every role (Sprint 7.4.8 Objetivo A/B — generalized
+/// from the admin-only `_ReceiveTaskCreationPushOption` of Sprint 7.4.7):
+/// controls whether this user gets an FCM push for any notification type.
+/// The in-app `notifications` record (bell badge/counter/historial) is
+/// always written server-side regardless of this preference — see
+/// `functions/src/notifications.js` `sendNotificationToUser`.
+class _PushNotificationsOption extends StatelessWidget {
+  const _PushNotificationsOption({required this.user});
 
   final AppUser user;
 
@@ -111,16 +110,17 @@ class _ReceiveTaskCreationPushOption extends StatelessWidget {
     return SwitchListTile(
       contentPadding: EdgeInsets.zero,
       secondary: const Icon(LucideIcons.bell),
-      title: const Text('Recibir notificaciones push de nuevas tareas'),
+      title: const Text('Recibir notificaciones push'),
       subtitle: const Text(
-        'Si lo desactivas, las nuevas tareas seguirán apareciendo en tu '
-        'campanita, pero ya no recibirás un push por cada una.',
+        'Las notificaciones seguirán apareciendo\n'
+        'en el centro de notificaciones aunque\n'
+        'los avisos push estén desactivados.',
       ),
-      value: user.receiveTaskCreationPush,
+      value: user.pushNotificationsEnabled,
       onChanged: (value) {
         context
             .read<UserRepository>()
-            .updateReceiveTaskCreationPush(user.id, value);
+            .updatePushNotificationsEnabled(user.id, value);
       },
     );
   }

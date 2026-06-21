@@ -32,12 +32,15 @@ class AppUser {
   /// `true` so legacy users aren't locked out without an explicit action.
   final bool isActive;
 
-  /// Whether this admin wants an FCM push for the "task_created_admin"
-  /// global-visibility notification (Sprint 7.4.7 Objetivo C). Only
-  /// meaningful for `super_admin` accounts. Defaults to `true` — the
-  /// in-app `notifications` record is always written regardless of this
-  /// preference; it only gates the push itself.
-  final bool receiveTaskCreationPush;
+  /// Whether this user wants an FCM push for any notification type
+  /// (Sprint 7.4.8 Objetivo A — generalized from the admin-only
+  /// `receiveTaskCreationPush` added in Sprint 7.4.7). Applies to every
+  /// role and every notification type. Defaults to `true` — the in-app
+  /// `notifications` record (bell badge/counter/historial) is always
+  /// written server-side regardless of this preference; it only gates
+  /// the FCM push itself (see `functions/src/notifications.js`
+  /// `sendNotificationToUser`).
+  final bool pushNotificationsEnabled;
 
   const AppUser({
     required this.id,
@@ -54,7 +57,7 @@ class AppUser {
     this.accentColor = 'gold',
     this.photoUrl,
     this.isActive = true,
-    this.receiveTaskCreationPush = true,
+    this.pushNotificationsEnabled = true,
   });
 
   bool get isSuperAdmin => role == AppRoles.superAdmin;
@@ -78,8 +81,13 @@ class AppUser {
       accentColor: map['accentColor'] as String? ?? 'gold',
       photoUrl: map['photoUrl'] as String?,
       isActive: map['isActive'] as bool? ?? true,
-      receiveTaskCreationPush:
-          map['receiveTaskCreationPush'] as bool? ?? true,
+      // Sprint 7.4.8 Objetivo E: `pushNotificationsEnabled` is the only
+      // field new writes use, but documents written under Sprint 7.4.7
+      // (admin-only, field named `receiveTaskCreationPush`) are read with
+      // a fallback so an admin's earlier opt-out isn't silently reset.
+      pushNotificationsEnabled: map['pushNotificationsEnabled'] as bool? ??
+          map['receiveTaskCreationPush'] as bool? ??
+          true,
     );
   }
 
@@ -103,7 +111,7 @@ class AppUser {
       'accentColor': accentColor,
       'photoUrl': photoUrl,
       'isActive': isActive,
-      'receiveTaskCreationPush': receiveTaskCreationPush,
+      'pushNotificationsEnabled': pushNotificationsEnabled,
     };
   }
 
@@ -119,7 +127,7 @@ class AppUser {
     String? accentColor,
     String? photoUrl,
     bool? isActive,
-    bool? receiveTaskCreationPush,
+    bool? pushNotificationsEnabled,
   }) {
     return AppUser(
       id: id,
@@ -136,8 +144,8 @@ class AppUser {
       accentColor: accentColor ?? this.accentColor,
       photoUrl: photoUrl ?? this.photoUrl,
       isActive: isActive ?? this.isActive,
-      receiveTaskCreationPush:
-          receiveTaskCreationPush ?? this.receiveTaskCreationPush,
+      pushNotificationsEnabled:
+          pushNotificationsEnabled ?? this.pushNotificationsEnabled,
     );
   }
 }

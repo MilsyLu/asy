@@ -41,6 +41,32 @@ service cloud.firestore {
                 || task.get('groupId', null) == me().groupId));
     }
 
+    // Sprint 7.4.9B — only the task's current assignedUserId or a
+    // super_admin may directly change the reminder. Mirrors the rule
+    // enforced client-side in AddEditTaskPage (Encargado edita su propio
+    // recordatorio / Administrador edita cualquiera).
+    function canEditReminder() {
+      return isSuperAdmin()
+        || request.auth.uid == resource.data.get('assignedUserId', null);
+    }
+
+    // True when this write leaves reminderTime/reminderSent exactly as they
+    // were — any user who already passes canAccessTask() may still edit
+    // every other field freely (complete, soft-delete, edit other fields).
+    function reminderUnchanged() {
+      return request.resource.data.get('reminderTime', null) == resource.data.get('reminderTime', null)
+        && request.resource.data.get('reminderSent', false) == resource.data.get('reminderSent', false);
+    }
+
+    // True when date/hour is changing — a reschedule, which legitimately
+    // recalculates/clears the reminder as a side effect and is intentionally
+    // not gated by canEditReminder() (reschedule permissions are unchanged
+    // by this sprint).
+    function taskTimeChanged() {
+      return request.resource.data.get('date', null) != resource.data.get('date', null)
+        || request.resource.data.get('hour', null) != resource.data.get('hour', null);
+    }
+
     // -----------------------------------------------------------------
     // users
     // -----------------------------------------------------------------
@@ -54,7 +80,7 @@ service cloud.firestore {
       allow update: if isSuperAdmin()
         || (isOwner(userId)
             && request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['fcmTokens', 'lastLogin', 'streakDays', 'maxStreakDays', 'name', 'themeMode', 'accentColor',  'photoUrl']));
+                .hasOnly(['fcmTokens', 'lastLogin', 'streakDays', 'maxStreakDays', 'name', 'themeMode', 'accentColor',  'photoUrl', 'pushNotificationsEnabled']));
       allow delete: if isSuperAdmin();
     }
 
@@ -76,9 +102,13 @@ service cloud.firestore {
       // (lib/core/utils/task_visibility.dart), same as groups/taskTypes/etc.
       allow list: if isSignedIn();
       allow create: if isSignedIn() && canAccessTask(request.resource.data);
+      // Sprint 7.4.9B: a direct change to reminderTime/reminderSent (not a
+      // side effect of rescheduling) additionally requires canEditReminder()
+      // — the task's current assignedUserId or a super_admin.
       allow update: if isSignedIn()
         && canAccessTask(resource.data)
-        && canAccessTask(request.resource.data);
+        && canAccessTask(request.resource.data)
+        && (reminderUnchanged() || taskTimeChanged() || canEditReminder());
       // Permanent delete is restricted to super_admin.
       // Soft delete uses update() above and is available to any signed-in user
       // who can access the task.

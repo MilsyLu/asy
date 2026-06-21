@@ -63,10 +63,30 @@ async function sendNotificationToUser(userId, { title, body, data = {} }) {
 
     // Recorded regardless of whether a push can be delivered right now —
     // the in-app history is the durable record, independent of device
-    // tokens. Sprint 7.4.1: kicked off here (not awaited yet) and joined
-    // below alongside the FCM send, instead of sequentially blocking it —
-    // a slow Firestore write must not delay push delivery.
+    // tokens or this user's push preference. Sprint 7.4.1: kicked off here
+    // (not awaited yet) and joined below alongside the FCM send, instead of
+    // sequentially blocking it — a slow Firestore write must not delay
+    // push delivery.
     const recordPromise = recordNotification(userId, { title, body, data });
+
+    // Sprint 7.4.8 Objetivo A/C/D: a single, central preference check that
+    // every notification type goes through (Encargado/Grupo/Admin/
+    // Recordatorio all call this function). `pushNotificationsEnabled` is
+    // the current field; `receiveTaskCreationPush` is the Sprint 7.4.7
+    // admin-only field it replaces, read here only as a fallback for
+    // documents written before this migration — neither field is ever
+    // written by new code under that legacy name. Only an explicit
+    // `false` disables the push; the in-app record above already happened
+    // either way.
+    const pushEnabled =
+      userSnap.get("pushNotificationsEnabled") ??
+      userSnap.get("receiveTaskCreationPush") ??
+      true;
+    if (pushEnabled === false) {
+      console.log(`[FCM] Push skipped (preference disabled): ${userId}`);
+      await recordPromise;
+      return 0;
+    }
 
     const tokens = sanitizeTokens(userSnap.get("fcmTokens"));
     if (tokens.length === 0) {
@@ -141,39 +161,19 @@ async function sendNotificationToUsers(userIds, message) {
 
 /**
  * Sends the "task created" global-visibility notification to every admin
- * in [adminIds] (Sprint 7.4.7 Objetivo C/D). The in-app `notifications`
- * record is always written; the FCM push is skipped for admins whose
- * `receiveTaskCreationPush` field is explicitly `false` (defaults to
- * `true` for documents that don't have it yet — the preference is opt-out,
- * not opt-in). A failure for one admin never affects the others.
+ * in [adminIds] (Sprint 7.4.7 Objetivo D). Sprint 7.4.8: the push-preference
+ * check (record always, push only if enabled) now lives centrally in
+ * [sendNotificationToUser] and applies uniformly to every notification
+ * type, so this is a thin admin-specific alias of [sendNotificationToUsers]
+ * — kept as its own named export so the call site in `onTaskCreate.js`
+ * stays self-documenting about which audience it's notifying.
  *
  * @param {string[]} adminIds
  * @param {{title: string, body: string, data?: Record<string, string>}} message
  * @returns {Promise<number>} total tokens the push was actually sent to.
  */
 async function notifyAdminsOfTaskCreated(adminIds, message) {
-  const db = getFirestore();
-  let pushCount = 0;
-
-  await Promise.all(
-    adminIds.map(async (adminId) => {
-      try {
-        const snap = await db.collection("users").doc(adminId).get();
-        if (!snap.exists || snap.get("isActive") === false) return;
-
-        if (snap.get("receiveTaskCreationPush") === false) {
-          await recordNotification(adminId, message);
-          return;
-        }
-
-        pushCount += await sendNotificationToUser(adminId, message);
-      } catch (e) {
-        console.error(`[FCM][ERROR] Admin notification failed for ${adminId}: ${e}`);
-      }
-    })
-  );
-
-  return pushCount;
+  return sendNotificationToUsers(adminIds, message);
 }
 
 module.exports = {

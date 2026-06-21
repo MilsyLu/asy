@@ -168,11 +168,22 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
         return 'Sin recordatorio';
       case _ReminderOption.custom:
         return _reminderDateTime != null
-            ? AppDateUtils.formatTime12h(_reminderDateTime!)
+            ? _formatReminderDateTime(_reminderDateTime!)
             : 'Sin recordatorio';
       default:
         return _reminderOption.label;
     }
+  }
+
+  /// Shows just the time when the reminder falls on the same day as the
+  /// task (the common case, unchanged from before Sprint 7.4.9B); prefixes
+  /// the short date when the user picked a different day (e.g. the day
+  /// before), so that distinction is always visible rather than implied.
+  String _formatReminderDateTime(DateTime dt) {
+    final taskDt = _taskDateTime();
+    final sameDay = taskDt != null && AppDateUtils.isSameDay(dt, taskDt);
+    final time = AppDateUtils.formatTime12h(dt);
+    return sameDay ? time : '${AppDateUtils.formatShortDate(dt)} · $time';
   }
 
   // ---------------------------------------------------------------------------
@@ -262,7 +273,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                             current == _ReminderOption.custom &&
                             reminderDt != null)
                           Text(
-                            AppDateUtils.formatTime12h(reminderDt),
+                            _formatReminderDateTime(reminderDt),
                             style: TextStyle(
                                 color: colors.textSecondary, fontSize: 13),
                           ),
@@ -280,7 +291,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     if (!mounted || result == null) return;
 
     if (result == _ReminderOption.custom) {
-      await _showCustomTimePicker();
+      await _showCustomReminderPicker();
       return;
     }
 
@@ -295,8 +306,30 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     });
   }
 
-  Future<void> _showCustomTimePicker() async {
-    DateTime picked = _reminderDateTime ?? DateTime.now();
+  /// Custom reminder: lets the user pick a date (defaulting to the task's
+  /// own date, but any earlier day is allowed — Sprint 7.4.9B Objetivo A/B)
+  /// followed by a time, instead of forcing the reminder onto the task's
+  /// own day as the previous time-only picker did.
+  Future<void> _showCustomReminderPicker() async {
+    final taskDt = _taskDateTime();
+    final initial = _reminderDateTime ?? taskDt ?? DateTime.now();
+
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: taskDt ?? DateTime.now().add(const Duration(days: 365 * 2)),
+      helpText: 'Fecha del recordatorio',
+    );
+    if (!mounted || pickedDate == null) return;
+
+    DateTime picked = DateTime(
+      pickedDate.year,
+      pickedDate.month,
+      pickedDate.day,
+      initial.hour,
+      initial.minute,
+    );
 
     await showDialog<void>(
       context: context,
@@ -331,7 +364,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Hora personalizada',
+                            'Hora del recordatorio',
                             style: TextStyle(
                               color: colors.textPrimary,
                               fontSize: 16,
@@ -340,7 +373,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Selecciona la hora exacta del recordatorio',
+                            'Para el ${AppDateUtils.formatShortDate(pickedDate)}',
                             style: TextStyle(
                               color: colors.textSecondary,
                               fontSize: 12,
@@ -372,7 +405,13 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                     mode: CupertinoDatePickerMode.time,
                     initialDateTime: picked,
                     use24hFormat: false,
-                    onDateTimeChanged: (dt) => picked = dt,
+                    onDateTimeChanged: (dt) => picked = DateTime(
+                      pickedDate.year,
+                      pickedDate.month,
+                      pickedDate.day,
+                      dt.hour,
+                      dt.minute,
+                    ),
                   ),
                 ),
               ),
@@ -408,17 +447,9 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                               borderRadius: BorderRadius.circular(10)),
                         ),
                         onPressed: () {
-                          final taskDt = _taskDateTime();
-                          final reminderDt = DateTime(
-                            taskDt?.year ?? picked.year,
-                            taskDt?.month ?? picked.month,
-                            taskDt?.day ?? picked.day,
-                            picked.hour,
-                            picked.minute,
-                          );
                           setState(() {
                             _reminderOption = _ReminderOption.custom;
-                            _reminderDateTime = reminderDt;
+                            _reminderDateTime = picked;
                           });
                           Navigator.pop(dialogCtx);
                         },
@@ -511,8 +542,16 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
 
     final catalog = context.read<CatalogProvider>();
     final repo = context.read<TaskRepository>();
-    final currentUserId = context.read<AuthProvider>().appUser?.id;
+    final auth = context.read<AuthProvider>();
+    final currentUserId = auth.appUser?.id;
+    final isAdmin = auth.isSuperAdmin;
     final dateKey = AppDateUtils.formatDateKey(_selectedDate);
+    // Sprint 7.4.9B Objetivo D: only the task's encargado or an admin may
+    // change the reminder of an EXISTING task; the creator of a brand-new
+    // task may always set its initial reminder. Mirrored in firestore.rules
+    // (canEditReminder()) as the authoritative check.
+    final canEditReminder =
+        !_isEditing || isAdmin || _assignedUserId == currentUserId;
 
     setState(() => _isSaving = true);
     try {
@@ -545,6 +584,14 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
       final statusId = _statusId ?? catalog.pendingStatusId ?? '';
 
       if (_isEditing) {
+        // Sprint 7.4.9B: a user without canEditReminder must not change
+        // reminderTime/reminderSent at all, even incidentally — otherwise
+        // firestore.rules' reminderUnchanged() check would reject the
+        // whole update, blocking their edit of unrelated fields too.
+        final reminderTimeToSave =
+            canEditReminder ? _reminderDateTime : widget.existingTask!.reminderTime;
+        final reminderSentToSave =
+            canEditReminder ? false : widget.existingTask!.reminderSent;
         await repo.updateTask(widget.existingTask!.id, {
           'date': dateKey,
           'hour': _selectedHour,
@@ -554,8 +601,8 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
           'clientName': _clientNameController.text.trim(),
           'clientPhone': Validators.cleanPhone(_clientPhoneController.text),
           'observations': _observationsController.text.trim(),
-          'reminderTime': _reminderDateTime,
-          'reminderSent': false,
+          'reminderTime': reminderTimeToSave,
+          'reminderSent': reminderSentToSave,
           'groupId': _groupId,
           'visibleToAllGroups': _visibleToAllGroups,
         }.map((key, value) {
@@ -565,17 +612,19 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
           }
           return MapEntry(key, value);
         }));
-        // Cancel previous local notification, then schedule the new one (if any).
-        await NotificationService.instance
-            .cancelReminder(widget.existingTask!.id);
-        if (_reminderDateTime != null) {
-          await NotificationService.instance.scheduleReminder(
-            taskId: widget.existingTask!.id,
-            clientName: _clientNameController.text.trim(),
-            taskTypeName: catalog.taskTypeName(_taskTypeId),
-            taskHour: _selectedHour!,
-            reminderTime: _reminderDateTime!,
-          );
+        if (canEditReminder) {
+          // Cancel previous local notification, then schedule the new one (if any).
+          await NotificationService.instance
+              .cancelReminder(widget.existingTask!.id);
+          if (_reminderDateTime != null) {
+            await NotificationService.instance.scheduleReminder(
+              taskId: widget.existingTask!.id,
+              clientName: _clientNameController.text.trim(),
+              taskTypeName: catalog.taskTypeName(_taskTypeId),
+              taskHour: _selectedHour!,
+              reminderTime: _reminderDateTime!,
+            );
+          }
         }
       } else {
         final newTask = TaskModel(
@@ -674,6 +723,11 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     if (!isAdmin) {
       _assignedUserId ??= currentUser.id;
     }
+    // Sprint 7.4.9B Objetivo D/E: same rule as in _save() — only the
+    // encargado or an admin may edit an EXISTING task's reminder; the
+    // creator of a brand-new task may always set the initial one.
+    final canEditReminder =
+        !_isEditing || isAdmin || _assignedUserId == currentUser.id;
     if (_statusId == null && !_isEditing) {
       _statusId = catalog.pendingStatusId;
     }
@@ -881,29 +935,38 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
             ),
             const SizedBox(height: 16),
             InkWell(
-              onTap: _showReminderSheet,
+              onTap: canEditReminder ? _showReminderSheet : null,
               child: InputDecorator(
                 decoration: InputDecoration(
                   labelText: 'Recordatorio (opcional)',
                   prefixIcon: Icon(LucideIcons.bell, color: colors.primary),
-                  suffixIcon: _reminderOption != _ReminderOption.none
-                      ? IconButton(
-                          icon: Icon(LucideIcons.xCircle,
-                              color: colors.textSecondary),
-                          onPressed: () => setState(() {
-                            _reminderDateTime = null;
-                            _reminderOption = _ReminderOption.none;
-                          }),
-                        )
-                      : null,
+                  suffixIcon: !canEditReminder
+                      ? Icon(LucideIcons.lock,
+                          color: colors.textSecondary, size: 18)
+                      : (_reminderOption != _ReminderOption.none
+                          ? IconButton(
+                              icon: Icon(LucideIcons.xCircle,
+                                  color: colors.textSecondary),
+                              onPressed: () => setState(() {
+                                _reminderDateTime = null;
+                                _reminderOption = _ReminderOption.none;
+                              }),
+                            )
+                          : null),
                 ),
-                child: Text(_reminderLabel()),
+                child: Text(
+                  _reminderLabel(),
+                  style:
+                      !canEditReminder ? TextStyle(color: colors.textSecondary) : null,
+                ),
               ),
             ),
             Padding(
               padding: const EdgeInsets.only(top: 6, left: 4),
               child: Text(
-                'El recordatorio debe ser anterior a la hora de la tarea.',
+                canEditReminder
+                    ? 'El recordatorio debe ser anterior a la hora de la tarea.'
+                    : 'Solo el encargado o un administrador pueden modificar el recordatorio.',
                 style: TextStyle(color: colors.textSecondary, fontSize: 12),
               ),
             ),
