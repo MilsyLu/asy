@@ -23,6 +23,10 @@ class TaskModel {
   final DateTime? deletedAt;
   final String? deletedBy;
   final String? deletedByName;
+  // Sprint 7.4.1: id of the user who created the task, so onTaskCreate can
+  // exclude them from their own "task created" push (e.g. a self-assigned
+  // task, or a task in the creator's own group).
+  final String? createdBy;
 
   const TaskModel({
     required this.id,
@@ -45,6 +49,7 @@ class TaskModel {
     this.deletedAt,
     this.deletedBy,
     this.deletedByName,
+    this.createdBy,
   });
 
   /// The full scheduled [DateTime] obtained by combining [date] and [hour].
@@ -78,6 +83,7 @@ class TaskModel {
       deletedAt: (map['deletedAt'] as Timestamp?)?.toDate(),
       deletedBy: map['deletedBy'] as String?,
       deletedByName: map['deletedByName'] as String?,
+      createdBy: map['createdBy'] as String?,
     );
   }
 
@@ -110,6 +116,7 @@ class TaskModel {
       'deletedAt': deletedAt != null ? Timestamp.fromDate(deletedAt!) : null,
       'deletedBy': deletedBy,
       'deletedByName': deletedByName,
+      'createdBy': createdBy,
     };
   }
 
@@ -165,6 +172,7 @@ class TaskModel {
           clearDeletedBy == true ? null : (deletedBy ?? this.deletedBy),
       deletedByName:
           clearDeletedByName == true ? null : (deletedByName ?? this.deletedByName),
+      createdBy: createdBy,
     );
   }
 }

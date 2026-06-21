@@ -83,7 +83,12 @@ class AuthProvider extends ChangeNotifier {
       if (token != null) {
         await _userRepository.addFcmToken(uid, token);
       }
-      NotificationService.instance.onTokenRefresh((newToken) {
+      // Sprint 7.4.3 Parte 1: this only swaps the handler reference — the
+      // underlying `onTokenRefresh` subscription is created exactly once,
+      // inside NotificationService.initialize(). Re-running this method on
+      // every `users/{uid}` snapshot (not just login) no longer accumulates
+      // a new listener each time.
+      NotificationService.instance.setTokenRefreshHandler((newToken) {
         _userRepository.addFcmToken(uid, newToken);
       });
     } catch (e) {
@@ -111,6 +116,9 @@ class AuthProvider extends ChangeNotifier {
         debugPrint('FCM token cleanup skipped: $e');
       }
     }
+    // Sprint 7.4.3 Parte 1: clear the handler so a token rotation that
+    // fires after this point doesn't write to the now-logged-out uid.
+    NotificationService.instance.setTokenRefreshHandler(null);
     await _authService.signOut();
   }
 

@@ -5,12 +5,14 @@ import 'package:provider/provider.dart';
 import '../core/constants/app_constants.dart';
 import '../providers/auth_provider.dart';
 import '../providers/catalog_provider.dart';
+import '../services/notification_repository.dart';
 import '../services/notification_service.dart';
 import '../services/task_repository.dart';
 import '../widgets/app_drawer.dart';
 import 'calendar/calendar_page.dart';
 import 'dashboard/dashboard_page.dart';
 import 'home/home_page.dart';
+import 'notifications/notifications_page.dart';
 import 'profile/profile_page.dart';
 import 'reports/reports_page.dart';
 import 'week/week_page.dart';
@@ -55,13 +57,16 @@ class _MainShellState extends State<MainShell> {
       final repo = context.read<TaskRepository>();
       final catalog = context.read<CatalogProvider>();
       final now = DateTime.now();
-      final tasks = await repo.getTasksInRange(
+      // Sprint 7.4.5 Objetivo 2: filtered server-side to this user's own
+      // tasks — previously downloaded every user's tasks in the 60-day
+      // window just to discard everyone but `currentUserId` below.
+      final tasks = await repo.getTasksForUserInRange(
+        currentUserId,
         now,
         now.add(const Duration(days: 60)),
       );
 
       for (final task in tasks) {
-        if (task.assignedUserId != currentUserId) continue;
         final reminder = task.reminderTime;
         if (reminder == null || reminder.isBefore(now)) continue;
         await NotificationService.instance.scheduleReminder(
@@ -108,7 +113,7 @@ class _MainShellState extends State<MainShell> {
         : _titles[_index + titleIndexOffset];
 
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(title: Text(title), actions: const [_NotificationBellAction()]),
       drawer: const AppDrawer(),
       body: IndexedStack(index: _index, children: pages),
       bottomNavigationBar: BottomNavigationBar(
@@ -116,6 +121,48 @@ class _MainShellState extends State<MainShell> {
         items: items,
         onTap: (i) => setState(() => _index = i),
       ),
+    );
+  }
+}
+
+/// AppBar bell action (Sprint 7.4): opens [NotificationsPage] as a normal
+/// pushed route and shows a live unread-count badge sourced from
+/// [NotificationRepository.unreadCount].
+class _NotificationBellAction extends StatelessWidget {
+  const _NotificationBellAction();
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = context.read<NotificationRepository>();
+    final userId = context.watch<AuthProvider>().appUser?.id;
+    if (userId == null) return const SizedBox.shrink();
+
+    return StreamBuilder<int>(
+      stream: repo.unreadCount(userId),
+      builder: (context, snapshot) {
+        // Sprint 7.4.1: a permission/index error here must not be silently
+        // swallowed as "0 unread" — that's indistinguishable from a healthy
+        // empty state and was hiding exactly the kind of bug Sprint 7.4.1
+        // set out to find (push arrives, bell shows nothing).
+        if (snapshot.hasError) {
+          debugPrint('[Notifications] unreadCount stream error: ${snapshot.error}');
+        }
+        final count = snapshot.data ?? 0;
+        return IconButton(
+          icon: Badge(
+            label: Text(count > 9 ? '9+' : '$count'),
+            isLabelVisible: count > 0,
+            backgroundColor: Theme.of(context).colorScheme.error,
+            child: const Icon(LucideIcons.bell),
+          ),
+          tooltip: 'Notificaciones',
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const NotificationsPage()),
+            );
+          },
+        );
+      },
     );
   }
 }

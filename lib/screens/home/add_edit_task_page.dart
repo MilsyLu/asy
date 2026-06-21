@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -472,6 +474,9 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
   }
 
   Future<void> _save() async {
+    debugPrint(
+      '[CREATE_TASK]\nsave_pressed\ntimestamp=${DateTime.now().millisecondsSinceEpoch}',
+    );
     if (!_formKey.currentState!.validate()) return;
     if (_selectedHour == null) {
       SnackbarUtils.showError(context, 'Selecciona una hora');
@@ -506,6 +511,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
 
     final catalog = context.read<CatalogProvider>();
     final repo = context.read<TaskRepository>();
+    final currentUserId = context.read<AuthProvider>().appUser?.id;
     final dateKey = AppDateUtils.formatDateKey(_selectedDate);
 
     setState(() => _isSaving = true);
@@ -585,17 +591,47 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
           date: dateKey,
           groupId: _groupId,
           visibleToAllGroups: _visibleToAllGroups,
+          // Sprint 7.4.1: lets onTaskCreate exclude the creator from their
+          // own "task created" push (self-assigned task, or own group).
+          createdBy: currentUserId,
         );
         final taskId = await repo.createTask(newTask);
+        // Sprint 7.4.3 Parte 2 — latency measurement only, no behavior
+        // change. Measured on the device clock, so the delta against the
+        // Cloud Functions `trigger_received` log (server clock) carries
+        // whatever clock skew exists between this device and GCP — not a
+        // pure network/processing latency.
+        debugPrint(
+          '[FCM_TIMING]\ntask_created_local\ntaskId=$taskId\ntimestamp=${DateTime.now().millisecondsSinceEpoch}',
+        );
+        debugPrint(
+          '[CREATE_TASK]\nfirestore_saved\ntaskId=$taskId\ntimestamp=${DateTime.now().millisecondsSinceEpoch}',
+        );
         if (_reminderDateTime != null) {
-          await NotificationService.instance.scheduleReminder(
-            taskId: taskId,
-            clientName: _clientNameController.text.trim(),
-            taskTypeName: catalog.taskTypeName(_taskTypeId),
-            taskHour: _selectedHour!,
-            reminderTime: _reminderDateTime!,
+          // Sprint 7.4.6 Bug 3: scheduling a local reminder never touches
+          // Firestore/network, so it must not delay the success message —
+          // by the time the server-side push for this task arrives, the UI
+          // should already be back on the previous screen. Fired without
+          // `await`; its own completion is logged separately so slow
+          // scheduling is still visible without blocking on it.
+          final reminderStopwatch = Stopwatch()..start();
+          unawaited(
+            NotificationService.instance.scheduleReminder(
+              taskId: taskId,
+              clientName: _clientNameController.text.trim(),
+              taskTypeName: catalog.taskTypeName(_taskTypeId),
+              taskHour: _selectedHour!,
+              reminderTime: _reminderDateTime!,
+            ).then((_) {
+              debugPrint(
+                '[PERF] scheduleReminder (no bloqueante): ${reminderStopwatch.elapsedMilliseconds}ms',
+              );
+            }),
           );
         }
+        debugPrint(
+          '[CREATE_TASK]\nreminders_scheduled\ntaskId=$taskId\ntimestamp=${DateTime.now().millisecondsSinceEpoch}',
+        );
       }
 
       if (mounted) {
@@ -603,7 +639,13 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
           context,
           _isEditing ? 'Tarea actualizada' : 'Tarea creada correctamente',
         );
+        debugPrint(
+          '[CREATE_TASK]\nsuccess_message_shown\ntimestamp=${DateTime.now().millisecondsSinceEpoch}',
+        );
         Navigator.of(context).pop();
+        debugPrint(
+          '[CREATE_TASK]\nnavigation_completed\ntimestamp=${DateTime.now().millisecondsSinceEpoch}',
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -622,7 +664,16 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     final isAdmin = auth.isSuperAdmin;
     final colors = context.colors;
 
-    _assignedUserId ??= currentUser.id;
+    // Sprint 7.4.6 Bug 2: only self-default "Encargado" for regular workers
+    // (who usually create tasks for themselves) — defaulting an admin to
+    // themselves silently saved tasks "assigned" to the admin instead of
+    // the worker they actually meant to pick, which then (correctly, given
+    // that wrong data) routed the "task_created_assigned" push to the
+    // admin. Leaving it null for admins lets the existing
+    // "Selecciona un encargado" validation in `_save()` do its job.
+    if (!isAdmin) {
+      _assignedUserId ??= currentUser.id;
+    }
     if (_statusId == null && !_isEditing) {
       _statusId = catalog.pendingStatusId;
     }

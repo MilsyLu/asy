@@ -32,6 +32,13 @@ class AppUser {
   /// `true` so legacy users aren't locked out without an explicit action.
   final bool isActive;
 
+  /// Whether this admin wants an FCM push for the "task_created_admin"
+  /// global-visibility notification (Sprint 7.4.7 Objetivo C). Only
+  /// meaningful for `super_admin` accounts. Defaults to `true` — the
+  /// in-app `notifications` record is always written regardless of this
+  /// preference; it only gates the push itself.
+  final bool receiveTaskCreationPush;
+
   const AppUser({
     required this.id,
     required this.email,
@@ -47,6 +54,7 @@ class AppUser {
     this.accentColor = 'gold',
     this.photoUrl,
     this.isActive = true,
+    this.receiveTaskCreationPush = true,
   });
 
   bool get isSuperAdmin => role == AppRoles.superAdmin;
@@ -70,6 +78,8 @@ class AppUser {
       accentColor: map['accentColor'] as String? ?? 'gold',
       photoUrl: map['photoUrl'] as String?,
       isActive: map['isActive'] as bool? ?? true,
+      receiveTaskCreationPush:
+          map['receiveTaskCreationPush'] as bool? ?? true,
     );
   }
 
@@ -93,6 +103,7 @@ class AppUser {
       'accentColor': accentColor,
       'photoUrl': photoUrl,
       'isActive': isActive,
+      'receiveTaskCreationPush': receiveTaskCreationPush,
     };
   }
 
@@ -108,6 +119,7 @@ class AppUser {
     String? accentColor,
     String? photoUrl,
     bool? isActive,
+    bool? receiveTaskCreationPush,
   }) {
     return AppUser(
       id: id,
@@ -124,6 +136,8 @@ class AppUser {
       accentColor: accentColor ?? this.accentColor,
       photoUrl: photoUrl ?? this.photoUrl,
       isActive: isActive ?? this.isActive,
+      receiveTaskCreationPush:
+          receiveTaskCreationPush ?? this.receiveTaskCreationPush,
     );
   }
 }

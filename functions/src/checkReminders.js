@@ -35,28 +35,34 @@ const checkReminders = onSchedule("every 1 minutes", async () => {
 
   await Promise.all(
     snap.docs.map(async (doc) => {
-      const task = doc.data();
+      try {
+        const task = doc.data();
 
-      if (completedStatusId && task.statusId === completedStatusId) {
+        if (completedStatusId && task.statusId === completedStatusId) {
+          await doc.ref.update({ reminderSent: true });
+          return;
+        }
+
+        const { assignedUserId, clientName, hour } = task;
+        if (assignedUserId) {
+          const count = await sendNotificationToUser(assignedUserId, {
+            title: "Recordatorio de tarea",
+            body: `${clientName} - hoy a las ${hour}`,
+            data: {
+              type: "task_reminder",
+              taskId: doc.id,
+              date: task.date || "",
+              hour: hour || "",
+            },
+          });
+          console.log(`[FCM] Reminder notified: ${assignedUserId}`);
+          console.log(`[FCM] Push sent: ${count}`);
+        }
+
         await doc.ref.update({ reminderSent: true });
-        return;
+      } catch (e) {
+        console.error(`[FCM][ERROR] Reminder processing failed for ${doc.id}: ${e}`);
       }
-
-      const { assignedUserId, clientName, hour } = task;
-      if (assignedUserId) {
-        await sendNotificationToUser(assignedUserId, {
-          title: "Recordatorio de tarea",
-          body: `${clientName} - hoy a las ${hour}`,
-          data: {
-            type: "task_reminder",
-            taskId: doc.id,
-            date: task.date || "",
-            hour: hour || "",
-          },
-        });
-      }
-
-      await doc.ref.update({ reminderSent: true });
     })
   );
 });

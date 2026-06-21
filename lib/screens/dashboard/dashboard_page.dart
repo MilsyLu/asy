@@ -49,6 +49,8 @@ class _DashboardPageState extends State<DashboardPage> {
   late final DateTime _end;
   late final DateTime _queryEnd;
   late final Stream<List<TaskModel>> _tasksStream;
+  late final Stopwatch _loadStopwatch;
+  bool _loadLogged = false;
 
   @override
   void initState() {
@@ -62,6 +64,7 @@ class _DashboardPageState extends State<DashboardPage> {
     // historical KPIs/charts below still filter back down to `_end` so their
     // existing 30-day-window behavior (Sprint 6.2) is unchanged.
     _queryEnd = _end.add(const Duration(days: 1));
+    _loadStopwatch = Stopwatch()..start();
     _tasksStream = repo.watchTasksInRange(_start, _queryEnd);
   }
 
@@ -79,6 +82,10 @@ class _DashboardPageState extends State<DashboardPage> {
       body: StreamBuilder<List<TaskModel>>(
         stream: _tasksStream,
         builder: (context, snapshot) {
+          if (!_loadLogged && snapshot.connectionState != ConnectionState.waiting) {
+            _loadLogged = true;
+            debugPrint('[PERF] Dashboard load: ${_loadStopwatch.elapsedMilliseconds}ms');
+          }
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const LoadingIndicator();
           }

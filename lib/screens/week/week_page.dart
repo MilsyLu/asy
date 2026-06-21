@@ -42,6 +42,14 @@ class _WeekPageState extends State<WeekPage> {
   late DateTime _weekStart;
   late DateTime _selectedDay;
 
+  // Sprint 7.4.4: cached per the actual queried week so day-chip taps
+  // (which only change `_selectedDay`) reuse this stream instead of
+  // opening a new Firestore listener on every rebuild.
+  Stream<List<TaskModel>>? _tasksStream;
+  DateTime? _streamWeekStart;
+  late Stopwatch _loadStopwatch;
+  bool _loadLogged = false;
+
   @override
   void initState() {
     super.initState();
@@ -49,6 +57,7 @@ class _WeekPageState extends State<WeekPage> {
     final monday = now.subtract(Duration(days: now.weekday - 1));
     _weekStart = DateTime(monday.year, monday.month, monday.day);
     _selectedDay = DateTime(now.year, now.month, now.day);
+    _loadStopwatch = Stopwatch()..start();
   }
 
   void _prevWeek() {
@@ -83,10 +92,24 @@ class _WeekPageState extends State<WeekPage> {
 
     final days = List.generate(7, (i) => _weekStart.add(Duration(days: i)));
 
+    // Sprint 7.4.4: only recreate the stream when the queried week
+    // actually changes (prev/next week) — day-chip taps just change
+    // `_selectedDay` and reuse this same listener.
+    if (_tasksStream == null || _streamWeekStart != _weekStart) {
+      _streamWeekStart = _weekStart;
+      _tasksStream = repo.watchTasksInRange(_weekStart, weekEnd);
+      _loadStopwatch = Stopwatch()..start();
+      _loadLogged = false;
+    }
+
     return Scaffold(
       body: StreamBuilder<List<TaskModel>>(
-        stream: repo.watchTasksInRange(_weekStart, weekEnd),
+        stream: _tasksStream,
         builder: (context, snapshot) {
+          if (!_loadLogged && snapshot.connectionState != ConnectionState.waiting) {
+            _loadLogged = true;
+            debugPrint('[PERF] Semana load: ${_loadStopwatch.elapsedMilliseconds}ms');
+          }
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const LoadingIndicator();
           }

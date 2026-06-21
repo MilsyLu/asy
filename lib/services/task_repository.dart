@@ -78,6 +78,32 @@ class TaskRepository {
         .toList();
   }
 
+  /// Same as [getTasksInRange] but filtered server-side to a single
+  /// [userId] (Sprint 7.4.5 Objetivo 2) — used for scheduling local
+  /// reminders, which only ever fire for tasks assigned to the signed-in
+  /// user on this device, so there's no reason to download every other
+  /// user's tasks in the window just to discard them client-side.
+  /// Requires a composite index (assignedUserId ASC, date ASC, hour ASC).
+  Future<List<TaskModel>> getTasksForUserInRange(
+    String userId,
+    DateTime start,
+    DateTime end,
+  ) async {
+    final startKey = AppDateUtils.formatDateKey(start);
+    final endKey = AppDateUtils.formatDateKey(end);
+    final snap = await _collection
+        .where('assignedUserId', isEqualTo: userId)
+        .where('date', isGreaterThanOrEqualTo: startKey)
+        .where('date', isLessThanOrEqualTo: endKey)
+        .orderBy('date')
+        .orderBy('hour')
+        .get();
+    return snap.docs
+        .map((d) => TaskModel.fromDoc(d))
+        .where((t) => !t.isDeleted)
+        .toList();
+  }
+
   Stream<TaskModel?> watchTask(String taskId) {
     return _collection.doc(taskId).snapshots().map((doc) {
       if (!doc.exists) return null;

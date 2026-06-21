@@ -12,6 +12,7 @@ import 'screens/auth/login_page.dart';
 import 'screens/main_shell.dart';
 import 'services/auth_service.dart';
 import 'services/catalog_repository.dart';
+import 'services/notification_repository.dart';
 import 'services/task_repository.dart';
 import 'services/user_repository.dart';
 import 'widgets/brand_logo.dart';
@@ -27,6 +28,7 @@ class TaskFlowApp extends StatelessWidget {
         Provider<UserRepository>(create: (_) => UserRepository()),
         Provider<TaskRepository>(create: (_) => TaskRepository()),
         Provider<CatalogRepository>(create: (_) => CatalogRepository()),
+        Provider<NotificationRepository>(create: (_) => NotificationRepository()),
         ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider()),
         ChangeNotifierProxyProvider<AuthProvider, ThemeManager>(
           create: (_) => ThemeManager(),

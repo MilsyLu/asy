@@ -108,5 +108,33 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isSuperAdmin();
     }
+
+    // -----------------------------------------------------------------
+    // notifications (Sprint 7.4 — in-app notification center)
+    // -----------------------------------------------------------------
+    match /notifications/{id} {
+      // Documents are written only by Cloud Functions via the
+      // firebase-admin SDK, which bypasses Security Rules entirely — so
+      // clients can never fabricate a notification for themselves or
+      // anyone else.
+      allow create: if false;
+      // Single-document reads: resource.data is concrete here, so this
+      // evaluates per document as expected.
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // Collection queries (watchNotifications/unreadCount): same rationale
+      // as tasks' `list` rule above — rules can't constrain per-doc fields
+      // across an arbitrary query result set, so list is open to any
+      // signed-in user; privacy is enforced by the repository always
+      // querying `where('userId', isEqualTo: <own uid>)`.
+      allow list: if isSignedIn();
+      // markAsRead/markAllAsRead: the owner may only flip isRead.
+      allow update: if isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
+      // Sprint 7.4.7 Objetivo E/F: a user may delete their own notifications
+      // (single delete or "vaciar historial") — never anyone else's, not
+      // even super_admin, since this isn't an admin-moderation feature.
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
   }
 }

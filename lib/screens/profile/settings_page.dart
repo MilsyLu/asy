@@ -5,6 +5,9 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/theme/theme_manager.dart';
+import '../../models/app_user.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/user_repository.dart';
 
 /// "Configuración" screen (FASE 4): lets each user choose the app's
 /// appearance (Seguir sistema / Modo claro / Modo oscuro) and accent
@@ -17,12 +20,24 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeManager = context.watch<ThemeManager>();
+    final auth = context.watch<AuthProvider>();
+    final isAdmin = auth.isSuperAdmin;
+    final adminUser = auth.appUser;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Configuración')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
+          if (isAdmin && adminUser != null) ...[
+            const _SectionTitle(
+              icon: LucideIcons.bellRing,
+              title: 'Notificaciones administrativas',
+            ),
+            const SizedBox(height: 4),
+            _ReceiveTaskCreationPushOption(user: adminUser),
+            const SizedBox(height: 24),
+          ],
           const _SectionTitle(icon: LucideIcons.sunMoon, title: 'Apariencia'),
           const SizedBox(height: 4),
           RadioGroup<ThemeMode>(
@@ -77,6 +92,36 @@ class SettingsPage extends StatelessWidget {
           const _AboutBlock(),
         ],
       ),
+    );
+  }
+}
+
+/// Admin-only toggle (Sprint 7.4.7 Objetivo C): controls whether this
+/// admin gets an FCM push for the "task_created_admin" global-visibility
+/// notification. The in-app `notifications` record is always written
+/// server-side regardless of this preference — see
+/// `functions/src/notifications.js` `notifyAdminsOfTaskCreated`.
+class _ReceiveTaskCreationPushOption extends StatelessWidget {
+  const _ReceiveTaskCreationPushOption({required this.user});
+
+  final AppUser user;
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      secondary: const Icon(LucideIcons.bell),
+      title: const Text('Recibir notificaciones push de nuevas tareas'),
+      subtitle: const Text(
+        'Si lo desactivas, las nuevas tareas seguirán apareciendo en tu '
+        'campanita, pero ya no recibirás un push por cada una.',
+      ),
+      value: user.receiveTaskCreationPush,
+      onChanged: (value) {
+        context
+            .read<UserRepository>()
+            .updateReceiveTaskCreationPush(user.id, value);
+      },
     );
   }
 }

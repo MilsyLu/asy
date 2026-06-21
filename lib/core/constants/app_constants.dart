@@ -27,6 +27,18 @@ class AppTaskTypeNames {
   static const String instalacion = 'Instalación';
 }
 
+/// Notification types stored in `notifications/{id}.type` (Sprint 7.4).
+/// Mirrors the `type` values the Cloud Functions layer already writes into
+/// the FCM data payload (functions/src/onTaskCreate.js, checkReminders.js).
+class AppNotificationTypes {
+  AppNotificationTypes._();
+
+  static const String taskCreatedAssigned = 'task_created_assigned';
+  static const String taskCreatedGroup = 'task_created_group';
+  static const String taskCreatedAdmin = 'task_created_admin';
+  static const String taskReminder = 'task_reminder';
+}
+
 class AppConstants {
   AppConstants._();
 

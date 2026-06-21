@@ -8,4 +8,5 @@ class FirestoreCollections {
   static const String taskTypes = 'taskTypes';
   static const String statuses = 'statuses';
   static const String availableHours = 'availableHours';
+  static const String notifications = 'notifications';
 }

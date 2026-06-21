@@ -158,6 +158,14 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
                 label: 'Recordatorio',
                 value: _reminderLabel(task),
               ),
+              const SizedBox(height: 12),
+              _DetailRow(
+                icon: LucideIcons.userPlus,
+                label: 'Creado por',
+                value: task.createdBy != null
+                    ? catalog.userName(task.createdBy)
+                    : 'No disponible',
+              ),
               ...[
                 const SizedBox(height: 12),
                 const Divider(height: 1),

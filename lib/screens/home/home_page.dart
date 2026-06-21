@@ -49,6 +49,8 @@ class _HomePageState extends State<HomePage> {
   final _clientController = TextEditingController();
 
   late final Stream<List<TaskModel>> _tasksStream;
+  late final Stopwatch _loadStopwatch;
+  bool _loadLogged = false;
 
   String? _groupFilter;
   String? _userFilter;
@@ -61,6 +63,7 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     final repo = context.read<TaskRepository>();
     final rangeStart = _today.subtract(const Duration(days: _lookbackDays));
+    _loadStopwatch = Stopwatch()..start();
     _tasksStream = repo.watchTasksInRange(rangeStart, _today);
   }
 
@@ -82,6 +85,10 @@ class _HomePageState extends State<HomePage> {
           : StreamBuilder<List<TaskModel>>(
               stream: _tasksStream,
               builder: (context, snapshot) {
+                if (!_loadLogged && snapshot.connectionState != ConnectionState.waiting) {
+                  _loadLogged = true;
+                  debugPrint('[PERF] Home/Agenda load: ${_loadStopwatch.elapsedMilliseconds}ms');
+                }
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const LoadingIndicator();
                 }

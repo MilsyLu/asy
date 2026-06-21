@@ -28,6 +28,20 @@ class TrashPage extends StatefulWidget {
 class _TrashPageState extends State<TrashPage> {
   _TrashFilter _filter = _TrashFilter.all;
 
+  // Sprint 7.4.4: a single stream for the whole page lifetime — the filter
+  // chips above only change client-side filtering of already-fetched data,
+  // so they must never trigger a new Firestore listener.
+  late final Stream<List<TaskModel>> _tasksStream;
+  late final Stopwatch _loadStopwatch;
+  bool _loadLogged = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tasksStream = context.read<TaskRepository>().watchDeletedTasks();
+    _loadStopwatch = Stopwatch()..start();
+  }
+
   List<TaskModel> _applyFilter(List<TaskModel> tasks) {
     if (_filter == _TrashFilter.all) return tasks;
     final days = _filter == _TrashFilter.sevenDays ? 7 : 30;
@@ -91,7 +105,6 @@ class _TrashPageState extends State<TrashPage> {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final repo = context.read<TaskRepository>();
     final catalog = context.watch<CatalogProvider>();
 
     return Scaffold(
@@ -130,8 +143,12 @@ class _TrashPageState extends State<TrashPage> {
           ),
           Expanded(
             child: StreamBuilder<List<TaskModel>>(
-              stream: repo.watchDeletedTasks(),
+              stream: _tasksStream,
               builder: (context, snapshot) {
+                if (!_loadLogged && snapshot.connectionState != ConnectionState.waiting) {
+                  _loadLogged = true;
+                  debugPrint('[PERF] Papelera load: ${_loadStopwatch.elapsedMilliseconds}ms');
+                }
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const LoadingIndicator();
                 }
@@ -292,6 +309,8 @@ class _TrashCard extends StatelessWidget {
       AppDateUtils.parseDateKey(task.date),
     );
     final deletedByName = task.deletedByName ?? 'Usuario desconocido';
+    final createdByName =
+        task.createdBy != null ? catalog.userName(task.createdBy) : 'No disponible';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -396,6 +415,27 @@ class _TrashCard extends StatelessWidget {
                         ],
                       ),
                     ],
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(
+                          LucideIcons.userPlus,
+                          size: 13,
+                          color: colors.textSecondary,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Creada por: $createdByName',
+                            style: TextStyle(
+                              color: colors.textSecondary,
+                              fontSize: 12,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 4),
                     Row(
                       children: [

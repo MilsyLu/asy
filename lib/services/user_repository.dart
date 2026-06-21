@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 import '../core/constants/firestore_paths.dart';
 import '../models/app_user.dart';
@@ -9,6 +10,13 @@ class UserRepository {
       : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
+
+  /// Max FCM tokens kept per user (Sprint 7.4.2 — Parte 1.4). Beyond this,
+  /// the oldest token is evicted so multi-device logins never grow the
+  /// array unbounded (reinstalls/`flutter run`/device changes otherwise
+  /// leave stale tokens behind forever, since they're only pruned on
+  /// explicit sign-out or reactively when FCM reports them invalid).
+  static const int _maxFcmTokens = 3;
 
   CollectionReference<Map<String, dynamic>> get _collection =>
       _firestore.collection(FirestoreCollections.users);
@@ -80,22 +88,67 @@ class UserRepository {
     return _collection.doc(uid).set({'photoUrl': photoUrl}, SetOptions(merge: true));
   }
 
-  /// Registers an FCM token for push notifications. Idempotent —
-  /// `arrayUnion` is a no-op if the token is already stored, so the same
-  /// device never produces duplicate entries. Empty tokens are rejected
-  /// (Sprint 7.1 Part 8).
-  Future<void> addFcmToken(String uid, String token) {
-    if (token.isEmpty) return Future.value();
-    return _collection.doc(uid).set({
-      'fcmTokens': FieldValue.arrayUnion([token]),
-    }, SetOptions(merge: true));
+  /// Registers an FCM token for push notifications. Idempotent — a token
+  /// already present is left untouched (no rewrite, no log). New tokens
+  /// are appended; if that pushes the array past [_maxFcmTokens], the
+  /// oldest token is evicted so multi-device logins never grow the array
+  /// unbounded (Sprint 7.4.2 — Parte 1.4). Empty tokens are rejected
+  /// (Sprint 7.1 Part 8). Runs in a transaction since two devices can
+  /// register concurrently.
+  ///
+  /// Sprint 7.4.6 Bug 1: an FCM token identifies a *device install*, not an
+  /// account — if a previous user on this device didn't cleanly sign out
+  /// (force-close, crash, hot-restart during dev), their `fcmTokens` array
+  /// can still contain this device's token. FCM delivers by token, so that
+  /// stale registration keeps receiving pushes addressed to the old user
+  /// (and gets correctly recorded under *their* `userId` in `notifications`)
+  /// even after a different user is now signed in here — the new user's
+  /// device displays the push, but its own bell/historial query never
+  /// matches a doc that was correctly written for someone else. Stripping
+  /// the token from every other account before attaching it here keeps a
+  /// token bound to exactly one account at a time.
+  Future<void> addFcmToken(String uid, String token) async {
+    if (token.isEmpty) return;
+
+    final staleHolders =
+        await _collection.where('fcmTokens', arrayContains: token).get();
+    for (final doc in staleHolders.docs) {
+      if (doc.id == uid) continue;
+      await doc.reference.update({
+        'fcmTokens': FieldValue.arrayRemove([token]),
+      });
+      debugPrint('[FCM] Stale token removed from previous owner: ${doc.id}');
+    }
+
+    final docRef = _collection.doc(uid);
+    await _firestore.runTransaction((transaction) async {
+      final snap = await transaction.get(docRef);
+      final current = (snap.data()?['fcmTokens'] as List<dynamic>?)
+              ?.whereType<String>()
+              .toList() ??
+          <String>[];
+      if (current.contains(token)) return;
+
+      current.add(token);
+      String? evicted;
+      if (current.length > _maxFcmTokens) {
+        evicted = current.removeAt(0);
+      }
+
+      transaction.set(docRef, {'fcmTokens': current}, SetOptions(merge: true));
+      debugPrint('[FCM] Token added: $uid (${current.length}/$_maxFcmTokens)');
+      if (evicted != null) {
+        debugPrint('[FCM] Token limit reached: $uid, oldest token evicted');
+      }
+    });
   }
 
-  Future<void> removeFcmToken(String uid, String token) {
-    if (token.isEmpty) return Future.value();
-    return _collection.doc(uid).update({
+  Future<void> removeFcmToken(String uid, String token) async {
+    if (token.isEmpty) return;
+    await _collection.doc(uid).update({
       'fcmTokens': FieldValue.arrayRemove([token]),
     });
+    debugPrint('[FCM] Token removed: $uid');
   }
 
   Future<void> deleteUserDoc(String uid) {
@@ -109,5 +162,16 @@ class UserRepository {
     return _collection
         .doc(uid)
         .set({'isActive': isActive}, SetOptions(merge: true));
+  }
+
+  /// Toggles whether [uid] (a `super_admin`) receives an FCM push for the
+  /// "task_created_admin" global-visibility notification (Sprint 7.4.7
+  /// Objetivo C) — the in-app `notifications` record is always written
+  /// regardless of this preference. Uses `merge: true` so legacy documents
+  /// without the field are upgraded in place.
+  Future<void> updateReceiveTaskCreationPush(String uid, bool value) {
+    return _collection
+        .doc(uid)
+        .set({'receiveTaskCreationPush': value}, SetOptions(merge: true));
   }
 }

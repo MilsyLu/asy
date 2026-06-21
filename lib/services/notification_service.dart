@@ -15,6 +15,9 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // for a background message, so no extra setup is required here.
   // The system tray automatically displays the `notification` payload
   // for background/terminated messages, so nothing else to do.
+  debugPrint(
+    '[FCM_TIMING]\npush_received\ntaskId=${message.data['taskId'] ?? "n/a"}\ntimestamp=${DateTime.now().millisecondsSinceEpoch}',
+  );
   debugPrint('Background FCM message received: ${message.messageId}');
 }
 
@@ -65,6 +68,16 @@ class NotificationService {
 
   bool _initialized = false;
 
+  /// Sprint 7.4.3 Parte 1 — the *only* place `onTokenRefresh.listen(...)` is
+  /// ever called (inside [initialize], once, guarded by [_initialized]).
+  /// Callers that need to react to a token rotation (currently just
+  /// [AuthProvider], to re-save the token under the signed-in user) swap
+  /// this handler reference via [setTokenRefreshHandler] instead of
+  /// creating their own subscription — re-running login logic (e.g. on
+  /// every `users/{uid}` snapshot) only replaces the callback, it never
+  /// grows the number of underlying stream listeners.
+  void Function(String token)? _tokenRefreshHandler;
+
   /// Sets up local notification channels, timezone data, and FCM listeners.
   /// Call once during app startup, after `Firebase.initializeApp()`.
   Future<void> initialize() async {
@@ -97,10 +110,21 @@ class NotificationService {
     }
 
     // --- FCM permissions (covers local notifications on iOS too) ---
-    await requestPermissions();
+    // Sprint 7.4.5 Objetivo 1: this used to be requested right here,
+    // blocking `runApp()` on the OS permission prompt (which can wait
+    // indefinitely on user interaction, especially on iOS). It's now
+    // requested by the caller (see `main.dart`) only after the first frame
+    // is on screen — every other step of `initialize()` is unchanged and
+    // still completes before `runApp()`.
 
     // --- Foreground messages: show a local banner ---
     FirebaseMessaging.onMessage.listen(_showForegroundNotification);
+
+    // --- Token rotation: single subscription for the app's lifetime
+    // (Sprint 7.4.3 Parte 1) — forwards to whatever handler is currently
+    // registered via [setTokenRefreshHandler] instead of letting callers
+    // create their own `.listen()` each time they need to react to it.
+    _messaging.onTokenRefresh.listen((token) => _tokenRefreshHandler?.call(token));
 
     // --- Background/terminated delivery: official Firebase entry point ---
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
@@ -144,10 +168,16 @@ class NotificationService {
   /// notifications (task created/completed/reprogrammed) to dispatch on.
   void handleOpenedNotification(RemoteMessage message) {
     final payload = NotificationPayload.fromMessage(message);
+    debugPrint(
+      '[FCM_TIMING] Push opened taskId=${payload.taskId ?? "n/a"} ts=${DateTime.now().millisecondsSinceEpoch}',
+    );
     debugPrint('Notification opened: $payload');
   }
 
   void _showForegroundNotification(RemoteMessage message) {
+    debugPrint(
+      '[FCM_TIMING]\npush_received\ntaskId=${message.data['taskId'] ?? "n/a"}\ntimestamp=${DateTime.now().millisecondsSinceEpoch}',
+    );
     final notification = message.notification;
     if (notification == null) return;
 
@@ -252,9 +282,13 @@ class NotificationService {
   /// (e.g. simulator without push capability, web without VAPID key).
   Future<String?> getToken() => _messaging.getToken();
 
-  /// Notifies [onRefresh] whenever the FCM token rotates so it can be
-  /// re-saved to the user's Firestore document.
-  void onTokenRefresh(void Function(String token) onRefresh) {
-    _messaging.onTokenRefresh.listen(onRefresh);
+  /// Sets (or clears, with `null`) the callback invoked whenever the FCM
+  /// token rotates, so it can be re-saved to the user's Firestore document.
+  /// Replaces any previously-registered handler — it does NOT add another
+  /// `onTokenRefresh` subscription (Sprint 7.4.3 Parte 1; see
+  /// [_tokenRefreshHandler]). Callers should pass `null` on sign-out so a
+  /// late token rotation doesn't write to a stale, now-logged-out uid.
+  void setTokenRefreshHandler(void Function(String token)? handler) {
+    _tokenRefreshHandler = handler;
   }
 }

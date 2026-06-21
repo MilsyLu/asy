@@ -31,6 +31,21 @@ class _CalendarPageState extends State<CalendarPage> {
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
 
+  // Sprint 7.4.4: cached per the actual queried 3-month window so day
+  // taps/selections within the same window reuse this stream instead of
+  // opening a new Firestore listener on every rebuild.
+  Stream<List<TaskModel>>? _tasksStream;
+  DateTime? _streamRangeStart;
+  DateTime? _streamRangeEnd;
+  late Stopwatch _loadStopwatch;
+  bool _loadLogged = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStopwatch = Stopwatch()..start();
+  }
+
   @override
   Widget build(BuildContext context) {
     final repo = context.read<TaskRepository>();
@@ -48,10 +63,27 @@ class _CalendarPageState extends State<CalendarPage> {
       return const Scaffold(body: LoadingIndicator());
     }
 
+    // Sprint 7.4.4: only recreate the stream when the queried 3-month
+    // window actually changes (month paging) — selecting a day within the
+    // same window reuses this same listener.
+    if (_tasksStream == null ||
+        _streamRangeStart != rangeStart ||
+        _streamRangeEnd != rangeEnd) {
+      _streamRangeStart = rangeStart;
+      _streamRangeEnd = rangeEnd;
+      _tasksStream = repo.watchTasksInRange(rangeStart, rangeEnd);
+      _loadStopwatch = Stopwatch()..start();
+      _loadLogged = false;
+    }
+
     return Scaffold(
       body: StreamBuilder<List<TaskModel>>(
-        stream: repo.watchTasksInRange(rangeStart, rangeEnd),
+        stream: _tasksStream,
         builder: (context, snapshot) {
+          if (!_loadLogged && snapshot.connectionState != ConnectionState.waiting) {
+            _loadLogged = true;
+            debugPrint('[PERF] Calendario load: ${_loadStopwatch.elapsedMilliseconds}ms');
+          }
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const LoadingIndicator();
           }

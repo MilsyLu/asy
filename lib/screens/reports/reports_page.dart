@@ -74,10 +74,20 @@ class _ReportsPageState extends State<ReportsPage>
     // Single shared listener for the selected range — every tab below reads
     // from this same task list instead of opening its own stream, so
     // switching tabs/date range never issues duplicate Firestore queries.
+    //
+    // Sprint 7.4.3 Parte 3 — measurement only. Local to this build() call,
+    // so it times the load triggered by each `_pickRange()` selection.
+    final loadStopwatch = Stopwatch()..start();
+    var loadLogged = false;
+
     return Scaffold(
       body: StreamBuilder<List<TaskModel>>(
         stream: repo.watchTasksInRange(_range.start, _range.end),
         builder: (context, snapshot) {
+          if (!loadLogged && snapshot.connectionState != ConnectionState.waiting) {
+            loadLogged = true;
+            debugPrint('[PERF] Reportes load: ${loadStopwatch.elapsedMilliseconds}ms');
+          }
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const LoadingIndicator();
           }
