@@ -39,6 +39,25 @@ class AppNotificationTypes {
   static const String taskReminder = 'task_reminder';
 }
 
+/// Values for `users/{userId}.pushNotificationMode` (Sprint 7.5.0 — replaces
+/// the boolean `pushNotificationsEnabled` from Sprint 7.4.8). Only gates the
+/// FCM push itself; the in-app `notifications` record (bell/historial/
+/// contador) is always written server-side regardless of this preference
+/// (see `functions/src/notifications.js` `sendNotificationToUser`).
+///
+/// `groupOnly` is only offered in the Settings UI for `super_admin` — the
+/// field itself doesn't enforce that, so a worker doc could in principle
+/// carry it (e.g. a direct Firestore edit), in which case it behaves exactly
+/// as it does for an admin (only [AppNotificationTypes.taskCreatedGroup]).
+class AppPushNotificationModes {
+  AppPushNotificationModes._();
+
+  static const String all = 'all';
+  static const String assignedOnly = 'assigned_only';
+  static const String groupOnly = 'group_only';
+  static const String none = 'none';
+}
+
 class AppConstants {
   AppConstants._();
 

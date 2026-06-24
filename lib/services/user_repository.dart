@@ -164,15 +164,17 @@ class UserRepository {
         .set({'isActive': isActive}, SetOptions(merge: true));
   }
 
-  /// Toggles whether [uid] receives an FCM push for any notification type
-  /// (Sprint 7.4.8 Objetivo A — generalized from the admin-only
-  /// `receiveTaskCreationPush` of Sprint 7.4.7, now obsolete and no longer
-  /// written). The in-app `notifications` record is always written
-  /// server-side regardless of this preference. Uses `merge: true` so
-  /// legacy documents without the field are upgraded in place.
-  Future<void> updatePushNotificationsEnabled(String uid, bool value) {
+  /// Sets which FCM push categories [uid] wants to receive (Sprint 7.5.0 —
+  /// replaces the boolean `pushNotificationsEnabled` of Sprint 7.4.8, now
+  /// obsolete and no longer written, though still read as a fallback — see
+  /// `AppUser._resolvePushNotificationMode`). [mode] is one of
+  /// [AppPushNotificationModes]. The in-app `notifications` record is
+  /// always written server-side regardless of this preference. Uses
+  /// `merge: true` so legacy documents without the field are upgraded in
+  /// place.
+  Future<void> updatePushNotificationMode(String uid, String mode) {
     return _collection
         .doc(uid)
-        .set({'pushNotificationsEnabled': value}, SetOptions(merge: true));
+        .set({'pushNotificationMode': mode}, SetOptions(merge: true));
   }
 }

@@ -8,7 +8,6 @@ import '../../../core/utils/snackbar_utils.dart';
 import '../../../core/utils/validators.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/catalog_provider.dart';
-import '../../../services/notification_service.dart';
 import '../../../services/task_repository.dart';
 import '../../../widgets/confirm_dialog.dart';
 
@@ -163,19 +162,6 @@ Future<void> _confirmReschedule({
       reminderTime: reminderStillValid ? task.reminderTime : null,
       clearReminder: !reminderStillValid && task.reminderTime != null,
     );
-
-    // Always cancel the previous notification (task time changed).
-    await NotificationService.instance.cancelReminder(task.id);
-    // Re-schedule with the new hour if the reminder is still valid.
-    if (reminderStillValid && task.reminderTime != null) {
-      await NotificationService.instance.scheduleReminder(
-        taskId: task.id,
-        clientName: task.clientName,
-        taskTypeName: catalog.taskTypeName(task.taskTypeId),
-        taskHour: newHour,
-        reminderTime: task.reminderTime!,
-      );
-    }
 
     if (context.mounted) {
       if (!reminderStillValid && task.reminderTime != null) {

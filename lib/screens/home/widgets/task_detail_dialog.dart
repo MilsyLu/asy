@@ -12,7 +12,6 @@ import '../../../models/task_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/catalog_provider.dart';
 import '../../../services/task_repository.dart';
-import '../../../services/notification_service.dart';
 import '../../../widgets/confirm_dialog.dart';
 import '../../../widgets/task_type_chip.dart';
 import '../../../widgets/trash_dialog.dart';
@@ -219,8 +218,6 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
                           if (!confirm) return;
                           try {
                             await repo.completeTask(task.id, completedId);
-                            await NotificationService.instance
-                                .cancelReminder(task.id);
                             if (context.mounted) {
                               SnackbarUtils.showSuccess(context, 'Tarea completada');
                             }
@@ -257,7 +254,6 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
               if (!confirm) return;
               try {
                 await repo.softDeleteTask(task.id, user.id, user.name);
-                await NotificationService.instance.cancelReminder(task.id);
                 if (context.mounted) {
                   SnackbarUtils.showSuccess(context, 'Tarea enviada a la papelera');
                 }

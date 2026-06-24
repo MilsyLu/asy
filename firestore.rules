@@ -80,7 +80,7 @@ service cloud.firestore {
       allow update: if isSuperAdmin()
         || (isOwner(userId)
             && request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['fcmTokens', 'lastLogin', 'streakDays', 'maxStreakDays', 'name', 'themeMode', 'accentColor',  'photoUrl', 'pushNotificationsEnabled']));
+                .hasOnly(['fcmTokens', 'lastLogin', 'streakDays', 'maxStreakDays', 'name', 'themeMode', 'accentColor',  'photoUrl', 'pushNotificationMode']));
       allow delete: if isSuperAdmin();
     }
 

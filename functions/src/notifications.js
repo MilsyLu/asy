@@ -8,6 +8,66 @@ function sanitizeTokens(tokens) {
 }
 
 /**
+ * Sprint 7.5.0 Objetivo F — resolves the effective `pushNotificationMode`
+ * for a `users/{uid}` doc, migrating virtually (no write, no script) from
+ * the booleans it replaces: `pushNotificationsEnabled` (Sprint 7.4.8) and,
+ * before that, the admin-only `receiveTaskCreationPush` (Sprint 7.4.7).
+ * `false` -> "none", `true` -> "all". Brand-new docs with none of these
+ * fields default to "all", matching the old default-enabled behavior.
+ *
+ * @param {FirebaseFirestore.DocumentSnapshot} userSnap
+ * @returns {string}
+ */
+function resolvePushMode(userSnap) {
+  const mode = userSnap.get("pushNotificationMode");
+  if (typeof mode === "string" && mode.length > 0) return mode;
+
+  const legacyEnabled = userSnap.get("pushNotificationsEnabled");
+  if (typeof legacyEnabled === "boolean") return legacyEnabled ? "all" : "none";
+
+  const legacyReceive = userSnap.get("receiveTaskCreationPush");
+  if (typeof legacyReceive === "boolean") return legacyReceive ? "all" : "none";
+
+  return "all";
+}
+
+/**
+ * Sprint 7.5.0 Objetivo D — the single point of decision for whether a push
+ * of a given notification `type` is allowed under a given `mode`. Every
+ * Cloud Function that sends a push (`onTaskCreate.js`, `checkReminders.js`,
+ * any future one) goes through [sendNotificationToUser] below instead of
+ * branching on role/type itself, so this is the only place that logic
+ * lives.
+ *
+ * - "all": every type.
+ * - "assigned_only": task_created_assigned + task_reminder only (used by
+ *   both roles).
+ * - "group_only": task_created_group only (offered to super_admin in the
+ *   Settings UI; a worker's own tasks are always "assigned", so this mode
+ *   has no special meaning for them beyond the literal type match).
+ * - "none": nothing.
+ * - anything else (unrecognized/missing): treated as "all", matching the
+ *   pre-7.5.0 default-enabled behavior.
+ *
+ * @param {string} mode
+ * @param {string | undefined} type
+ * @returns {boolean}
+ */
+function isPushAllowed(mode, type) {
+  switch (mode) {
+    case "none":
+      return false;
+    case "assigned_only":
+      return type === "task_created_assigned" || type === "task_reminder";
+    case "group_only":
+      return type === "task_created_group";
+    case "all":
+    default:
+      return true;
+  }
+}
+
+/**
  * Sprint 7.4 — writes a `notifications/{id}` document so the in-app
  * notification center has a durable record of every push, independent of
  * whether a device token exists or the user dismisses the system
@@ -69,21 +129,13 @@ async function sendNotificationToUser(userId, { title, body, data = {} }) {
     // push delivery.
     const recordPromise = recordNotification(userId, { title, body, data });
 
-    // Sprint 7.4.8 Objetivo A/C/D: a single, central preference check that
-    // every notification type goes through (Encargado/Grupo/Admin/
-    // Recordatorio all call this function). `pushNotificationsEnabled` is
-    // the current field; `receiveTaskCreationPush` is the Sprint 7.4.7
-    // admin-only field it replaces, read here only as a fallback for
-    // documents written before this migration — neither field is ever
-    // written by new code under that legacy name. Only an explicit
-    // `false` disables the push; the in-app record above already happened
-    // either way.
-    const pushEnabled =
-      userSnap.get("pushNotificationsEnabled") ??
-      userSnap.get("receiveTaskCreationPush") ??
-      true;
-    if (pushEnabled === false) {
-      console.log(`[FCM] Push skipped (preference disabled): ${userId}`);
+    // Sprint 7.5.0 Objetivo D: a single, central mode+type check that every
+    // notification (Encargado/Grupo/Admin/Recordatorio, and any future
+    // type) goes through here — callers never branch on role/type
+    // themselves. The in-app record above already happened either way.
+    const mode = resolvePushMode(userSnap);
+    if (!isPushAllowed(mode, data.type)) {
+      console.log(`[FCM] Push skipped (mode=${mode}, type=${data.type || "n/a"}): ${userId}`);
       await recordPromise;
       return 0;
     }

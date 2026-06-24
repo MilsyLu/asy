@@ -3,8 +3,6 @@ import 'dart:io';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/data/latest_all.dart' as tz_data;
-import 'package:timezone/timezone.dart' as tz;
 
 /// This top-level function MUST stay top-level (or static) — it is the
 /// entry point Firebase Messaging invokes when a push notification
@@ -45,11 +43,9 @@ class NotificationPayload {
 
 /// Wraps Firebase Cloud Messaging + flutter_local_notifications.
 ///
-/// Handles both:
-/// - FCM push notifications (foreground display via [_showForegroundNotification],
-///   background/terminated via [firebaseMessagingBackgroundHandler], tap via
-///   [handleOpenedNotification])
-/// - Scheduled local reminders ([scheduleReminder] / [cancelReminder])
+/// Handles FCM push notifications: foreground display via
+/// [_showForegroundNotification], background/terminated via
+/// [firebaseMessagingBackgroundHandler], tap via [handleOpenedNotification].
 class NotificationService {
   NotificationService._();
 
@@ -78,15 +74,11 @@ class NotificationService {
   /// grows the number of underlying stream listeners.
   void Function(String token)? _tokenRefreshHandler;
 
-  /// Sets up local notification channels, timezone data, and FCM listeners.
+  /// Sets up local notification channels and FCM listeners.
   /// Call once during app startup, after `Firebase.initializeApp()`.
   Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
-
-    // Timezone database for scheduled local notifications.
-    // Uses the absolute epoch of each DateTime, so no device-TZ lookup needed.
-    tz_data.initializeTimeZones();
 
     // --- Local notifications setup ---
     // Sprint 7.3.3: must be a monochrome white-on-transparent drawable, not
@@ -204,79 +196,8 @@ class NotificationService {
   }
 
   // ---------------------------------------------------------------------------
-  // Scheduled local reminders
-  // ---------------------------------------------------------------------------
-
-  /// Schedules a local notification that fires at [reminderTime].
-  ///
-  /// - No-op if [reminderTime] is already in the past.
-  /// - Safe to call more than once for the same [taskId]: the notification
-  ///   ID is deterministic, so a new call overwrites the previous one.
-  /// - Errors are caught and logged; callers do not need to handle them.
-  Future<void> scheduleReminder({
-    required String taskId,
-    required String clientName,
-    required String taskTypeName,
-    required String taskHour,
-    required DateTime reminderTime,
-  }) async {
-    if (reminderTime.isBefore(DateTime.now())) return;
-
-    try {
-      final scheduledDate = tz.TZDateTime.fromMillisecondsSinceEpoch(
-        tz.UTC,
-        reminderTime.millisecondsSinceEpoch,
-      );
-
-      await _localNotifications.zonedSchedule(
-        _idForTask(taskId),
-        '⏰ Recordatorio',
-        '$clientName\n$taskTypeName · $taskHour',
-        scheduledDate,
-        NotificationDetails(
-          android: AndroidNotificationDetails(
-            _channel.id,
-            _channel.name,
-            channelDescription: _channel.description,
-            importance: Importance.high,
-            priority: Priority.high,
-            icon: '@drawable/ic_notification',
-          ),
-          iOS: const DarwinNotificationDetails(
-            presentAlert: true,
-            presentBadge: true,
-            presentSound: true,
-          ),
-        ),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-      );
-    } catch (e) {
-      debugPrint('scheduleReminder failed for $taskId: $e');
-    }
-  }
-
-  /// Cancels the pending scheduled notification for [taskId], if any.
-  Future<void> cancelReminder(String taskId) async {
-    try {
-      await _localNotifications.cancel(_idForTask(taskId));
-    } catch (e) {
-      debugPrint('cancelReminder failed for $taskId: $e');
-    }
-  }
-
-  // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
-
-  /// Deterministic, stable notification ID derived from [taskId].
-  ///
-  /// Dart VM does not randomize `String.hashCode` (unlike Java/Python), so
-  /// this value is stable across app restarts — essential for cancellation.
-  /// The modulo keeps it within the 32-bit signed int range required by
-  /// flutter_local_notifications on Android.
-  static int _idForTask(String taskId) => taskId.hashCode.abs() % 2000000000;
 
   /// Returns the current device FCM token, or null if unavailable
   /// (e.g. simulator without push capability, web without VAPID key).

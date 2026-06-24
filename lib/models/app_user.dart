@@ -32,15 +32,13 @@ class AppUser {
   /// `true` so legacy users aren't locked out without an explicit action.
   final bool isActive;
 
-  /// Whether this user wants an FCM push for any notification type
-  /// (Sprint 7.4.8 Objetivo A — generalized from the admin-only
-  /// `receiveTaskCreationPush` added in Sprint 7.4.7). Applies to every
-  /// role and every notification type. Defaults to `true` — the in-app
-  /// `notifications` record (bell badge/counter/historial) is always
-  /// written server-side regardless of this preference; it only gates
-  /// the FCM push itself (see `functions/src/notifications.js`
-  /// `sendNotificationToUser`).
-  final bool pushNotificationsEnabled;
+  /// Which FCM push categories this user wants to receive (Sprint 7.5.0 —
+  /// replaces the boolean `pushNotificationsEnabled` from Sprint 7.4.8).
+  /// One of [AppPushNotificationModes]. The in-app `notifications` record
+  /// (bell badge/counter/historial) is always written server-side
+  /// regardless of this preference; it only gates the FCM push itself (see
+  /// `functions/src/notifications.js` `sendNotificationToUser`).
+  final String pushNotificationMode;
 
   const AppUser({
     required this.id,
@@ -57,7 +55,7 @@ class AppUser {
     this.accentColor = 'gold',
     this.photoUrl,
     this.isActive = true,
-    this.pushNotificationsEnabled = true,
+    this.pushNotificationMode = AppPushNotificationModes.all,
   });
 
   bool get isSuperAdmin => role == AppRoles.superAdmin;
@@ -81,14 +79,33 @@ class AppUser {
       accentColor: map['accentColor'] as String? ?? 'gold',
       photoUrl: map['photoUrl'] as String?,
       isActive: map['isActive'] as bool? ?? true,
-      // Sprint 7.4.8 Objetivo E: `pushNotificationsEnabled` is the only
-      // field new writes use, but documents written under Sprint 7.4.7
-      // (admin-only, field named `receiveTaskCreationPush`) are read with
-      // a fallback so an admin's earlier opt-out isn't silently reset.
-      pushNotificationsEnabled: map['pushNotificationsEnabled'] as bool? ??
-          map['receiveTaskCreationPush'] as bool? ??
-          true,
+      pushNotificationMode: _resolvePushNotificationMode(map),
     );
+  }
+
+  /// Sprint 7.5.0 Objetivo F: `pushNotificationMode` is the only field new
+  /// writes use, but documents written under Sprint 7.4.8
+  /// (`pushNotificationsEnabled`, boolean) or Sprint 7.4.7
+  /// (`receiveTaskCreationPush`, boolean, admin-only) are migrated
+  /// virtually on read — `false` -> [AppPushNotificationModes.none],
+  /// `true` -> [AppPushNotificationModes.all] — so existing users keep
+  /// their prior behavior without any write/migration script.
+  static String _resolvePushNotificationMode(Map<String, dynamic> map) {
+    final mode = map['pushNotificationMode'] as String?;
+    if (mode != null && mode.isNotEmpty) return mode;
+    final legacyEnabled = map['pushNotificationsEnabled'] as bool?;
+    if (legacyEnabled != null) {
+      return legacyEnabled
+          ? AppPushNotificationModes.all
+          : AppPushNotificationModes.none;
+    }
+    final legacyReceive = map['receiveTaskCreationPush'] as bool?;
+    if (legacyReceive != null) {
+      return legacyReceive
+          ? AppPushNotificationModes.all
+          : AppPushNotificationModes.none;
+    }
+    return AppPushNotificationModes.all;
   }
 
   factory AppUser.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -111,7 +128,7 @@ class AppUser {
       'accentColor': accentColor,
       'photoUrl': photoUrl,
       'isActive': isActive,
-      'pushNotificationsEnabled': pushNotificationsEnabled,
+      'pushNotificationMode': pushNotificationMode,
     };
   }
 
@@ -127,7 +144,7 @@ class AppUser {
     String? accentColor,
     String? photoUrl,
     bool? isActive,
-    bool? pushNotificationsEnabled,
+    String? pushNotificationMode,
   }) {
     return AppUser(
       id: id,
@@ -144,8 +161,7 @@ class AppUser {
       accentColor: accentColor ?? this.accentColor,
       photoUrl: photoUrl ?? this.photoUrl,
       isActive: isActive ?? this.isActive,
-      pushNotificationsEnabled:
-          pushNotificationsEnabled ?? this.pushNotificationsEnabled,
+      pushNotificationMode: pushNotificationMode ?? this.pushNotificationMode,
     );
   }
 }

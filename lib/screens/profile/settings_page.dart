@@ -33,7 +33,7 @@ class SettingsPage extends StatelessWidget {
               title: 'Notificaciones',
             ),
             const SizedBox(height: 4),
-            _PushNotificationsOption(user: user),
+            _PushNotificationModeOption(user: user),
             const SizedBox(height: 24),
           ],
           const _SectionTitle(icon: LucideIcons.sunMoon, title: 'Apariencia'),
@@ -94,34 +94,71 @@ class SettingsPage extends StatelessWidget {
   }
 }
 
-/// General toggle for every role (Sprint 7.4.8 Objetivo A/B — generalized
-/// from the admin-only `_ReceiveTaskCreationPushOption` of Sprint 7.4.7):
-/// controls whether this user gets an FCM push for any notification type.
-/// The in-app `notifications` record (bell badge/counter/historial) is
-/// always written server-side regardless of this preference — see
+/// Push-category picker (Sprint 7.5.0 — replaces the single on/off
+/// `_PushNotificationsOption` switch from Sprint 7.4.8): lets each user pick
+/// which FCM push categories they want, with admins getting an extra
+/// "Solo tareas de mi grupo" option workers don't see. The in-app
+/// `notifications` record (bell badge/counter/historial) is always written
+/// server-side regardless of this preference — see
 /// `functions/src/notifications.js` `sendNotificationToUser`.
-class _PushNotificationsOption extends StatelessWidget {
-  const _PushNotificationsOption({required this.user});
+class _PushNotificationModeOption extends StatelessWidget {
+  const _PushNotificationModeOption({required this.user});
 
   final AppUser user;
 
   @override
   Widget build(BuildContext context) {
-    return SwitchListTile(
-      contentPadding: EdgeInsets.zero,
-      secondary: const Icon(LucideIcons.bell),
-      title: const Text('Recibir notificaciones push'),
-      subtitle: const Text(
-        'Las notificaciones seguirán apareciendo\n'
-        'en el centro de notificaciones aunque\n'
-        'los avisos push estén desactivados.',
-      ),
-      value: user.pushNotificationsEnabled,
-      onChanged: (value) {
-        context
-            .read<UserRepository>()
-            .updatePushNotificationsEnabled(user.id, value);
-      },
+    final isAdmin = user.isSuperAdmin;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RadioGroup<String>(
+          groupValue: user.pushNotificationMode,
+          onChanged: (mode) {
+            if (mode != null) {
+              context.read<UserRepository>().updatePushNotificationMode(user.id, mode);
+            }
+          },
+          child: Column(
+            children: [
+              const RadioListTile<String>(
+                value: AppPushNotificationModes.all,
+                secondary: Icon(LucideIcons.bellRing),
+                title: Text('Todas las notificaciones'),
+                contentPadding: EdgeInsets.zero,
+              ),
+              if (isAdmin)
+                const RadioListTile<String>(
+                  value: AppPushNotificationModes.groupOnly,
+                  secondary: Icon(LucideIcons.users),
+                  title: Text('Solo tareas de mi grupo'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              const RadioListTile<String>(
+                value: AppPushNotificationModes.assignedOnly,
+                secondary: Icon(LucideIcons.userCheck),
+                title: Text('Solo tareas asignadas'),
+                contentPadding: EdgeInsets.zero,
+              ),
+              const RadioListTile<String>(
+                value: AppPushNotificationModes.none,
+                secondary: Icon(LucideIcons.bellOff),
+                title: Text('No recibir notificaciones push'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 4, left: 4),
+          child: Text(
+            'Las notificaciones seguirán apareciendo en el centro de '
+            'notificaciones aunque elijas "No recibir notificaciones push".',
+            style: TextStyle(color: context.colors.textSecondary, fontSize: 12),
+          ),
+        ),
+      ],
     );
   }
 }

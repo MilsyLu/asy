@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -14,7 +12,6 @@ import '../../models/app_user.dart';
 import '../../models/task_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
-import '../../services/notification_service.dart';
 import '../../services/task_repository.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/gold_button.dart';
@@ -612,20 +609,6 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
           }
           return MapEntry(key, value);
         }));
-        if (canEditReminder) {
-          // Cancel previous local notification, then schedule the new one (if any).
-          await NotificationService.instance
-              .cancelReminder(widget.existingTask!.id);
-          if (_reminderDateTime != null) {
-            await NotificationService.instance.scheduleReminder(
-              taskId: widget.existingTask!.id,
-              clientName: _clientNameController.text.trim(),
-              taskTypeName: catalog.taskTypeName(_taskTypeId),
-              taskHour: _selectedHour!,
-              reminderTime: _reminderDateTime!,
-            );
-          }
-        }
       } else {
         final newTask = TaskModel(
           id: '',
@@ -655,31 +638,6 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
         );
         debugPrint(
           '[CREATE_TASK]\nfirestore_saved\ntaskId=$taskId\ntimestamp=${DateTime.now().millisecondsSinceEpoch}',
-        );
-        if (_reminderDateTime != null) {
-          // Sprint 7.4.6 Bug 3: scheduling a local reminder never touches
-          // Firestore/network, so it must not delay the success message —
-          // by the time the server-side push for this task arrives, the UI
-          // should already be back on the previous screen. Fired without
-          // `await`; its own completion is logged separately so slow
-          // scheduling is still visible without blocking on it.
-          final reminderStopwatch = Stopwatch()..start();
-          unawaited(
-            NotificationService.instance.scheduleReminder(
-              taskId: taskId,
-              clientName: _clientNameController.text.trim(),
-              taskTypeName: catalog.taskTypeName(_taskTypeId),
-              taskHour: _selectedHour!,
-              reminderTime: _reminderDateTime!,
-            ).then((_) {
-              debugPrint(
-                '[PERF] scheduleReminder (no bloqueante): ${reminderStopwatch.elapsedMilliseconds}ms',
-              );
-            }),
-          );
-        }
-        debugPrint(
-          '[CREATE_TASK]\nreminders_scheduled\ntaskId=$taskId\ntimestamp=${DateTime.now().millisecondsSinceEpoch}',
         );
       }
 

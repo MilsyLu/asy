@@ -4,10 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../core/constants/app_constants.dart';
 import '../providers/auth_provider.dart';
-import '../providers/catalog_provider.dart';
 import '../services/notification_repository.dart';
-import '../services/notification_service.dart';
-import '../services/task_repository.dart';
 import '../widgets/app_drawer.dart';
 import 'calendar/calendar_page.dart';
 import 'dashboard/dashboard_page.dart';
@@ -33,54 +30,8 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _index = 0;
-  bool _startupRemindersDone = false;
 
   static const _titles = ['Dashboard', 'Calendario', 'Semana', 'Reportes', 'Perfil'];
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_startupRemindersDone) {
-      _startupRemindersDone = true;
-      _scheduleUpcomingReminders();
-    }
-  }
-
-  /// Re-schedules local reminder notifications for the current user's upcoming
-  /// tasks. Runs once after login so reminders survive app restarts and updates.
-  Future<void> _scheduleUpcomingReminders() async {
-    try {
-      final auth = context.read<AuthProvider>();
-      final currentUserId = auth.appUser?.id;
-      if (currentUserId == null) return;
-
-      final repo = context.read<TaskRepository>();
-      final catalog = context.read<CatalogProvider>();
-      final now = DateTime.now();
-      // Sprint 7.4.5 Objetivo 2: filtered server-side to this user's own
-      // tasks — previously downloaded every user's tasks in the 60-day
-      // window just to discard everyone but `currentUserId` below.
-      final tasks = await repo.getTasksForUserInRange(
-        currentUserId,
-        now,
-        now.add(const Duration(days: 60)),
-      );
-
-      for (final task in tasks) {
-        final reminder = task.reminderTime;
-        if (reminder == null || reminder.isBefore(now)) continue;
-        await NotificationService.instance.scheduleReminder(
-          taskId: task.id,
-          clientName: task.clientName,
-          taskTypeName: catalog.taskTypeName(task.taskTypeId),
-          taskHour: task.hour,
-          reminderTime: reminder,
-        );
-      }
-    } catch (e) {
-      debugPrint('Startup reminder rebuild failed: $e');
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
