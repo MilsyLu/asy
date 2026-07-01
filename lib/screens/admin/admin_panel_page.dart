@@ -10,7 +10,11 @@ import 'users_page.dart';
 
 /// Hub for super_admin-only management screens.
 class AdminPanelPage extends StatelessWidget {
-  const AdminPanelPage({super.key});
+  const AdminPanelPage({super.key, this.showAppBar = true});
+
+  /// Set to false when this page lives inside the main shell's [IndexedStack]
+  /// so the outer shell's AppBar is used instead of rendering a second one.
+  final bool showAppBar;
 
   @override
   Widget build(BuildContext context) {
@@ -48,72 +52,75 @@ class AdminPanelPage extends StatelessWidget {
       ),
     ];
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Panel de administración')),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: sections.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 12),
-        itemBuilder: (context, index) {
-          final section = sections[index];
-          return Material(
-            color: colors.surface,
+    final body = ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: sections.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final section = sections[index];
+        return Material(
+          color: colors.surface,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
             borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: section.builder),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: colors.background,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: colors.primary.withValues(alpha: 0.4)),
-                      ),
-                      child: Icon(section.icon, color: colors.primary, size: 20),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: section.builder),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: colors.background,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: colors.primary.withValues(alpha: 0.4)),
                     ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            section.title,
-                            style: TextStyle(
-                              color: colors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 15,
-                            ),
+                    child: Icon(section.icon, color: colors.primary, size: 20),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          section.title,
+                          style: TextStyle(
+                            color: colors.textPrimary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            section.subtitle,
-                            style: TextStyle(color: colors.textSecondary, fontSize: 12),
-                          ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          section.subtitle,
+                          style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                        ),
+                      ],
                     ),
-                    Icon(LucideIcons.chevronRight, color: colors.primary, size: 18),
-                  ],
-                ),
+                  ),
+                  Icon(LucideIcons.chevronRight, color: colors.primary, size: 18),
+                ],
               ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
+    );
+
+    if (!showAppBar) return body;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Panel de administración')),
+      body: body,
     );
   }
 }

@@ -58,28 +58,28 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDqaVyEpEB7XN2g2YpLWhcNCzBKUc72f4s',
-    appId: '1:74896792623:web:ee8b004fc6ce11cdf9bada',
-    messagingSenderId: '74896792623',
-    projectId: 'asyone-d8b68',
-    authDomain: 'asyone-d8b68.firebaseapp.com',
-    storageBucket: 'asyone-d8b68.firebasestorage.app',
-    measurementId: 'G-58PJEM68CW',
+    apiKey: 'AIzaSyB3vZ7n8gFrh_H6pRcUwoRsul1X-mWl35g',
+    appId: '1:1065136957290:web:6014aa111c59097b69a713',
+    messagingSenderId: '1065136957290',
+    projectId: 'chhecu',
+    authDomain: 'chhecu.firebaseapp.com',
+    storageBucket: 'chhecu.firebasestorage.app',
+    measurementId: 'G-VMP8G2YRY9',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyA7kt3XTS-A66THH-cMPOzCg9oL3Y29_Qs',
-    appId: '1:74896792623:android:35ee092d1a860adef9bada',
-    messagingSenderId: '74896792623',
-    projectId: 'asyone-d8b68',
-    storageBucket: 'asyone-d8b68.firebasestorage.app',
+    apiKey: 'AIzaSyCgaYgUF4_qM2Pn23nm-GhSv3K3a-blcag',
+    appId: '1:1065136957290:android:6f309f961fe31dd369a713',
+    messagingSenderId: '1065136957290',
+    projectId: 'chhecu',
+    storageBucket: 'chhecu.firebasestorage.app',
   );
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyB-fucvHZmkotjBI5hbpP88s9_vJMEOvyc',
-    appId: '1:74896792623:ios:fae162dcc816e3aef9bada',
-    messagingSenderId: '74896792623',
-    projectId: 'asyone-d8b68',
-    storageBucket: 'asyone-d8b68.firebasestorage.app',
+    apiKey: 'AIzaSyD3mDEgZIfD-yleWrRiLh7BFww1EfB9fU8',
+    appId: '1:1065136957290:ios:d990275193c2cd1969a713',
+    messagingSenderId: '1065136957290',
+    projectId: 'chhecu',
+    storageBucket: 'chhecu.firebasestorage.app',
     iosBundleId: 'com.taskflow.taskflowExecutive',
   );
 }

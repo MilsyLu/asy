@@ -50,9 +50,7 @@ class Validators {
   /// Allows only digits, '+' and spaces, and requires at least 10 digits —
   /// with or without a country code (e.g. "3002257755" or "+573002257755").
   static String? phone(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'El teléfono es requerido';
-    }
+    if (value == null || value.trim().isEmpty) return null;
     final trimmed = value.trim();
     if (!_phoneRegex.hasMatch(trimmed)) {
       return 'Solo se permiten números, "+" y espacios';

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../models/app_user.dart';
 import '../services/auth_service.dart';
@@ -78,10 +79,17 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _registerFcmToken(String uid) async {
+    debugPrint('[WEB_FCM_DIAG] _registerFcmToken() ENTRY uid=$uid');
     try {
+      debugPrint('[WEB_FCM_DIAG] _registerFcmToken(): calling getToken()...');
       final token = await NotificationService.instance.getToken();
+      debugPrint(
+        '[WEB_FCM_DIAG] _registerFcmToken(): getToken() returned '
+        '${token == null ? "NULL — addFcmToken() will NOT be called" : "token(len=${token.length}) — calling addFcmToken()"}',
+      );
       if (token != null) {
         await _userRepository.addFcmToken(uid, token);
+        debugPrint('[WEB_FCM_DIAG] _registerFcmToken(): addFcmToken() returned');
       }
       // Sprint 7.4.3 Parte 1: this only swaps the handler reference — the
       // underlying `onTokenRefresh` subscription is created exactly once,
@@ -89,10 +97,34 @@ class AuthProvider extends ChangeNotifier {
       // every `users/{uid}` snapshot (not just login) no longer accumulates
       // a new listener each time.
       NotificationService.instance.setTokenRefreshHandler((newToken) {
+        debugPrint('[WEB_FCM_DIAG] onTokenRefresh: new token (len=${newToken.length}), calling addFcmToken(uid=$uid)');
         _userRepository.addFcmToken(uid, newToken);
       });
-    } catch (e) {
-      debugPrint('FCM token registration skipped: $e');
+    } catch (e, st) {
+      debugPrint(
+        '[WEB_FCM_DIAG] _registerFcmToken() CAUGHT EXCEPTION\n'
+        '  runtimeType: ${e.runtimeType}\n'
+        '  toString: $e',
+      );
+      if (e is FirebaseException) {
+        debugPrint(
+          '[WEB_FCM_DIAG] FirebaseException:\n'
+          '  plugin: ${e.plugin}\n'
+          '  code: ${e.code}\n'
+          '  message: ${e.message}\n'
+          '  stackTrace: ${e.stackTrace}',
+        );
+      }
+      if (e is PlatformException) {
+        debugPrint(
+          '[WEB_FCM_DIAG] PlatformException:\n'
+          '  code: ${e.code}\n'
+          '  message: ${e.message}\n'
+          '  details: ${e.details}\n'
+          '  stacktrace: ${e.stacktrace}',
+        );
+      }
+      debugPrint('[WEB_FCM_DIAG] _registerFcmToken() stackTrace:\n$st');
     }
   }
 

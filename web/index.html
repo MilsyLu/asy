@@ -33,14 +33,24 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+  <!-- Register FCM Service Worker at Firebase's default push scope so that
+       background push events are handled independently of Flutter's own SW
+       lifecycle (which self-unregisters on activate). The scope must match
+       the one the Firebase JS SDK uses internally when creating the push
+       subscription via getToken(), so both sides agree on which registration
+       owns the subscription. -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker
+        .register('/firebase-messaging-sw.js', {scope: '/firebase-cloud-messaging-push-scope'})
+        .then(function(reg) {
+          console.log('[WEB_FCM] SW registered — scope:', reg.scope);
+        })
+        .catch(function(err) {
+          console.error('[WEB_FCM] SW registration FAILED:', err);
+        });
+    }
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

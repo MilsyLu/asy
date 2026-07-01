@@ -1,0 +1,15 @@
+[
+  {
+    "origin": [
+      "https://chhecu.web.app",
+      "https://chhecu.firebaseapp.com"
+    ],
+    "method": [
+      "GET"
+    ],
+    "responseHeader": [
+      "Content-Type"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]

@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -80,14 +79,15 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
               const Divider(),
-              ListTile(
-                leading: Icon(LucideIcons.camera, color: colors.primary),
-                title: const Text('Tomar foto'),
-                onTap: () {
-                  Navigator.of(sheetCtx).pop();
-                  _pickPhoto(ImageSource.camera, user.id);
-                },
-              ),
+              if (!kIsWeb)
+                ListTile(
+                  leading: Icon(LucideIcons.camera, color: colors.primary),
+                  title: const Text('Tomar foto'),
+                  onTap: () {
+                    Navigator.of(sheetCtx).pop();
+                    _pickPhoto(ImageSource.camera, user.id);
+                  },
+                ),
               ListTile(
                 leading: Icon(LucideIcons.image, color: colors.primary),
                 title: const Text('Elegir de galería'),
@@ -132,8 +132,8 @@ class _ProfilePageState extends State<ProfilePage> {
       );
       if (picked == null || !mounted) return;
       setState(() => _uploading = true);
-      final url =
-          await StorageService.uploadProfilePhoto(uid, File(picked.path));
+      final bytes = await picked.readAsBytes();
+      final url = await StorageService.uploadProfilePhoto(uid, bytes);
       if (!mounted) return;
       await context.read<UserRepository>().updatePhotoUrl(uid, url);
       if (mounted) SnackbarUtils.showSuccess(context, 'Foto actualizada');

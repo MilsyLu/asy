@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "74896792623",
-    "project_id": "asyone-d8b68",
-    "storage_bucket": "asyone-d8b68.firebasestorage.app"
+    "project_number": "1065136957290",
+    "project_id": "chhecu",
+    "storage_bucket": "chhecu.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:74896792623:android:35ee092d1a860adef9bada",
+        "mobilesdk_app_id": "1:1065136957290:android:6f309f961fe31dd369a713",
         "android_client_info": {
           "package_name": "com.taskflow.taskflow_executive"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyA7kt3XTS-A66THH-cMPOzCg9oL3Y29_Qs"
+          "current_key": "AIzaSyCgaYgUF4_qM2Pn23nm-GhSv3K3a-blcag"
         }
       ],
       "services": {

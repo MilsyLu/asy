@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../core/responsive/app_spacing.dart';
+import '../core/responsive/responsive.dart';
 import '../core/theme/theme_colors.dart';
 
 /// Shows a gold-themed confirmation dialog. Returns true if the user
@@ -13,14 +15,16 @@ Future<bool> showConfirmDialog(
   Color? confirmForegroundColor,
 }) async {
   final colors = context.colors;
+  final insetPadding = _dialogInsetPadding(context);
   final result = await showDialog<bool>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (ctx) => AlertDialog(
+      insetPadding: insetPadding,
       title: Text(title),
       content: Text(message),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(ctx).pop(false),
           child: Text(cancelLabel),
         ),
         ElevatedButton(
@@ -30,7 +34,7 @@ Future<bool> showConfirmDialog(
                   foregroundColor: confirmForegroundColor ?? colors.textPrimary,
                 )
               : null,
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(ctx).pop(true),
           child: Text(confirmLabel),
         ),
       ],
@@ -48,17 +52,36 @@ Future<void> showInfoDialog(
   required String message,
   String acknowledgeLabel = 'Continuar',
 }) {
+  final insetPadding = _dialogInsetPadding(context);
   return showDialog<void>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (ctx) => AlertDialog(
+      insetPadding: insetPadding,
       title: Text(title),
       content: Text(message),
       actions: [
         ElevatedButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(ctx).pop(),
           child: Text(acknowledgeLabel),
         ),
       ],
     ),
   );
+}
+
+/// Computes [AlertDialog.insetPadding] so dialogs are width-capped on tablet
+/// and desktop while remaining unchanged on mobile.
+EdgeInsets _dialogInsetPadding(BuildContext context) {
+  final screenW = Responsive.screenWidth(context);
+  if (context.isDesktop) {
+    final h = ((screenW - AppLayout.dialogWidthDesktop) / 2)
+        .clamp(24.0, double.infinity);
+    return EdgeInsets.symmetric(horizontal: h, vertical: 24);
+  }
+  if (context.isTablet) {
+    final h = ((screenW - AppLayout.dialogWidthTablet) / 2)
+        .clamp(24.0, double.infinity);
+    return EdgeInsets.symmetric(horizontal: h, vertical: 24);
+  }
+  return const EdgeInsets.symmetric(horizontal: 40, vertical: 24);
 }

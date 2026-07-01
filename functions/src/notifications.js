@@ -166,8 +166,38 @@ async function sendNotificationToUser(userId, { title, body, data = {} }) {
       `[FCM_TIMING]\npush_sent\ntaskId=${data.taskId || "n/a"}\nuserId=${userId}\ntimestamp=${Date.now()}`
     );
 
+    console.log(
+      `[FCM_DIAG] Multicast completed\n` +
+      `  successCount=${response.successCount}\n` +
+      `  failureCount=${response.failureCount}\n` +
+      `  responses.length=${response.responses.length}\n` +
+      `  tokens.length=${tokens.length}`
+    );
+
     const invalidTokens = [];
     response.responses.forEach((result, index) => {
+      const _tok = tokens[index] || "";
+      const _tokHead = _tok.substring(0, 25);
+      const _tokTail = _tok.length > 10 ? _tok.substring(_tok.length - 10) : _tok;
+      if (result.success) {
+        console.log(
+          `[FCM_DIAG] Token[${index}]\n` +
+          `  token=${_tokHead}...${_tokTail}\n` +
+          `  success=true\n` +
+          `  messageId=${result.messageId}`
+        );
+      } else {
+        const _err = result.error;
+        console.log(
+          `[FCM_DIAG] Token[${index}]\n` +
+          `  token=${_tokHead}...${_tokTail}\n` +
+          `  success=false\n` +
+          `  code=${_err && _err.code}\n` +
+          `  message=${_err && _err.message}\n` +
+          `  stack=${_err && _err.stack}\n` +
+          `  errorType=${_err && _err.constructor && _err.constructor.name}`
+        );
+      }
       if (!result.success) {
         const code = result.error && result.error.code;
         if (

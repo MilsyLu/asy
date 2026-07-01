@@ -1,7 +1,10 @@
 import 'dart:io';
+import 'dart:js_interop';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 /// This top-level function MUST stay top-level (or static) — it is the
@@ -41,6 +44,15 @@ class NotificationPayload {
   String toString() => 'NotificationPayload(type: $type, taskId: $taskId)';
 }
 
+// Thin wrapper around the browser's Notification constructor — used only on
+// web (inside kIsWeb guards) to display foreground push banners without going
+// through the service worker path.
+@JS('Notification')
+extension type _WebNotification._(JSObject _) implements JSObject {
+  external factory _WebNotification(String title, [JSObject? options]);
+  external static String get permission;
+}
+
 /// Wraps Firebase Cloud Messaging + flutter_local_notifications.
 ///
 /// Handles FCM push notifications: foreground display via
@@ -64,6 +76,12 @@ class NotificationService {
 
   bool _initialized = false;
 
+  /// VAPID key for FCM Web (Push API). Required by [getToken] on web;
+  /// ignored on Android/iOS where the platform handles push registration
+  /// without a VAPID key.
+  static const String _vapidKey =
+      'BOpiFkfn0yeunRHgJJzaWdEdnlZRqrNrTxq-I616FKM4sep0x1xE6jXcsdC8O4sZP1M9ec0u7_cQtm60W3pDUVc';
+
   /// Sprint 7.4.3 Parte 1 — the *only* place `onTokenRefresh.listen(...)` is
   /// ever called (inside [initialize], once, guarded by [_initialized]).
   /// Callers that need to react to a token rotation (currently just
@@ -80,25 +98,27 @@ class NotificationService {
     if (_initialized) return;
     _initialized = true;
 
-    // --- Local notifications setup ---
-    // Sprint 7.3.3: must be a monochrome white-on-transparent drawable, not
-    // the full-color launcher mipmap — Android renders status-bar icons from
-    // the alpha channel only, so a color icon shows up as a solid block.
-    const androidInit = AndroidInitializationSettings('@drawable/ic_notification');
-    const iosInit = DarwinInitializationSettings(
-      requestAlertPermission: false,
-      requestBadgePermission: false,
-      requestSoundPermission: false,
-    );
-    await _localNotifications.initialize(
-      const InitializationSettings(android: androidInit, iOS: iosInit),
-    );
+    if (!kIsWeb) {
+      // --- Local notifications setup (mobile only) ---
+      // Sprint 7.3.3: must be a monochrome white-on-transparent drawable, not
+      // the full-color launcher mipmap — Android renders status-bar icons from
+      // the alpha channel only, so a color icon shows up as a solid block.
+      const androidInit = AndroidInitializationSettings('@drawable/ic_notification');
+      const iosInit = DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+      );
+      await _localNotifications.initialize(
+        const InitializationSettings(android: androidInit, iOS: iosInit),
+      );
 
-    if (Platform.isAndroid) {
-      await _localNotifications
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(_channel);
+      if (Platform.isAndroid) {
+        await _localNotifications
+            .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin>()
+            ?.createNotificationChannel(_channel);
+      }
     }
 
     // --- FCM permissions (covers local notifications on iOS too) ---
@@ -129,6 +149,14 @@ class NotificationService {
     // that one message for retrieval right after startup.
     final initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) {
+      if (kIsWeb) {
+        debugPrint(
+          '[WEB_FCM] getInitialMessage\n'
+          '  messageId=${initialMessage.messageId}\n'
+          '  notification.title=${initialMessage.notification?.title}\n'
+          '  data=${initialMessage.data}',
+        );
+      }
       handleOpenedNotification(initialMessage);
     }
   }
@@ -144,7 +172,7 @@ class NotificationService {
       sound: true,
     );
 
-    if (Platform.isIOS) {
+    if (!kIsWeb && Platform.isIOS) {
       await _messaging.setForegroundNotificationPresentationOptions(
         alert: true,
         badge: true,
@@ -163,6 +191,15 @@ class NotificationService {
     debugPrint(
       '[FCM_TIMING] Push opened taskId=${payload.taskId ?? "n/a"} ts=${DateTime.now().millisecondsSinceEpoch}',
     );
+    if (kIsWeb) {
+      debugPrint(
+        '[WEB_FCM] onMessageOpenedApp\n'
+        '  messageId=${message.messageId}\n'
+        '  notification.title=${message.notification?.title}\n'
+        '  notification.body=${message.notification?.body}\n'
+        '  data=${message.data}',
+      );
+    }
     debugPrint('Notification opened: $payload');
   }
 
@@ -170,6 +207,34 @@ class NotificationService {
     debugPrint(
       '[FCM_TIMING]\npush_received\ntaskId=${message.data['taskId'] ?? "n/a"}\ntimestamp=${DateTime.now().millisecondsSinceEpoch}',
     );
+    if (kIsWeb) {
+      final n = message.notification;
+      debugPrint(
+        '[WEB_FCM] onMessage (foreground)\n'
+        '  messageId=${message.messageId}\n'
+        '  notification.title=${n?.title}\n'
+        '  notification.body=${n?.body}\n'
+        '  data=${message.data}',
+      );
+      if (n != null) {
+        try {
+          // Background pushes are handled by firebase-messaging-sw.js via the
+          // native push event. For foreground, use the Web Notification API
+          // directly — flutter_local_notifications has no web implementation.
+          final opts = {
+            'body': n.body ?? '',
+            'icon': '/icons/Icon-192.png',
+            'badge': '/icons/Icon-192.png',
+            'tag': message.messageId ?? '',
+          }.jsify()! as JSObject;
+          _WebNotification(n.title ?? 'CheCu', opts);
+          debugPrint('[WEB_FCM] foreground: notification shown via Web Notification API');
+        } catch (e) {
+          debugPrint('[WEB_FCM] foreground: Notification API error — $e');
+        }
+      }
+      return;
+    }
     final notification = message.notification;
     if (notification == null) return;
 
@@ -199,9 +264,70 @@ class NotificationService {
   // Helpers
   // ---------------------------------------------------------------------------
 
-  /// Returns the current device FCM token, or null if unavailable
-  /// (e.g. simulator without push capability, web without VAPID key).
-  Future<String?> getToken() => _messaging.getToken();
+  /// Returns the current FCM token, or null if unavailable. On web the
+  /// [_vapidKey] is required by the browser Push API; on Android/iOS it is
+  /// ignored and the platform handles registration without it.
+  Future<String?> getToken() async {
+    if (kIsWeb) {
+      final perm = _WebNotification.permission;
+      final vapidHead = _vapidKey.substring(0, 8);
+      final vapidTail = _vapidKey.substring(_vapidKey.length - 8);
+      debugPrint(
+        '[WEB_FCM_DIAG] getToken() ENTRY\n'
+        '  Notification.permission=$perm\n'
+        '  vapidKey=$vapidHead...$vapidTail',
+      );
+    }
+
+    final sw = Stopwatch()..start();
+    String? token;
+    try {
+      token = await _messaging.getToken(vapidKey: kIsWeb ? _vapidKey : null);
+    } catch (e, st) {
+      sw.stop();
+      debugPrint(
+        '[WEB_FCM_DIAG] getToken() EXCEPTION after ${sw.elapsedMilliseconds}ms\n'
+        '  runtimeType: ${e.runtimeType}\n'
+        '  toString: $e',
+      );
+      if (e is FirebaseException) {
+        debugPrint(
+          '[WEB_FCM_DIAG] FirebaseException:\n'
+          '  plugin: ${e.plugin}\n'
+          '  code: ${e.code}\n'
+          '  message: ${e.message}\n'
+          '  stackTrace: ${e.stackTrace}',
+        );
+      }
+      if (e is PlatformException) {
+        debugPrint(
+          '[WEB_FCM_DIAG] PlatformException:\n'
+          '  code: ${e.code}\n'
+          '  message: ${e.message}\n'
+          '  details: ${e.details}\n'
+          '  stacktrace: ${e.stacktrace}',
+        );
+      }
+      debugPrint('[WEB_FCM_DIAG] getToken() stackTrace:\n$st');
+      rethrow;
+    }
+    sw.stop();
+
+    if (kIsWeb) {
+      if (token == null) {
+        debugPrint('[WEB_FCM_DIAG] getToken() returned NULL after ${sw.elapsedMilliseconds}ms');
+      } else {
+        final head = token.substring(0, 12);
+        final tail = token.substring(token.length - 8);
+        debugPrint(
+          '[WEB_FCM_DIAG] getToken() SUCCESS after ${sw.elapsedMilliseconds}ms\n'
+          '  token length: ${token.length}\n'
+          '  token: $head...$tail',
+        );
+      }
+    }
+    return token;
+  }
 
   /// Sets (or clears, with `null`) the callback invoked whenever the FCM
   /// token rotates, so it can be re-saved to the user's Firestore document.

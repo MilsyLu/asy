@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../responsive/app_spacing.dart';
 import 'theme_colors.dart';
 
 /// Central theme definition for TaskFlow Executive.
@@ -197,6 +198,26 @@ class AppTheme {
       dividerTheme: DividerThemeData(
         color: colors.divider,
         thickness: 1,
+      ),
+      navigationRailTheme: NavigationRailThemeData(
+        backgroundColor: colors.surface,
+        useIndicator: true,
+        indicatorColor: colors.primary.withValues(alpha: 0.18),
+        indicatorShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        ),
+        selectedIconTheme: IconThemeData(color: colors.primary, size: 22),
+        selectedLabelTextStyle: TextStyle(
+          color: colors.primary,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+        unselectedIconTheme: IconThemeData(color: colors.textSecondary, size: 22),
+        unselectedLabelTextStyle: TextStyle(
+          color: colors.textSecondary,
+          fontSize: 12,
+        ),
+        minWidth: AppLayout.navigationRailWidth,
       ),
       extensions: [colors.toExtension()],
     );

@@ -110,8 +110,12 @@ class UserRepository {
   Future<void> addFcmToken(String uid, String token) async {
     if (token.isEmpty) return;
 
+    final tokenShort = '${token.substring(0, 8)}...${token.substring(token.length - 8)}';
+    debugPrint('[WEB_FCM_DIAG] addFcmToken() ENTRY uid=$uid token=$tokenShort');
+
     final staleHolders =
         await _collection.where('fcmTokens', arrayContains: token).get();
+    debugPrint('[WEB_FCM_DIAG] addFcmToken(): stale query done — ${staleHolders.docs.length} doc(s) hold this token');
     for (final doc in staleHolders.docs) {
       if (doc.id == uid) continue;
       await doc.reference.update({
@@ -121,13 +125,18 @@ class UserRepository {
     }
 
     final docRef = _collection.doc(uid);
+    debugPrint('[WEB_FCM_DIAG] addFcmToken(): starting Firestore transaction...');
     await _firestore.runTransaction((transaction) async {
       final snap = await transaction.get(docRef);
       final current = (snap.data()?['fcmTokens'] as List<dynamic>?)
               ?.whereType<String>()
               .toList() ??
           <String>[];
-      if (current.contains(token)) return;
+      debugPrint('[WEB_FCM_DIAG] addFcmToken(): inside transaction — current.length=${current.length} alreadyContains=${current.contains(token)}');
+      if (current.contains(token)) {
+        debugPrint('[WEB_FCM_DIAG] addFcmToken(): token already present — no write needed');
+        return;
+      }
 
       current.add(token);
       String? evicted;
@@ -136,11 +145,13 @@ class UserRepository {
       }
 
       transaction.set(docRef, {'fcmTokens': current}, SetOptions(merge: true));
+      debugPrint('[WEB_FCM_DIAG] addFcmToken(): transaction.set() queued — new count=${current.length}');
       debugPrint('[FCM] Token added: $uid (${current.length}/$_maxFcmTokens)');
       if (evicted != null) {
         debugPrint('[FCM] Token limit reached: $uid, oldest token evicted');
       }
     });
+    debugPrint('[WEB_FCM_DIAG] addFcmToken(): Firestore transaction COMPLETED OK');
   }
 
   Future<void> removeFcmToken(String uid, String token) async {

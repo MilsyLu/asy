@@ -15,81 +15,88 @@ import '../../services/user_repository.dart';
 /// [ThemeManager] and are persisted to the user's Firestore profile, so
 /// each user keeps their own independent preferences.
 class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({super.key, this.showAppBar = true});
+
+  /// Set to false when this page lives inside the main shell's [IndexedStack]
+  /// so the outer shell's AppBar is used instead of rendering a second one.
+  final bool showAppBar;
 
   @override
   Widget build(BuildContext context) {
     final themeManager = context.watch<ThemeManager>();
     final user = context.watch<AuthProvider>().appUser;
 
+    final body = ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      children: [
+        if (user != null) ...[
+          const _SectionTitle(
+            icon: LucideIcons.bellRing,
+            title: 'Notificaciones',
+          ),
+          const SizedBox(height: 4),
+          _PushNotificationModeOption(user: user),
+          const SizedBox(height: 24),
+        ],
+        const _SectionTitle(icon: LucideIcons.sunMoon, title: 'Apariencia'),
+        const SizedBox(height: 4),
+        RadioGroup<ThemeMode>(
+          groupValue: themeManager.themeMode,
+          onChanged: (mode) {
+            if (mode != null) context.read<ThemeManager>().setThemeMode(mode);
+          },
+          child: const Column(
+            children: [
+              _ThemeModeOption(
+                mode: ThemeMode.system,
+                label: 'Seguir sistema',
+                description: 'Usa el modo claro u oscuro del dispositivo.',
+                icon: LucideIcons.smartphone,
+              ),
+              _ThemeModeOption(
+                mode: ThemeMode.light,
+                label: 'Modo claro',
+                description: 'Fondo claro con texto oscuro.',
+                icon: LucideIcons.sun,
+              ),
+              _ThemeModeOption(
+                mode: ThemeMode.dark,
+                label: 'Modo oscuro',
+                description: 'Fondo oscuro con texto claro.',
+                icon: LucideIcons.moon,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        const _SectionTitle(icon: LucideIcons.palette, title: 'Color principal'),
+        const SizedBox(height: 4),
+        RadioGroup<AppAccentColor>(
+          groupValue: themeManager.accentColor,
+          onChanged: (accent) {
+            if (accent != null) context.read<ThemeManager>().setAccentColor(accent);
+          },
+          child: Column(
+            children: [
+              for (final accent in AppAccentColor.values) _AccentOption(accent: accent),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        const _SectionTitle(icon: LucideIcons.eye, title: 'Vista previa'),
+        const SizedBox(height: 8),
+        const _ThemePreview(),
+        const SizedBox(height: 24),
+        const _SectionTitle(icon: LucideIcons.info, title: 'Acerca de'),
+        const SizedBox(height: 8),
+        const _AboutBlock(),
+      ],
+    );
+
+    if (!showAppBar) return body;
     return Scaffold(
       appBar: AppBar(title: const Text('Configuración')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-        children: [
-          if (user != null) ...[
-            const _SectionTitle(
-              icon: LucideIcons.bellRing,
-              title: 'Notificaciones',
-            ),
-            const SizedBox(height: 4),
-            _PushNotificationModeOption(user: user),
-            const SizedBox(height: 24),
-          ],
-          const _SectionTitle(icon: LucideIcons.sunMoon, title: 'Apariencia'),
-          const SizedBox(height: 4),
-          RadioGroup<ThemeMode>(
-            groupValue: themeManager.themeMode,
-            onChanged: (mode) {
-              if (mode != null) context.read<ThemeManager>().setThemeMode(mode);
-            },
-            child: const Column(
-              children: [
-                _ThemeModeOption(
-                  mode: ThemeMode.system,
-                  label: 'Seguir sistema',
-                  description: 'Usa el modo claro u oscuro del dispositivo.',
-                  icon: LucideIcons.smartphone,
-                ),
-                _ThemeModeOption(
-                  mode: ThemeMode.light,
-                  label: 'Modo claro',
-                  description: 'Fondo claro con texto oscuro.',
-                  icon: LucideIcons.sun,
-                ),
-                _ThemeModeOption(
-                  mode: ThemeMode.dark,
-                  label: 'Modo oscuro',
-                  description: 'Fondo oscuro con texto claro.',
-                  icon: LucideIcons.moon,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          const _SectionTitle(icon: LucideIcons.palette, title: 'Color principal'),
-          const SizedBox(height: 4),
-          RadioGroup<AppAccentColor>(
-            groupValue: themeManager.accentColor,
-            onChanged: (accent) {
-              if (accent != null) context.read<ThemeManager>().setAccentColor(accent);
-            },
-            child: Column(
-              children: [
-                for (final accent in AppAccentColor.values) _AccentOption(accent: accent),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          const _SectionTitle(icon: LucideIcons.eye, title: 'Vista previa'),
-          const SizedBox(height: 8),
-          const _ThemePreview(),
-          const SizedBox(height: 24),
-          const _SectionTitle(icon: LucideIcons.info, title: 'Acerca de'),
-          const SizedBox(height: 8),
-          const _AboutBlock(),
-        ],
-      ),
+      body: body,
     );
   }
 }

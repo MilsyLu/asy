@@ -18,7 +18,11 @@ enum _TrashFilter { all, sevenDays, thirtyDays }
 /// Admin-only screen that lists soft-deleted tasks and allows restoring or
 /// permanently deleting them.
 class TrashPage extends StatefulWidget {
-  const TrashPage({super.key});
+  const TrashPage({super.key, this.showAppBar = true});
+
+  /// Set to false when this page lives inside the main shell's [IndexedStack]
+  /// so the outer shell's AppBar is used instead of rendering a second one.
+  final bool showAppBar;
 
   @override
   State<TrashPage> createState() => _TrashPageState();
@@ -92,42 +96,40 @@ class _TrashPageState extends State<TrashPage> {
     final colors = context.colors;
     final catalog = context.watch<CatalogProvider>();
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Papelera')),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _FilterChip(
-                    label: 'Todas',
-                    selected: _filter == _TrashFilter.all,
-                    onTap: () => setState(() => _filter = _TrashFilter.all),
-                  ),
-                  const SizedBox(width: 8),
-                  _FilterChip(
-                    label: 'Últimos 7 días',
-                    selected: _filter == _TrashFilter.sevenDays,
-                    onTap: () =>
-                        setState(() => _filter = _TrashFilter.sevenDays),
-                  ),
-                  const SizedBox(width: 8),
-                  _FilterChip(
-                    label: 'Últimos 30 días',
-                    selected: _filter == _TrashFilter.thirtyDays,
-                    onTap: () =>
-                        setState(() => _filter = _TrashFilter.thirtyDays),
-                  ),
-                ],
-              ),
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _FilterChip(
+                  label: 'Todas',
+                  selected: _filter == _TrashFilter.all,
+                  onTap: () => setState(() => _filter = _TrashFilter.all),
+                ),
+                const SizedBox(width: 8),
+                _FilterChip(
+                  label: 'Últimos 7 días',
+                  selected: _filter == _TrashFilter.sevenDays,
+                  onTap: () =>
+                      setState(() => _filter = _TrashFilter.sevenDays),
+                ),
+                const SizedBox(width: 8),
+                _FilterChip(
+                  label: 'Últimos 30 días',
+                  selected: _filter == _TrashFilter.thirtyDays,
+                  onTap: () =>
+                      setState(() => _filter = _TrashFilter.thirtyDays),
+                ),
+              ],
             ),
           ),
-          Expanded(
-            child: StreamBuilder<List<TaskModel>>(
+        ),
+        Expanded(
+          child: StreamBuilder<List<TaskModel>>(
               stream: _tasksStream,
               builder: (context, snapshot) {
                 if (!_loadLogged && snapshot.connectionState != ConnectionState.waiting) {
@@ -222,7 +224,12 @@ class _TrashPageState extends State<TrashPage> {
             ),
           ),
         ],
-      ),
+      );
+
+    if (!widget.showAppBar) return body;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Papelera')),
+      body: body,
     );
   }
 }
