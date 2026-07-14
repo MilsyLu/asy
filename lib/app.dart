@@ -8,8 +8,10 @@ import 'core/constants/app_constants.dart';
 import 'core/theme/theme_manager.dart';
 import 'providers/auth_provider.dart';
 import 'providers/catalog_provider.dart';
+import 'providers/system_config_provider.dart';
 import 'screens/auth/login_page.dart';
 import 'screens/main_shell.dart';
+import 'services/app_update_service.dart';
 import 'services/auth_service.dart';
 import 'services/catalog_repository.dart';
 import 'services/notification_repository.dart';
@@ -65,10 +67,16 @@ class TaskFlowApp extends StatelessWidget {
             builder: (context, child) {
               final user = context.watch<AuthProvider>().appUser;
               if (user == null) return child!;
-              return ChangeNotifierProvider<CatalogProvider>(
-                key: ValueKey(user.id),
-                create: (_) => CatalogProvider(),
-                child: child!,
+              return ChangeNotifierProvider<AppUpdateService>(
+                create: (_) => AppUpdateService(),
+                child: ChangeNotifierProvider<SystemConfigProvider>(
+                  create: (_) => SystemConfigProvider(),
+                  child: ChangeNotifierProvider<CatalogProvider>(
+                    key: ValueKey(user.id),
+                    create: (_) => CatalogProvider(),
+                    child: child!,
+                  ),
+                ),
               );
             },
           );

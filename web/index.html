@@ -33,6 +33,119 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <!-- ── CheCu auto-update: Service Worker monitoring ────────────────────────
+       Detects when Flutter's generated service worker has a new version ready
+       in the "waiting" state (i.e., a new deploy was completed) and exposes:
+         window.__checu_sw_update_waiting  — boolean flag polled by Dart
+         window.__checu_activate_update()  — called when user taps "Actualizar"
+
+       How it works:
+         1. Intercepts navigator.serviceWorker.register() to watch every SW.
+         2. When the new SW reaches state "installed" AND there is already an
+            active controller (= this is an update, not a first install), the
+            flag is set to true.
+         3. On tab visibility-change the active registration is asked to check
+            for updates, so users returning to a background tab get the banner
+            promptly without waiting for the next 5-minute timer tick.
+         4. __checu_activate_update() sends the 'skipWaiting' message that
+            Flutter's generated SW already handles, then reloads once the new
+            SW signals controllerchange. A 3 s fallback reload guards against
+            browsers that don't fire the event in time.
+
+       This script runs before flutter_bootstrap.js so the register() patch is
+       in place before Flutter registers its own service worker.
+  ──────────────────────────────────────────────────────────────────────── -->
+  <script>
+    (function () {
+      'use strict';
+
+      window.__checu_sw_update_waiting = false;
+
+      if (!('serviceWorker' in navigator)) {
+        // SW not supported — activate simply reloads.
+        window.__checu_activate_update = function () { window.location.reload(); };
+        return;
+      }
+
+      // Watch a single SW registration for new versions.
+      function watchReg(reg) {
+        function onInstalling(worker) {
+          worker.addEventListener('statechange', function () {
+            if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+              window.__checu_sw_update_waiting = true;
+            }
+          });
+        }
+        if (reg.installing) onInstalling(reg.installing);
+        reg.addEventListener('updatefound', function () {
+          if (reg.installing) onInstalling(reg.installing);
+        });
+        // Already waiting from a previous page load?
+        if (reg.waiting && navigator.serviceWorker.controller) {
+          window.__checu_sw_update_waiting = true;
+        }
+      }
+
+      // Patch register() so we catch Flutter's SW registration even though it
+      // happens asynchronously inside flutter_bootstrap.js.
+      var _origRegister = navigator.serviceWorker.register.bind(navigator.serviceWorker);
+      navigator.serviceWorker.register = function (url, opts) {
+        return _origRegister(url, opts).then(function (reg) {
+          // Watch only Flutter's own SW; ignore the FCM SW (different scope).
+          if (typeof url === 'string' && url.indexOf('flutter_service_worker') !== -1) {
+            watchReg(reg);
+          }
+          return reg;
+        });
+      };
+
+      // Also check any SWs already registered (e.g., hard-refresh scenario).
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (reg) {
+          if (reg.scope && reg.scope.indexOf('firebase-cloud-messaging-push-scope') === -1) {
+            watchReg(reg);
+          }
+        });
+      });
+
+      // Force an update check whenever the user returns to this tab.
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) return;
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          regs.forEach(function (reg) {
+            if (reg.scope && reg.scope.indexOf('firebase-cloud-messaging-push-scope') === -1) {
+              reg.update().catch(function () {});
+            }
+          });
+        });
+      });
+
+      // Called by Dart when the user taps "Actualizar ahora".
+      window.__checu_activate_update = function () {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          var foundWaiting = false;
+          regs.forEach(function (reg) {
+            if (reg.waiting) {
+              // Flutter's generated SW handles the string 'skipWaiting'.
+              reg.waiting.postMessage('skipWaiting');
+              foundWaiting = true;
+            }
+          });
+          if (foundWaiting) {
+            var done = false;
+            navigator.serviceWorker.addEventListener('controllerchange', function () {
+              if (!done) { done = true; window.location.reload(); }
+            }, { once: true });
+            // Fallback: reload even if controllerchange never fires.
+            setTimeout(function () { if (!done) { done = true; window.location.reload(); } }, 3000);
+          } else {
+            window.location.reload();
+          }
+        }).catch(function () { window.location.reload(); });
+      };
+    })();
+  </script>
+
   <!-- Register FCM Service Worker at Firebase's default push scope so that
        background push events are handled independently of Flutter's own SW
        lifecycle (which self-unregisters on activate). The scope must match
