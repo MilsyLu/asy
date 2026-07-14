@@ -12,9 +12,12 @@ import '../../models/app_user.dart';
 import '../../models/task_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
+import '../../providers/system_config_provider.dart';
 import '../../services/task_repository.dart';
+import '../../services/task_scheduling_service.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/gold_button.dart';
+import 'widgets/hour_grid_selector.dart';
 
 enum _ReminderOption {
   none,
@@ -667,9 +670,11 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
     final auth = context.watch<AuthProvider>();
+    final sysConfig = context.watch<SystemConfigProvider>();
     final currentUser = auth.appUser!;
     final isAdmin = auth.isSuperAdmin;
     final colors = context.colors;
+    final useFreePicker = TaskSchedulingService.useFreePicker(sysConfig);
 
     // Sprint 7.4.6 Bug 2: only self-default "Encargado" for regular workers
     // (who usually create tasks for themselves) — defaulting an admin to
@@ -689,7 +694,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     if (_statusId == null && !_isEditing) {
       _statusId = catalog.pendingStatusId;
     }
-    if (_selectedHour == null && catalog.availableHours.isNotEmpty) {
+    if (_selectedHour == null && !useFreePicker && catalog.availableHours.isNotEmpty) {
       _selectedHour = catalog.availableHours.first.hour;
     }
     // Default to the assigned worker's group (covers both brand-new tasks
@@ -740,23 +745,41 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
               ),
             ),
             const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              initialValue:
-                  catalog.availableHours.any((h) => h.hour == _selectedHour)
-                      ? _selectedHour
-                      : null,
-              decoration: InputDecoration(
-                labelText: 'Hora',
-                prefixIcon: Icon(LucideIcons.clock, color: colors.primary),
+            if (useFreePicker)
+              InkWell(
+                onTap: () async {
+                  final initial = _selectedHour != null
+                      ? TaskSchedulingService.parseHourString(_selectedHour!)
+                      : TimeOfDay.now();
+                  final picked = await showTimePicker(
+                    context: context,
+                    initialTime: initial,
+                  );
+                  if (!mounted || picked == null) return;
+                  setState(() {
+                    _selectedHour = TaskSchedulingService.formatTimeOfDay(picked);
+                  });
+                },
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'Hora',
+                    prefixIcon: Icon(LucideIcons.clock, color: colors.primary),
+                  ),
+                  child: Text(
+                    _selectedHour ?? 'Seleccionar hora',
+                    style: _selectedHour == null
+                        ? TextStyle(color: colors.textSecondary)
+                        : null,
+                  ),
+                ),
+              )
+            else
+              HourGridSelector(
+                hours: TaskSchedulingService.catalogHours(catalog),
+                selectedDate: _selectedDate,
+                selectedHour: _selectedHour,
+                onHourSelected: (h) => setState(() => _selectedHour = h),
               ),
-              dropdownColor: colors.surface,
-              items: catalog.availableHours
-                  .map((h) =>
-                      DropdownMenuItem(value: h.hour, child: Text(h.hour)))
-                  .toList(),
-              onChanged: (v) => setState(() => _selectedHour = v),
-              validator: (v) => v == null ? 'Selecciona una hora' : null,
-            ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               initialValue:

@@ -140,6 +140,16 @@ service cloud.firestore {
     }
 
     // -----------------------------------------------------------------
+    // systemConfig — global system configuration (Sprint 22)
+    // Readable by any signed-in user (all screens need the current mode);
+    // writable only by super_admin.
+    // -----------------------------------------------------------------
+    match /systemConfig/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    // -----------------------------------------------------------------
     // notifications (Sprint 7.4 — in-app notification center)
     // -----------------------------------------------------------------
     match /notifications/{id} {

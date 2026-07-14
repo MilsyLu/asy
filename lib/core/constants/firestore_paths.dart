@@ -9,4 +9,8 @@ class FirestoreCollections {
   static const String statuses = 'statuses';
   static const String availableHours = 'availableHours';
   static const String notifications = 'notifications';
+
+  // Global system configuration
+  static const String systemConfig = 'systemConfig';
+  static const String systemConfigSettings = 'settings';
 }
