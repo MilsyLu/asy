@@ -18,8 +18,9 @@ void main() {
   });
 
   group('Validators.phone', () {
-    test('rejects empty values', () {
-      expect(Validators.phone(''), isNotNull);
+    test('accepts empty values (phone is optional)', () {
+      expect(Validators.phone(''), isNull);
+      expect(Validators.phone(null), isNull);
     });
 
     test('rejects letters', () {
