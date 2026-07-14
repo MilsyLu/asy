@@ -14,34 +14,41 @@ import '../../widgets/loading_indicator.dart';
 
 /// Admin: CRUD for `groups`, plus assigning/unassigning member users.
 class GroupsPage extends StatelessWidget {
-  const GroupsPage({super.key});
+  const GroupsPage({super.key, this.showAppBar = true});
+
+  /// Set to false when this page lives inside the main shell's [IndexedStack]
+  /// so the outer shell's AppBar is used instead of rendering a second one.
+  final bool showAppBar;
 
   @override
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
     final groups = catalog.groups;
 
+    final body = groups.isEmpty
+        ? const EmptyState(
+            message: 'No hay grupos creados todavía.',
+            icon: LucideIcons.users,
+          )
+        : ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+            itemCount: groups.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            itemBuilder: (context, index) {
+              final group = groups[index];
+              final members = catalog.usersInGroup(group.id);
+              return _GroupCard(group: group, members: members);
+            },
+          );
+    final fab = FloatingActionButton(
+      onPressed: () => _showGroupFormDialog(context),
+      child: const Icon(LucideIcons.plus),
+    );
+    if (!showAppBar) return Scaffold(body: body, floatingActionButton: fab);
     return Scaffold(
       appBar: AppBar(title: const Text('Grupos')),
-      body: groups.isEmpty
-          ? const EmptyState(
-              message: 'No hay grupos creados todavía.',
-              icon: LucideIcons.users,
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-              itemCount: groups.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                final group = groups[index];
-                final members = catalog.usersInGroup(group.id);
-                return _GroupCard(group: group, members: members);
-              },
-            ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showGroupFormDialog(context),
-        child: const Icon(LucideIcons.plus),
-      ),
+      body: body,
+      floatingActionButton: fab,
     );
   }
 }

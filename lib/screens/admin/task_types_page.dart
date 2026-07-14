@@ -30,7 +30,11 @@ String _groupsLabel(CatalogProvider catalog, TaskTypeModel type) {
 
 /// Admin: CRUD for `taskTypes` (name, order, optional color).
 class TaskTypesPage extends StatelessWidget {
-  const TaskTypesPage({super.key});
+  const TaskTypesPage({super.key, this.showAppBar = true});
+
+  /// Set to false when this page lives inside the main shell's [IndexedStack]
+  /// so the outer shell's AppBar is used instead of rendering a second one.
+  final bool showAppBar;
 
   @override
   Widget build(BuildContext context) {
@@ -38,60 +42,63 @@ class TaskTypesPage extends StatelessWidget {
     final taskTypes = catalog.taskTypes;
     final colors = context.colors;
 
+    final body = taskTypes.isEmpty
+        ? const EmptyState(
+            message: 'No hay tipos de tarea creados todavía.',
+            icon: LucideIcons.tag,
+          )
+        : ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+            itemCount: taskTypes.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final type = taskTypes[index];
+              return Container(
+                decoration: BoxDecoration(
+                  color: colors.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
+                ),
+                child: ListTile(
+                  leading: Container(
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: type.parsedColor ?? colors.primary,
+                    ),
+                  ),
+                  title: Text(type.name, style: TextStyle(color: colors.textPrimary)),
+                  subtitle: Text(
+                    'Orden: ${type.order} • Grupos: ${_groupsLabel(catalog, type)}',
+                    style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(LucideIcons.pencil, color: colors.primary, size: 18),
+                        onPressed: () => _showTaskTypeFormDialog(context, existing: type),
+                      ),
+                      IconButton(
+                        icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
+                        onPressed: () => _deleteTaskType(context, type),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+    final fab = FloatingActionButton(
+      onPressed: () => _showTaskTypeFormDialog(context),
+      child: const Icon(LucideIcons.plus),
+    );
+    if (!showAppBar) return Scaffold(body: body, floatingActionButton: fab);
     return Scaffold(
       appBar: AppBar(title: const Text('Tipos de tarea')),
-      body: taskTypes.isEmpty
-          ? const EmptyState(
-              message: 'No hay tipos de tarea creados todavía.',
-              icon: LucideIcons.tag,
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-              itemCount: taskTypes.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
-              itemBuilder: (context, index) {
-                final type = taskTypes[index];
-                return Container(
-                  decoration: BoxDecoration(
-                    color: colors.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
-                  ),
-                  child: ListTile(
-                    leading: Container(
-                      width: 16,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: type.parsedColor ?? colors.primary,
-                      ),
-                    ),
-                    title: Text(type.name, style: TextStyle(color: colors.textPrimary)),
-                    subtitle: Text(
-                      'Orden: ${type.order} • Grupos: ${_groupsLabel(catalog, type)}',
-                      style: TextStyle(color: colors.textSecondary, fontSize: 12),
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: Icon(LucideIcons.pencil, color: colors.primary, size: 18),
-                          onPressed: () => _showTaskTypeFormDialog(context, existing: type),
-                        ),
-                        IconButton(
-                          icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
-                          onPressed: () => _deleteTaskType(context, type),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showTaskTypeFormDialog(context),
-        child: const Icon(LucideIcons.plus),
-      ),
+      body: body,
+      floatingActionButton: fab,
     );
   }
 }

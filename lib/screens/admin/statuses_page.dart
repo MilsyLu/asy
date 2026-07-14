@@ -12,7 +12,11 @@ import '../../widgets/loading_indicator.dart';
 
 /// Admin: CRUD for `statuses` (name, order).
 class StatusesPage extends StatelessWidget {
-  const StatusesPage({super.key});
+  const StatusesPage({super.key, this.showAppBar = true});
+
+  /// Set to false when this page lives inside the main shell's [IndexedStack]
+  /// so the outer shell's AppBar is used instead of rendering a second one.
+  final bool showAppBar;
 
   @override
   Widget build(BuildContext context) {
@@ -20,82 +24,85 @@ class StatusesPage extends StatelessWidget {
     final statuses = catalog.statuses;
     final colors = context.colors;
 
+    final body = Column(
+      children: [
+        Container(
+          margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colors.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
+          ),
+          child: Row(
+            children: [
+              Icon(LucideIcons.info, color: colors.primary, size: 16),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Las funciones automáticas usan los nombres exactos '
+                  '"Pendiente", "Completada" y "Reprogramada". Evita '
+                  'renombrarlos o eliminarlos.',
+                  style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: statuses.isEmpty
+              ? const EmptyState(
+                  message: 'No hay estados creados todavía.',
+                  icon: LucideIcons.listChecks,
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+                  itemCount: statuses.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final status = statuses[index];
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: colors.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
+                      ),
+                      child: ListTile(
+                        leading: Icon(LucideIcons.listChecks, color: colors.primary),
+                        title: Text(status.name, style: TextStyle(color: colors.textPrimary)),
+                        subtitle: Text(
+                          'Orden: ${status.order}',
+                          style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: Icon(LucideIcons.pencil, color: colors.primary, size: 18),
+                              onPressed: () => _showStatusFormDialog(context, existing: status),
+                            ),
+                            IconButton(
+                              icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
+                              onPressed: () => _deleteStatus(context, status),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+    final fab = FloatingActionButton(
+      onPressed: () => _showStatusFormDialog(context),
+      child: const Icon(LucideIcons.plus),
+    );
+    if (!showAppBar) return Scaffold(body: body, floatingActionButton: fab);
     return Scaffold(
       appBar: AppBar(title: const Text('Estados')),
-      body: Column(
-        children: [
-          Container(
-            margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: colors.surface,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
-            ),
-            child: Row(
-              children: [
-                Icon(LucideIcons.info, color: colors.primary, size: 16),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Las funciones automáticas usan los nombres exactos '
-                    '"Pendiente", "Completada" y "Reprogramada". Evita '
-                    'renombrarlos o eliminarlos.',
-                    style: TextStyle(color: colors.textSecondary, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: statuses.isEmpty
-                ? const EmptyState(
-                    message: 'No hay estados creados todavía.',
-                    icon: LucideIcons.listChecks,
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-                    itemCount: statuses.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final status = statuses[index];
-                      return Container(
-                        decoration: BoxDecoration(
-                          color: colors.surface,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
-                        ),
-                        child: ListTile(
-                          leading: Icon(LucideIcons.listChecks, color: colors.primary),
-                          title: Text(status.name, style: TextStyle(color: colors.textPrimary)),
-                          subtitle: Text(
-                            'Orden: ${status.order}',
-                            style: TextStyle(color: colors.textSecondary, fontSize: 12),
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: Icon(LucideIcons.pencil, color: colors.primary, size: 18),
-                                onPressed: () => _showStatusFormDialog(context, existing: status),
-                              ),
-                              IconButton(
-                                icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
-                                onPressed: () => _deleteStatus(context, status),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showStatusFormDialog(context),
-        child: const Icon(LucideIcons.plus),
-      ),
+      body: body,
+      floatingActionButton: fab,
     );
   }
 }

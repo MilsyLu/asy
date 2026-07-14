@@ -27,7 +27,11 @@ TimeOfDay _parseHour(String hour) {
 /// Admin: CRUD for `availableHours` (the hours selectable when scheduling
 /// a task), each picked via a native time picker.
 class AvailableHoursPage extends StatelessWidget {
-  const AvailableHoursPage({super.key});
+  const AvailableHoursPage({super.key, this.showAppBar = true});
+
+  /// Set to false when this page lives inside the main shell's [IndexedStack]
+  /// so the outer shell's AppBar is used instead of rendering a second one.
+  final bool showAppBar;
 
   @override
   Widget build(BuildContext context) {
@@ -36,55 +40,58 @@ class AvailableHoursPage extends StatelessWidget {
       ..sort((a, b) => a.hour.compareTo(b.hour));
     final colors = context.colors;
 
+    final body = hours.isEmpty
+        ? const EmptyState(
+            message: 'No hay horarios configurados todavía.',
+            icon: LucideIcons.clock,
+          )
+        : ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+            itemCount: hours.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final item = hours[index];
+              return Container(
+                decoration: BoxDecoration(
+                  color: colors.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
+                ),
+                child: ListTile(
+                  leading: Icon(LucideIcons.clock, color: colors.primary),
+                  title: Text(
+                    item.hour,
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(LucideIcons.pencil, color: colors.primary, size: 18),
+                        onPressed: () => _editHour(context, item),
+                      ),
+                      IconButton(
+                        icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
+                        onPressed: () => _deleteHour(context, item),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+    final fab = FloatingActionButton(
+      onPressed: () => _addHour(context),
+      child: const Icon(LucideIcons.plus),
+    );
+    if (!showAppBar) return Scaffold(body: body, floatingActionButton: fab);
     return Scaffold(
       appBar: AppBar(title: const Text('Horarios disponibles')),
-      body: hours.isEmpty
-          ? const EmptyState(
-              message: 'No hay horarios configurados todavía.',
-              icon: LucideIcons.clock,
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-              itemCount: hours.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
-              itemBuilder: (context, index) {
-                final item = hours[index];
-                return Container(
-                  decoration: BoxDecoration(
-                    color: colors.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
-                  ),
-                  child: ListTile(
-                    leading: Icon(LucideIcons.clock, color: colors.primary),
-                    title: Text(
-                      item.hour,
-                      style: TextStyle(
-                        color: colors.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: Icon(LucideIcons.pencil, color: colors.primary, size: 18),
-                          onPressed: () => _editHour(context, item),
-                        ),
-                        IconButton(
-                          icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
-                          onPressed: () => _deleteHour(context, item),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _addHour(context),
-        child: const Icon(LucideIcons.plus),
-      ),
+      body: body,
+      floatingActionButton: fab,
     );
   }
 }

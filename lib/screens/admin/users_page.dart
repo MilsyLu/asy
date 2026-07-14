@@ -21,7 +21,11 @@ enum _UserStatusFilter { all, active, inactive }
 /// Admin: list of `users`, change role/group, reset password, view FCM
 /// tokens, and manage the active/inactive lifecycle (Sprint 7.3.1).
 class UsersPage extends StatefulWidget {
-  const UsersPage({super.key});
+  const UsersPage({super.key, this.showAppBar = true});
+
+  /// Set to false when this page lives inside the main shell's [IndexedStack]
+  /// so the outer shell's AppBar is used instead of rendering a second one.
+  final bool showAppBar;
 
   @override
   State<UsersPage> createState() => _UsersPageState();
@@ -47,80 +51,83 @@ class _UsersPageState extends State<UsersPage> {
       }
     }).toList();
 
+    final body = Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Row(
+            children: [
+              _StatusFilterChip(
+                label: 'Todos',
+                selected: _filter == _UserStatusFilter.all,
+                onTap: () => setState(() => _filter = _UserStatusFilter.all),
+              ),
+              const SizedBox(width: 8),
+              _StatusFilterChip(
+                label: 'Activos',
+                selected: _filter == _UserStatusFilter.active,
+                onTap: () => setState(() => _filter = _UserStatusFilter.active),
+              ),
+              const SizedBox(width: 8),
+              _StatusFilterChip(
+                label: 'Inactivos',
+                selected: _filter == _UserStatusFilter.inactive,
+                onTap: () => setState(() => _filter = _UserStatusFilter.inactive),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: filtered.isEmpty
+              ? const EmptyState(
+                  message: 'No hay usuarios para este filtro.',
+                  icon: LucideIcons.users,
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+                  itemCount: filtered.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final user = filtered[index];
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: colors.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
+                      ),
+                      child: ListTile(
+                        leading: Icon(LucideIcons.userCircle, color: colors.primary, size: 28),
+                        title: Text(user.name, style: TextStyle(color: colors.textPrimary)),
+                        subtitle: Text(
+                          user.email,
+                          style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                        ),
+                        trailing: Wrap(
+                          spacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            _Tag(label: AuthService.roleLabel(user.role)),
+                            if (user.groupId != null) _Tag(label: catalog.groupName(user.groupId)),
+                            _StatusBadge(isActive: user.isActive),
+                          ],
+                        ),
+                        onTap: () => _showUserDetailSheet(context, user),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+    final fab = FloatingActionButton(
+      onPressed: () => _showCreateUserDialog(context),
+      child: const Icon(LucideIcons.userPlus),
+    );
+    if (!widget.showAppBar) return Scaffold(body: body, floatingActionButton: fab);
     return Scaffold(
       appBar: AppBar(title: const Text('Usuarios')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Row(
-              children: [
-                _StatusFilterChip(
-                  label: 'Todos',
-                  selected: _filter == _UserStatusFilter.all,
-                  onTap: () => setState(() => _filter = _UserStatusFilter.all),
-                ),
-                const SizedBox(width: 8),
-                _StatusFilterChip(
-                  label: 'Activos',
-                  selected: _filter == _UserStatusFilter.active,
-                  onTap: () => setState(() => _filter = _UserStatusFilter.active),
-                ),
-                const SizedBox(width: 8),
-                _StatusFilterChip(
-                  label: 'Inactivos',
-                  selected: _filter == _UserStatusFilter.inactive,
-                  onTap: () => setState(() => _filter = _UserStatusFilter.inactive),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: filtered.isEmpty
-                ? const EmptyState(
-                    message: 'No hay usuarios para este filtro.',
-                    icon: LucideIcons.users,
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final user = filtered[index];
-                      return Container(
-                        decoration: BoxDecoration(
-                          color: colors.surface,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
-                        ),
-                        child: ListTile(
-                          leading: Icon(LucideIcons.userCircle, color: colors.primary, size: 28),
-                          title: Text(user.name, style: TextStyle(color: colors.textPrimary)),
-                          subtitle: Text(
-                            user.email,
-                            style: TextStyle(color: colors.textSecondary, fontSize: 12),
-                          ),
-                          trailing: Wrap(
-                            spacing: 6,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              _Tag(label: AuthService.roleLabel(user.role)),
-                              if (user.groupId != null) _Tag(label: catalog.groupName(user.groupId)),
-                              _StatusBadge(isActive: user.isActive),
-                            ],
-                          ),
-                          onTap: () => _showUserDetailSheet(context, user),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showCreateUserDialog(context),
-        child: const Icon(LucideIcons.userPlus),
-      ),
+      body: body,
+      floatingActionButton: fab,
     );
   }
 }
