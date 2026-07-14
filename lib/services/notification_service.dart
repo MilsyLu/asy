@@ -1,11 +1,13 @@
 import 'dart:io';
-import 'dart:js_interop';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+import 'notification_web_api_stub.dart'
+    if (dart.library.js_interop) 'notification_web_api.dart';
 
 /// This top-level function MUST stay top-level (or static) — it is the
 /// entry point Firebase Messaging invokes when a push notification
@@ -42,15 +44,6 @@ class NotificationPayload {
 
   @override
   String toString() => 'NotificationPayload(type: $type, taskId: $taskId)';
-}
-
-// Thin wrapper around the browser's Notification constructor — used only on
-// web (inside kIsWeb guards) to display foreground push banners without going
-// through the service worker path.
-@JS('Notification')
-extension type _WebNotification._(JSObject _) implements JSObject {
-  external factory _WebNotification(String title, [JSObject? options]);
-  external static String get permission;
 }
 
 /// Wraps Firebase Cloud Messaging + flutter_local_notifications.
@@ -221,13 +214,12 @@ class NotificationService {
           // Background pushes are handled by firebase-messaging-sw.js via the
           // native push event. For foreground, use the Web Notification API
           // directly — flutter_local_notifications has no web implementation.
-          final opts = {
+          showWebNotification(n.title ?? 'CheCu', {
             'body': n.body ?? '',
             'icon': '/icons/Icon-192.png',
             'badge': '/icons/Icon-192.png',
             'tag': message.messageId ?? '',
-          }.jsify()! as JSObject;
-          _WebNotification(n.title ?? 'CheCu', opts);
+          });
           debugPrint('[WEB_FCM] foreground: notification shown via Web Notification API');
         } catch (e) {
           debugPrint('[WEB_FCM] foreground: Notification API error — $e');
@@ -269,7 +261,7 @@ class NotificationService {
   /// ignored and the platform handles registration without it.
   Future<String?> getToken() async {
     if (kIsWeb) {
-      final perm = _WebNotification.permission;
+      final perm = webNotificationPermission;
       final vapidHead = _vapidKey.substring(0, 8);
       final vapidTail = _vapidKey.substring(_vapidKey.length - 8);
       debugPrint(
