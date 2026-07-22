@@ -16,14 +16,13 @@ class AppTheme {
   AppTheme._();
 
   /// Backwards-compatible getter: the original always-dark, gold-accented
-  /// theme (`themeFor(gold, dark)`), kept identical to the historical
-  /// `AppColors`-based palette.
+  /// theme, kept identical to the historical `AppColors`-based palette.
   static ThemeData get darkTheme =>
-      themeFor(AppAccentColor.gold, Brightness.dark);
+      themeFor(kDefaultAccentColor, Brightness.dark);
 
-  /// Builds a [ThemeData] for the given [accent] + [brightness].
-  static ThemeData themeFor(AppAccentColor accent, Brightness brightness) {
-    final colors = ThemeColors.forAccent(accent, brightness);
+  /// Builds a [ThemeData] for the given [accent] color + [brightness].
+  static ThemeData themeFor(Color accent, Brightness brightness) {
+    final colors = ThemeColors.forColor(accent, brightness);
     final base = brightness == Brightness.dark
         ? ThemeData.dark(useMaterial3: true)
         : ThemeData.light(useMaterial3: true);

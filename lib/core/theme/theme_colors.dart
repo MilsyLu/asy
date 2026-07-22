@@ -1,61 +1,44 @@
 import 'package:flutter/material.dart';
 
-/// Accent color options available for user customization (FASE 2).
-///
-/// `gold` matches the original TaskFlow Executive palette exactly, so it
-/// remains the default for all users and preserves the historical look.
-enum AppAccentColor {
-  gold,
-  blue,
-  green,
-  purple;
+/// Default accent color (the original TaskFlow Executive gold), used when a
+/// user has no stored preference yet.
+const Color kDefaultAccentColor = Color(0xFFD4AF37);
 
-  /// Spanish display label shown in the preferences screen.
-  String get label {
-    switch (this) {
-      case AppAccentColor.gold:
-        return 'Dorado';
-      case AppAccentColor.blue:
-        return 'Azul';
-      case AppAccentColor.green:
-        return 'Verde';
-      case AppAccentColor.purple:
-        return 'Morado';
-    }
-  }
+/// Preset names written to `users/{uid}.accentColor` before the accent
+/// picker became a full color wheel (FASE 2) — mapped to their exact
+/// original hex so users who had picked one of these keep looking the same
+/// after that change.
+const Map<String, Color> _legacyAccentPresets = {
+  'gold': kDefaultAccentColor,
+  'blue': Color(0xFF4FA3F7),
+  'green': Color(0xFF43C97A),
+  'purple': Color(0xFFB388F5),
+};
 
-  /// Representative swatch color used by the color picker preview.
-  Color get swatch {
-    switch (this) {
-      case AppAccentColor.gold:
-        return const Color(0xFFD4AF37);
-      case AppAccentColor.blue:
-        return const Color(0xFF4FA3F7);
-      case AppAccentColor.green:
-        return const Color(0xFF43C97A);
-      case AppAccentColor.purple:
-        return const Color(0xFFB388F5);
-    }
-  }
+/// Parses a persisted `users/{uid}.accentColor` value into a [Color].
+/// Accepts a "#RRGGBB" hex string (the current format, chosen via the full
+/// color-wheel picker) or one of the legacy preset names above.
+Color accentColorFromStorage(String? value) {
+  if (value == null) return kDefaultAccentColor;
+  final legacy = _legacyAccentPresets[value];
+  if (legacy != null) return legacy;
+  final cleaned = value.replaceFirst('#', '');
+  final parsed = int.tryParse('FF$cleaned', radix: 16);
+  return parsed != null ? Color(parsed) : kDefaultAccentColor;
+}
 
-  /// Value persisted in `users/{uid}.accentColor`.
-  String get storageValue => name;
-
-  /// Parses a Firestore value, defaulting to [gold] for legacy/unknown values.
-  static AppAccentColor fromStorage(String? value) {
-    return AppAccentColor.values.firstWhere(
-      (e) => e.name == value,
-      orElse: () => AppAccentColor.gold,
-    );
-  }
+/// Serializes a [Color] for storage as `users/{uid}.accentColor`.
+String accentColorToStorage(Color color) {
+  String channel(double v) => (v * 255).round().clamp(0, 255).toRadixString(16).padLeft(2, '0');
+  return '#${channel(color.r)}${channel(color.g)}${channel(color.b)}'.toUpperCase();
 }
 
 /// Full color palette for a given accent + brightness combination.
 ///
 /// This is the single source of truth consumed by [AppTheme.themeFor] to
-/// build a [ThemeData]. `forAccent(gold, dark)` reproduces the exact values
-/// previously hardcoded in `AppColors`, so the default configuration looks
-/// identical to the original always-dark theme.
+/// build a [ThemeData]. `forColor(kDefaultAccentColor, dark)` reproduces the
+/// exact values previously hardcoded in `AppColors`, so the default
+/// configuration looks identical to the original always-dark theme.
 class ThemeColors {
   const ThemeColors({
     required this.background,
@@ -93,74 +76,70 @@ class ThemeColors {
   /// accent colors, like [error]/[success], and only varies by brightness.
   final Color statusRescheduled;
 
-  /// Returns the palette for [accent] + [brightness].
-  static ThemeColors forAccent(AppAccentColor accent, Brightness brightness) {
-    final palettes = brightness == Brightness.dark ? _dark : _light;
-    return palettes[accent]!;
-  }
+  /// Fixed (brightness-only) palette values — identical for every accent
+  /// color, so a custom [primary] only needs to override [primary]/
+  /// [primaryLight]/[onPrimary]/[divider] below.
+  static const _darkFixed = ThemeColors(
+    background: Color(0xFF0A0A0A),
+    surface: Color(0xFF1A1A1A),
+    surfaceVariant: Color(0xFF222222),
+    primary: kDefaultAccentColor, // overridden by forColor
+    primaryLight: kDefaultAccentColor, // overridden by forColor
+    onPrimary: Color(0xFF0A0A0A), // overridden by forColor
+    textPrimary: Color(0xFFF5F5F5),
+    textSecondary: Color(0xFFB0B0B0),
+    error: Color(0xFFCF6679),
+    success: Color(0xFF4CAF50),
+    divider: Color(0x33D4AF37), // overridden by forColor
+    statusPending: Color(0xFFFFC107),
+    statusRescheduled: Color(0xFF64B5F6),
+  );
 
-  static const Map<AppAccentColor, ThemeColors> _dark = {
-    AppAccentColor.gold: ThemeColors(
-      background: Color(0xFF0A0A0A),
-      surface: Color(0xFF1A1A1A),
-      surfaceVariant: Color(0xFF222222),
-      primary: Color(0xFFD4AF37),
-      primaryLight: Color(0xFFE4C568),
-      onPrimary: Color(0xFF0A0A0A),
-      textPrimary: Color(0xFFF5F5F5),
-      textSecondary: Color(0xFFB0B0B0),
-      error: Color(0xFFCF6679),
-      success: Color(0xFF4CAF50),
-      divider: Color(0x33D4AF37),
-      statusPending: Color(0xFFFFC107),
-      statusRescheduled: Color(0xFF64B5F6),
-    ),
-    AppAccentColor.blue: ThemeColors(
-      background: Color(0xFF0A0A0A),
-      surface: Color(0xFF1A1A1A),
-      surfaceVariant: Color(0xFF222222),
-      primary: Color(0xFF4FA3F7),
-      primaryLight: Color(0xFF8AC4FB),
-      onPrimary: Color(0xFF0A0A0A),
-      textPrimary: Color(0xFFF5F5F5),
-      textSecondary: Color(0xFFB0B0B0),
-      error: Color(0xFFCF6679),
-      success: Color(0xFF4CAF50),
-      divider: Color(0x334FA3F7),
-      statusPending: Color(0xFFFFC107),
-      statusRescheduled: Color(0xFF64B5F6),
-    ),
-    AppAccentColor.green: ThemeColors(
-      background: Color(0xFF0A0A0A),
-      surface: Color(0xFF1A1A1A),
-      surfaceVariant: Color(0xFF222222),
-      primary: Color(0xFF43C97A),
-      primaryLight: Color(0xFF8FE6B4),
-      onPrimary: Color(0xFF0A0A0A),
-      textPrimary: Color(0xFFF5F5F5),
-      textSecondary: Color(0xFFB0B0B0),
-      error: Color(0xFFCF6679),
-      success: Color(0xFF4CAF50),
-      divider: Color(0x3343C97A),
-      statusPending: Color(0xFFFFC107),
-      statusRescheduled: Color(0xFF64B5F6),
-    ),
-    AppAccentColor.purple: ThemeColors(
-      background: Color(0xFF0A0A0A),
-      surface: Color(0xFF1A1A1A),
-      surfaceVariant: Color(0xFF222222),
-      primary: Color(0xFFB388F5),
-      primaryLight: Color(0xFFD2B8FF),
-      onPrimary: Color(0xFF0A0A0A),
-      textPrimary: Color(0xFFF5F5F5),
-      textSecondary: Color(0xFFB0B0B0),
-      error: Color(0xFFCF6679),
-      success: Color(0xFF4CAF50),
-      divider: Color(0x33B388F5),
-      statusPending: Color(0xFFFFC107),
-      statusRescheduled: Color(0xFF64B5F6),
-    ),
-  };
+  static const _lightFixed = ThemeColors(
+    background: Color(0xFFF5F5F5),
+    surface: Color(0xFFFFFFFF),
+    surfaceVariant: Color(0xFFECECEC),
+    primary: kDefaultAccentColor, // overridden by forColor
+    primaryLight: kDefaultAccentColor, // overridden by forColor
+    onPrimary: Color(0xFFFFFFFF), // overridden by forColor
+    textPrimary: Color(0xFF1A1A1A),
+    textSecondary: Color(0xFF5C5C5C),
+    error: Color(0xFFC62828),
+    success: Color(0xFF2E7D32),
+    divider: Color(0x33B8860B), // overridden by forColor
+    statusPending: Color(0xFFFF8F00),
+    statusRescheduled: Color(0xFF1976D2),
+  );
+
+  /// Builds the palette for an arbitrary [primary] accent color (chosen via
+  /// the full color-wheel picker in Configuración) + [brightness]. Every
+  /// field except primary/primaryLight/onPrimary/divider stays fixed per
+  /// brightness — matching how the old hand-picked accent presets worked,
+  /// just generalized to any color instead of 4 fixed choices.
+  static ThemeColors forColor(Color primary, Brightness brightness) {
+    final fixed = brightness == Brightness.dark ? _darkFixed : _lightFixed;
+    final primaryLight = Color.lerp(primary, Colors.white, 0.35)!;
+    // Luminance-based contrast, not tied to app brightness — a very light
+    // custom color still needs dark text/icons on top of it even in dark
+    // mode, and vice versa.
+    final onPrimary =
+        primary.computeLuminance() > 0.45 ? const Color(0xFF1A1A1A) : const Color(0xFFFFFFFF);
+    return ThemeColors(
+      background: fixed.background,
+      surface: fixed.surface,
+      surfaceVariant: fixed.surfaceVariant,
+      primary: primary,
+      primaryLight: primaryLight,
+      onPrimary: onPrimary,
+      textPrimary: fixed.textPrimary,
+      textSecondary: fixed.textSecondary,
+      error: fixed.error,
+      success: fixed.success,
+      divider: primary.withValues(alpha: 0.2),
+      statusPending: fixed.statusPending,
+      statusRescheduled: fixed.statusRescheduled,
+    );
+  }
 
   /// Builds the [AppColorsExtension] registered on [ThemeData] for this
   /// palette (see [AppTheme.themeFor]).
@@ -179,69 +158,6 @@ class ThemeColors {
         statusPending: statusPending,
         statusRescheduled: statusRescheduled,
       );
-
-  static const Map<AppAccentColor, ThemeColors> _light = {
-    AppAccentColor.gold: ThemeColors(
-      background: Color(0xFFF5F5F5),
-      surface: Color(0xFFFFFFFF),
-      surfaceVariant: Color(0xFFECECEC),
-      primary: Color(0xFFB8860B),
-      primaryLight: Color(0xFFD4AF37),
-      onPrimary: Color(0xFFFFFFFF),
-      textPrimary: Color(0xFF1A1A1A),
-      textSecondary: Color(0xFF5C5C5C),
-      error: Color(0xFFC62828),
-      success: Color(0xFF2E7D32),
-      divider: Color(0x33B8860B),
-      statusPending: Color(0xFFFF8F00),
-      statusRescheduled: Color(0xFF1976D2),
-    ),
-    AppAccentColor.blue: ThemeColors(
-      background: Color(0xFFF5F5F5),
-      surface: Color(0xFFFFFFFF),
-      surfaceVariant: Color(0xFFECECEC),
-      primary: Color(0xFF1565C0),
-      primaryLight: Color(0xFF4FA3F7),
-      onPrimary: Color(0xFFFFFFFF),
-      textPrimary: Color(0xFF1A1A1A),
-      textSecondary: Color(0xFF5C5C5C),
-      error: Color(0xFFC62828),
-      success: Color(0xFF2E7D32),
-      divider: Color(0x331565C0),
-      statusPending: Color(0xFFFF8F00),
-      statusRescheduled: Color(0xFF1976D2),
-    ),
-    AppAccentColor.green: ThemeColors(
-      background: Color(0xFFF5F5F5),
-      surface: Color(0xFFFFFFFF),
-      surfaceVariant: Color(0xFFECECEC),
-      primary: Color(0xFF2E7D32),
-      primaryLight: Color(0xFF4CAF50),
-      onPrimary: Color(0xFFFFFFFF),
-      textPrimary: Color(0xFF1A1A1A),
-      textSecondary: Color(0xFF5C5C5C),
-      error: Color(0xFFC62828),
-      success: Color(0xFF2E7D32),
-      divider: Color(0x332E7D32),
-      statusPending: Color(0xFFFF8F00),
-      statusRescheduled: Color(0xFF1976D2),
-    ),
-    AppAccentColor.purple: ThemeColors(
-      background: Color(0xFFF5F5F5),
-      surface: Color(0xFFFFFFFF),
-      surfaceVariant: Color(0xFFECECEC),
-      primary: Color(0xFF7E3FF2),
-      primaryLight: Color(0xFFB388F5),
-      onPrimary: Color(0xFFFFFFFF),
-      textPrimary: Color(0xFF1A1A1A),
-      textSecondary: Color(0xFF5C5C5C),
-      error: Color(0xFFC62828),
-      success: Color(0xFF2E7D32),
-      divider: Color(0x337E3FF2),
-      statusPending: Color(0xFFFF8F00),
-      statusRescheduled: Color(0xFF1976D2),
-    ),
-  };
 }
 
 /// [ThemeData] extension exposing [ThemeColors] to every widget via

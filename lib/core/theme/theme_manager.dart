@@ -10,14 +10,15 @@ import 'theme_preferences_cache.dart';
 
 /// Single source of truth for the app's visual personalization (FASE 1-3).
 ///
-/// Holds the active [ThemeMode] (system/light/dark) and [AppAccentColor]
-/// (gold/blue/green/purple), exposes the matching [lightTheme]/[darkTheme]
-/// for [MaterialApp], and persists per-user choices to Firestore
-/// (`users/{uid}.themeMode` / `.accentColor`) — the source of truth across
-/// devices — while mirroring them to a local [ThemePreferencesCache] so the
-/// app can apply the last-known preferences instantly on the next launch,
-/// before the Firestore document has loaded. Defaults to dark mode + the
-/// gold accent, matching the app's original always-dark theme.
+/// Holds the active [ThemeMode] (system/light/dark) and accent [Color]
+/// (picked via a full color-wheel picker in Configuración), exposes the
+/// matching [lightTheme]/[darkTheme] for [MaterialApp], and persists
+/// per-user choices to Firestore (`users/{uid}.themeMode` / `.accentColor`)
+/// — the source of truth across devices — while mirroring them to a local
+/// [ThemePreferencesCache] so the app can apply the last-known preferences
+/// instantly on the next launch, before the Firestore document has loaded.
+/// Defaults to dark mode + [kDefaultAccentColor] (gold), matching the app's
+/// original always-dark theme.
 class ThemeManager extends ChangeNotifier {
   ThemeManager({UserRepository? userRepository, ThemePreferencesCache? cache})
       : _userRepository = userRepository ?? UserRepository(),
@@ -29,11 +30,11 @@ class ThemeManager extends ChangeNotifier {
   final ThemePreferencesCache _cache;
 
   ThemeMode _themeMode = ThemeMode.dark;
-  AppAccentColor _accentColor = AppAccentColor.gold;
+  Color _accentColor = kDefaultAccentColor;
   String? _userId;
 
   ThemeMode get themeMode => _themeMode;
-  AppAccentColor get accentColor => _accentColor;
+  Color get accentColor => _accentColor;
 
   ThemeData get lightTheme =>
       AppTheme.themeFor(_accentColor, Brightness.light);
@@ -47,7 +48,7 @@ class ThemeManager extends ChangeNotifier {
   Future<void> loadCachedPreferences() async {
     final (mode, accent) = await _cache.read();
     final resolvedMode = themeModeFromStorage(mode);
-    final resolvedAccent = AppAccentColor.fromStorage(accent);
+    final resolvedAccent = accentColorFromStorage(accent);
 
     if (resolvedMode != _themeMode || resolvedAccent != _accentColor) {
       _themeMode = resolvedMode;
@@ -71,7 +72,7 @@ class ThemeManager extends ChangeNotifier {
 
     final userChanged = _userId != user.id;
     final mode = themeModeFromStorage(user.themeMode);
-    final accent = AppAccentColor.fromStorage(user.accentColor);
+    final accent = accentColorFromStorage(user.accentColor);
     _userId = user.id;
 
     if (userChanged || mode != _themeMode || accent != _accentColor) {
@@ -80,7 +81,7 @@ class ThemeManager extends ChangeNotifier {
       notifyListeners();
       unawaited(_cache.save(
         themeMode: themeModeToStorage(mode),
-        accentColor: accent.storageValue,
+        accentColor: accentColorToStorage(accent),
       ));
     }
   }
@@ -93,7 +94,7 @@ class ThemeManager extends ChangeNotifier {
     notifyListeners();
     unawaited(_cache.save(
       themeMode: themeModeToStorage(mode),
-      accentColor: _accentColor.storageValue,
+      accentColor: accentColorToStorage(_accentColor),
     ));
     final uid = _userId;
     if (uid != null) {
@@ -106,19 +107,19 @@ class ThemeManager extends ChangeNotifier {
 
   /// Updates the accent color immediately, mirrors it to the local startup
   /// cache, and persists it for the signed-in user in Firestore.
-  Future<void> setAccentColor(AppAccentColor accent) async {
+  Future<void> setAccentColor(Color accent) async {
     if (_accentColor == accent) return;
     _accentColor = accent;
     notifyListeners();
     unawaited(_cache.save(
       themeMode: themeModeToStorage(_themeMode),
-      accentColor: accent.storageValue,
+      accentColor: accentColorToStorage(accent),
     ));
     final uid = _userId;
     if (uid != null) {
       await _userRepository.updateThemePreferences(
         uid,
-        accentColor: accent.storageValue,
+        accentColor: accentColorToStorage(accent),
       );
     }
   }

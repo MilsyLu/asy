@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
@@ -29,6 +30,7 @@ class SettingsPage extends StatelessWidget {
     final themeManager = context.watch<ThemeManager>();
     final user = context.watch<AuthProvider>().appUser;
     final isDesktop = context.isDesktop;
+    final isMobile = context.isMobile;
     final hPad = isDesktop
         ? AppSpacing.pagePaddingDesktop
         : context.isTablet
@@ -56,12 +58,19 @@ class SettingsPage extends StatelessWidget {
                 children: [
                   Expanded(
                     flex: 3,
-                    child: _MainPrefsColumn(themeManager: themeManager, user: user),
+                    child: _MainPrefsColumn(
+                      themeManager: themeManager,
+                      user: user,
+                      showAccentSection: isMobile,
+                    ),
                   ),
                   const SizedBox(width: AppSpacing.lg),
                   Expanded(
                     flex: 2,
-                    child: _SidePanelColumn(),
+                    child: _SidePanelColumn(
+                      themeManager: themeManager,
+                      showAccentSection: !isMobile,
+                    ),
                   ),
                 ],
               )
@@ -69,9 +78,16 @@ class SettingsPage extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _MainPrefsColumn(themeManager: themeManager, user: user),
+                  _MainPrefsColumn(
+                    themeManager: themeManager,
+                    user: user,
+                    showAccentSection: isMobile,
+                  ),
                   const SizedBox(height: AppSpacing.md),
-                  _SidePanelColumn(),
+                  _SidePanelColumn(
+                    themeManager: themeManager,
+                    showAccentSection: !isMobile,
+                  ),
                 ],
               ),
           ],
@@ -119,10 +135,18 @@ class _SettingsHeader extends StatelessWidget {
 // ── Two-column layout pieces ──────────────────────────────────────────────────
 
 class _MainPrefsColumn extends StatelessWidget {
-  const _MainPrefsColumn({required this.themeManager, required this.user});
+  const _MainPrefsColumn({
+    required this.themeManager,
+    required this.user,
+    required this.showAccentSection,
+  });
 
   final ThemeManager themeManager;
   final AppUser? user;
+
+  /// Mobile only — tablet/desktop show Color principal in [_SidePanelColumn]
+  /// instead (below Consejos).
+  final bool showAccentSection;
 
   @override
   Widget build(BuildContext context) {
@@ -138,24 +162,38 @@ class _MainPrefsColumn extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
         ],
         _AppearanceSection(themeManager: themeManager),
-        const SizedBox(height: AppSpacing.md),
-        _AccentColorSection(themeManager: themeManager),
+        if (showAccentSection) ...[
+          const SizedBox(height: AppSpacing.md),
+          _AccentColorSection(themeManager: themeManager),
+        ],
       ],
     );
   }
 }
 
 class _SidePanelColumn extends StatelessWidget {
+  const _SidePanelColumn({required this.themeManager, required this.showAccentSection});
+
+  final ThemeManager themeManager;
+
+  /// Tablet/desktop only — mobile keeps Color principal in
+  /// [_MainPrefsColumn], right after Apariencia, unchanged.
+  final bool showAccentSection;
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: const [
-        _ThemePreviewCard(),
-        SizedBox(height: AppSpacing.md),
-        _AboutCard(),
-        SizedBox(height: AppSpacing.md),
-        _TipsCard(),
+      children: [
+        const _ThemePreviewCard(),
+        const SizedBox(height: AppSpacing.md),
+        const _AboutCard(),
+        const SizedBox(height: AppSpacing.md),
+        const _TipsCard(),
+        if (showAccentSection) ...[
+          const SizedBox(height: AppSpacing.md),
+          _AccentColorSection(themeManager: themeManager),
+        ],
       ],
     );
   }
@@ -571,86 +609,66 @@ class _AccentColorSection extends StatelessWidget {
 
   final ThemeManager themeManager;
 
-  @override
-  Widget build(BuildContext context) {
-    return _PrefCard(
-      icon: LucideIcons.palette,
-      title: 'Color principal',
-      child: Wrap(
-        spacing: AppSpacing.sm,
-        runSpacing: AppSpacing.sm,
-        children: [
-          for (final accent in AppAccentColor.values)
-            _AccentChip(
-              accent: accent,
-              selected: themeManager.accentColor == accent,
-              onTap: () => context.read<ThemeManager>().setAccentColor(accent),
-            ),
+  Future<void> _pickColor(BuildContext context) async {
+    var tempColor = themeManager.accentColor;
+    final picked = await showDialog<Color>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Color principal'),
+        content: SingleChildScrollView(
+          child: ColorPicker(
+            pickerColor: tempColor,
+            onColorChanged: (c) => tempColor = c,
+            enableAlpha: false,
+            labelTypes: const [],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(tempColor),
+            child: const Text('Guardar'),
+          ),
         ],
       ),
     );
+    if (picked != null && context.mounted) {
+      context.read<ThemeManager>().setAccentColor(picked);
+    }
   }
-}
-
-class _AccentChip extends StatelessWidget {
-  const _AccentChip({
-    required this.accent,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final AppAccentColor accent;
-  final bool selected;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.sm,
-        ),
-        decoration: BoxDecoration(
-          color: selected
-              ? accent.swatch.withValues(alpha: 0.12)
-              : colors.background,
-          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-          border: Border.all(
-            color: selected ? accent.swatch : colors.divider,
-            width: selected ? 1.5 : 1.0,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 18,
-              height: 18,
+    return _PrefCard(
+      icon: LucideIcons.palette,
+      title: 'Color principal',
+      child: Row(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(24),
+            onTap: () => _pickColor(context),
+            child: Container(
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: accent.swatch,
+                color: themeManager.accentColor,
+                border: Border.all(color: colors.divider, width: 1.5),
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
-            Text(
-              accent.label,
-              style: TextStyle(
-                color: selected ? colors.textPrimary : colors.textSecondary,
-                fontSize: 13,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-              ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Text(
+              'Toca el círculo para elegir cualquier color.',
+              style: TextStyle(color: colors.textSecondary, fontSize: 12),
             ),
-            if (selected) ...[
-              const SizedBox(width: AppSpacing.xs),
-              Icon(LucideIcons.check, size: 12, color: accent.swatch),
-            ],
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
