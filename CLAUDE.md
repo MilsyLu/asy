@@ -162,7 +162,22 @@ gold-accented palette (`AppColors.background`, `.gold`, etc.) used throughout
 
 Firebase project id: **`chhecu`** (Hosting URL: `https://chhecu.web.app`). No
 `.firebaserc` is committed, so every command below is explicit with
-`--project chhecu` — run `firebase login` once if the CLI isn't authenticated.
+`--project chhecu`.
+
+**Autenticación (desde 2026-07-22):** este equipo tiene una cuenta de
+servicio de Google Cloud (`checu-deploy@chhecu.iam.gserviceaccount.com`, rol
+**Firebase Hosting Admin** únicamente — no acceso total al proyecto) con su
+clave JSON guardada fuera del repo en
+`C:\Users\ASUS\.checu-deploy\service-account.json`, y la variable de entorno
+de usuario `GOOGLE_APPLICATION_CREDENTIALS` apuntando a esa ruta. Con eso,
+`firebase deploy` se autentica solo — **ya no hace falta pasar `--token` ni
+pedirle un token a Michel en cada sesión.** Ese archivo `.json` es una
+credencial: nunca debe copiarse dentro del repo ni subirse a ningún lado. Si
+en algún momento deja de funcionar (p. ej. equipo nuevo), hay que repetir el
+flujo de creación de cuenta de servicio en
+`https://console.cloud.google.com/iam-admin/serviceaccounts?project=chhecu`
+y volver a apuntar la variable de entorno al nuevo archivo — no volver al
+flujo de token CI salvo que Michel lo pida explícitamente.
 
 ### 1. Flujo de despliegue
 

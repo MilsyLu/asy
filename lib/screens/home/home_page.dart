@@ -430,7 +430,11 @@ class _HomePageState extends State<HomePage> {
   }
 
   bool _matchesFilters(TaskModel task) {
-    if (_groupFilter != null && task.groupId != _groupFilter) return false;
+    if (_groupFilter == AppFilterValues.noGroup) {
+      if (task.groupId != null) return false;
+    } else if (_groupFilter != null && task.groupId != _groupFilter) {
+      return false;
+    }
     if (_userFilter != null && task.assignedUserId != _userFilter) return false;
     if (_statusFilter != null && task.statusId != _statusFilter) return false;
     if (_clientQuery.isNotEmpty &&
@@ -1340,7 +1344,10 @@ class _FiltersBar extends StatelessWidget {
       label: 'Equipo',
       icon: LucideIcons.users,
       value: groupFilter,
-      items: [for (final g in groups) DropdownMenuItem(value: g.id, child: Text(g.name))],
+      items: [
+        const DropdownMenuItem(value: AppFilterValues.noGroup, child: Text('Sin equipo')),
+        for (final g in groups) DropdownMenuItem(value: g.id, child: Text(g.name)),
+      ],
       onChanged: onGroupChanged,
     );
     final userField = _FilterDropdown<String>(

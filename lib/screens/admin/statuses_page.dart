@@ -372,9 +372,18 @@ class _CreateStatusPanel extends StatefulWidget {
   State<_CreateStatusPanel> createState() => _CreateStatusPanelState();
 }
 
+/// Next "Orden" value offered by default in [_CreateStatusPanel] — one past
+/// the highest order already in use (1 when there are none), so admins
+/// don't have to look up the last order themselves.
+int _nextStatusOrder(CatalogProvider catalog) {
+  if (catalog.statuses.isEmpty) return 1;
+  return catalog.statuses.map((s) => s.order).reduce((a, b) => a > b ? a : b) + 1;
+}
+
 class _CreateStatusPanelState extends State<_CreateStatusPanel> {
   final _nameController = TextEditingController();
-  final _orderController = TextEditingController();
+  late final _orderController =
+      TextEditingController(text: '${_nextStatusOrder(context.read<CatalogProvider>())}');
   final _formKey = GlobalKey<FormState>();
   bool _isSaving = false;
 
@@ -394,7 +403,7 @@ class _CreateStatusPanelState extends State<_CreateStatusPanel> {
       await repo.addStatus(_nameController.text.trim(), order);
       if (mounted) {
         _nameController.clear();
-        _orderController.clear();
+        _orderController.text = '${order + 1}';
         SnackbarUtils.showSuccess(context, 'Estado creado');
       }
     } catch (e) {

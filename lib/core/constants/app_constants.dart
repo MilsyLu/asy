@@ -58,6 +58,15 @@ class AppPushNotificationModes {
   static const String none = 'none';
 }
 
+/// Sentinel value for "Sin equipo" in Equipo filter dropdowns — distinct from
+/// `null` (which means "Todos", i.e. no filter applied) and from any real
+/// Firestore group id.
+class AppFilterValues {
+  AppFilterValues._();
+
+  static const String noGroup = '__sin_equipo__';
+}
+
 class AppConstants {
   AppConstants._();
 

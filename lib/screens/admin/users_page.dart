@@ -39,6 +39,7 @@ class UsersPage extends StatefulWidget {
 class _UsersPageState extends State<UsersPage> {
   _UserStatusFilter _filter = _UserStatusFilter.all;
   String? _groupFilter;
+  String? _roleFilter;
   final _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -58,7 +59,12 @@ class _UsersPageState extends State<UsersPage> {
     final filtered = users.where((u) {
       if (_filter == _UserStatusFilter.active && !u.isActive) return false;
       if (_filter == _UserStatusFilter.inactive && u.isActive) return false;
-      if (_groupFilter != null && u.groupId != _groupFilter) return false;
+      if (_groupFilter == AppFilterValues.noGroup) {
+        if (u.groupId != null) return false;
+      } else if (_groupFilter != null && u.groupId != _groupFilter) {
+        return false;
+      }
+      if (_roleFilter != null && u.role != _roleFilter) return false;
       if (query.isNotEmpty &&
           !u.name.toLowerCase().contains(query) &&
           !u.email.toLowerCase().contains(query)) {
@@ -85,23 +91,37 @@ class _UsersPageState extends State<UsersPage> {
                       value: _groupFilter,
                       onChanged: (v) => setState(() => _groupFilter = v),
                     ),
+                    const SizedBox(height: 8),
+                    _RoleFilterDropdown(
+                      value: _roleFilter,
+                      onChanged: (v) => setState(() => _roleFilter = v),
+                    ),
                   ],
                 )
-              : Row(
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      flex: 2,
-                      child: _UserSearchField(
-                          controller: _searchController,
-                          onChanged: (v) => setState(() => _searchQuery = v)),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _GroupFilterDropdown(
-                        groups: groups,
-                        value: _groupFilter,
-                        onChanged: (v) => setState(() => _groupFilter = v),
-                      ),
+                    _UserSearchField(
+                        controller: _searchController,
+                        onChanged: (v) => setState(() => _searchQuery = v)),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _GroupFilterDropdown(
+                            groups: groups,
+                            value: _groupFilter,
+                            onChanged: (v) => setState(() => _groupFilter = v),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _RoleFilterDropdown(
+                            value: _roleFilter,
+                            onChanged: (v) => setState(() => _roleFilter = v),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -184,7 +204,10 @@ class _UsersPageState extends State<UsersPage> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 12, 16, 16),
+                  // Extra top offset (vs. the 12px used by Equipos/Estados)
+                  // to realign with the list, which now starts one row
+                  // lower here — the Rol filter added a second filters row.
+                  padding: const EdgeInsets.fromLTRB(0, 68, 16, 16),
                   child: SizedBox(width: 320, child: panel),
                 ),
               ],
@@ -421,7 +444,45 @@ class _GroupFilterDropdown extends StatelessWidget {
       dropdownColor: colors.surface,
       items: [
         const DropdownMenuItem<String?>(value: null, child: Text('Todos')),
+        const DropdownMenuItem<String?>(
+          value: AppFilterValues.noGroup,
+          child: Text('Sin equipo'),
+        ),
         for (final g in groups) DropdownMenuItem<String?>(value: g.id, child: Text(g.name)),
+      ],
+      onChanged: onChanged,
+    );
+  }
+}
+
+class _RoleFilterDropdown extends StatelessWidget {
+  const _RoleFilterDropdown({required this.value, required this.onChanged});
+
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return DropdownButtonFormField<String?>(
+      initialValue: value,
+      isExpanded: true,
+      decoration: InputDecoration(
+        isDense: true,
+        labelText: 'Rol',
+        prefixIcon: Icon(LucideIcons.shield, color: colors.primary, size: 18),
+      ),
+      dropdownColor: colors.surface,
+      items: [
+        const DropdownMenuItem<String?>(value: null, child: Text('Todos')),
+        DropdownMenuItem<String?>(
+          value: AppRoles.superAdmin,
+          child: Text(AuthService.roleLabel(AppRoles.superAdmin)),
+        ),
+        DropdownMenuItem<String?>(
+          value: AppRoles.trabajadorNormal,
+          child: Text(AuthService.roleLabel(AppRoles.trabajadorNormal)),
+        ),
       ],
       onChanged: onChanged,
     );
