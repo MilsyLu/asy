@@ -63,7 +63,7 @@ class AppConstants {
 
   static const String appName = 'CheCu';
   static const String appTagline = 'Chequeo y Cumplimiento de tareas';
-  static const String appVersion = '1.0';
+  static const String appVersion = '1.4';
   static const String appDeveloper = 'CustoDesk 2026';
 
   /// Fixed institutional brand colors (Sprint 7.3.2A/B). Used by screens

@@ -23,7 +23,10 @@ import 'reschedule_dialog.dart';
 /// Matches the quick-option offsets defined in `_ReminderOption` so the
 /// detail dialog shows "15 minutos antes" instead of a raw timestamp when
 /// the reminder was set via a quick option.
-String _reminderLabel(TaskModel task) {
+///
+/// Public (not file-private) so the desktop inline task-detail panel
+/// ([HomePage]) can render the same label without duplicating this logic.
+String reminderLabel(TaskModel task) {
   final reminderTime = task.reminderTime;
   if (reminderTime == null) return 'Sin recordatorio';
 
@@ -74,7 +77,7 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _DetailRow(
+              TaskDetailRow(
                 icon: LucideIcons.userCircle,
                 label: 'Cliente',
                 value: task.clientName,
@@ -111,12 +114,12 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
                       ),
                     ),
                     if (formattedPhone.isNotEmpty)
-                      _CopyPhoneButton(phone: Validators.cleanPhone(task.clientPhone)),
+                      CopyPhoneButton(phone: Validators.cleanPhone(task.clientPhone)),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
-              _DetailRow(
+              TaskDetailRow(
                 icon: LucideIcons.tag,
                 label: 'Tipo',
                 valueWidget: TaskTypeChip(
@@ -126,39 +129,39 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
                 ),
               ),
               const SizedBox(height: 12),
-              _DetailRow(
+              TaskDetailRow(
                 icon: LucideIcons.calendar,
                 label: 'Fecha',
                 value: AppDateUtils.formatShortDate(AppDateUtils.parseDateKey(task.date)),
               ),
               const SizedBox(height: 12),
-              _DetailRow(icon: LucideIcons.clock, label: 'Hora', value: task.hour),
+              TaskDetailRow(icon: LucideIcons.clock, label: 'Hora', value: task.hour),
               const SizedBox(height: 12),
-              _DetailRow(
+              TaskDetailRow(
                 icon: LucideIcons.userCheck,
                 label: 'Encargado',
                 value: catalog.userName(task.assignedUserId),
               ),
               const SizedBox(height: 12),
-              _DetailRow(
+              TaskDetailRow(
                 icon: LucideIcons.users,
-                label: 'Grupo',
+                label: 'Equipo',
                 value: catalog.groupName(task.groupId),
               ),
               const SizedBox(height: 12),
-              _DetailRow(
+              TaskDetailRow(
                 icon: LucideIcons.fileText,
                 label: 'Observaciones',
                 value: task.observations.isEmpty ? 'Sin observaciones' : task.observations,
               ),
               const SizedBox(height: 12),
-              _DetailRow(
+              TaskDetailRow(
                 icon: LucideIcons.bell,
                 label: 'Recordatorio',
-                value: _reminderLabel(task),
+                value: reminderLabel(task),
               ),
               const SizedBox(height: 12),
-              _DetailRow(
+              TaskDetailRow(
                 icon: LucideIcons.userPlus,
                 label: 'Creado por',
                 value: task.createdBy != null
@@ -276,9 +279,14 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
   );
 }
 
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.icon, required this.label, this.value, this.valueWidget})
-      : assert(value != null || valueWidget != null);
+class TaskDetailRow extends StatelessWidget {
+  const TaskDetailRow({
+    super.key,
+    required this.icon,
+    required this.label,
+    this.value,
+    this.valueWidget,
+  }) : assert(value != null || valueWidget != null);
 
   final IconData icon;
   final String label;
@@ -322,16 +330,16 @@ class _DetailRow extends StatelessWidget {
 /// Copy-to-clipboard button for [phone]. On tap, copies the number and
 /// temporarily swaps its icon from "copy" to "check" for ~2 seconds while
 /// showing a top banner confirmation (see [_showCopiedBanner]).
-class _CopyPhoneButton extends StatefulWidget {
-  const _CopyPhoneButton({required this.phone});
+class CopyPhoneButton extends StatefulWidget {
+  const CopyPhoneButton({super.key, required this.phone});
 
   final String phone;
 
   @override
-  State<_CopyPhoneButton> createState() => _CopyPhoneButtonState();
+  State<CopyPhoneButton> createState() => _CopyPhoneButtonState();
 }
 
-class _CopyPhoneButtonState extends State<_CopyPhoneButton> {
+class _CopyPhoneButtonState extends State<CopyPhoneButton> {
   bool _copied = false;
 
   Future<void> _copy() async {

@@ -157,7 +157,7 @@ class _ReportsPageState extends State<ReportsPage>
                   Tab(text: 'Tareas'),
                   Tab(text: 'Estados'),
                   Tab(text: 'Usuarios'),
-                  Tab(text: 'Grupos'),
+                  Tab(text: 'Equipos'),
                   Tab(text: 'Racha'),
                   Tab(text: 'Clientes'),
                 ],

@@ -60,7 +60,7 @@ class TasksReportTab extends StatelessWidget {
                   DataColumn(label: Text('Cliente')),
                   DataColumn(label: Text('Teléfono')),
                   DataColumn(label: Text('Tipo')),
-                  DataColumn(label: Text('Grupo')),
+                  DataColumn(label: Text('Equipo')),
                   DataColumn(label: Text('Encargado')),
                   DataColumn(label: Text('Estado')),
                   DataColumn(label: Text('Reprog.')),
@@ -89,7 +89,7 @@ class TasksReportTab extends StatelessWidget {
 
   Future<void> _exportCsv(List<TaskModel> tasks, CatalogProvider catalog) async {
     final rows = <List<dynamic>>[
-      ['Fecha', 'Hora', 'Cliente', 'Teléfono', 'Tipo', 'Grupo', 'Encargado', 'Estado', 'Reprogramaciones'],
+      ['Fecha', 'Hora', 'Cliente', 'Teléfono', 'Tipo', 'Equipo', 'Encargado', 'Estado', 'Reprogramaciones'],
       for (final t in tasks)
         [
           t.date,

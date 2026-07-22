@@ -51,8 +51,8 @@ AppUser? topUserByCompleted(List<TaskModel> tasks, CatalogProvider catalog) {
   return catalog.userById(topId);
 }
 
-/// Per-group assigned/completed counts, used both for the "Grupo con mejor
-/// cumplimiento" highlight and the "Cumplimiento por grupo" chart (Sprint
+/// Per-group assigned/completed counts, used both for the "Equipo con mejor
+/// cumplimiento" highlight and the "Cumplimiento por equipo" chart (Sprint
 /// 6.2 Parts 5 and 6) so the breakdown is computed exactly once.
 class GroupCompliance {
   const GroupCompliance({

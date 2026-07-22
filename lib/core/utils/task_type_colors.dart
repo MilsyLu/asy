@@ -11,6 +11,19 @@ Color? parseHexColor(String? hex) {
   return value != null ? Color(value) : null;
 }
 
+/// The inverse of [parseHexColor] — serializes a [Color] (e.g. picked via
+/// `flutter_colorpicker`) back to the "#RRGGBB" format stored on
+/// [TaskTypeModel.color]. Uses the 0.0–1.0 component getters rather than the
+/// deprecated 0–255 `.value` accessor.
+///
+/// Named `taskTypeColorToHex` (not `colorToHex`) because `flutter_colorpicker`
+/// itself exports a top-level `colorToHex`, which would otherwise collide.
+String taskTypeColorToHex(Color color) {
+  String channel(double v) =>
+      (v * 255).round().clamp(0, 255).toRadixString(16).padLeft(2, '0');
+  return '#${channel(color.r)}${channel(color.g)}${channel(color.b)}'.toUpperCase();
+}
+
 /// Centralizes resolving a [TaskTypeModel]'s configured color (Sprint 5.5),
 /// previously duplicated as ad-hoc hex parsing in individual screens.
 extension TaskTypeColor on TaskTypeModel {

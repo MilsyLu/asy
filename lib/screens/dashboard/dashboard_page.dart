@@ -241,7 +241,7 @@ class _DashboardPageState extends State<DashboardPage> {
               value: s.topUser?.name ?? 'Sin datos',
             ),
             _ExecutiveItem(
-              label: 'Mejor grupo',
+              label: 'Mejor equipo',
               value: s.bestGroup == null
                   ? 'Sin datos'
                   : '${s.catalog.groupName(s.bestGroup!.groupId)} · ${s.bestGroup!.percent}%',
@@ -265,7 +265,7 @@ class _DashboardPageState extends State<DashboardPage> {
         const SizedBox(height: _kCardGap),
         _DashboardCard(child: _StatusDistributionChart(distribution: s.statusDistribution)),
         const SizedBox(height: _kSectionGap),
-        _SectionTitle('Cumplimiento por grupo'),
+        _SectionTitle('Cumplimiento por equipo'),
         const SizedBox(height: _kCardGap),
         _DashboardCard(child: _GroupComplianceChart(groups: s.groupCompliance, catalog: s.catalog)),
         const SizedBox(height: _kSectionGap),
@@ -368,7 +368,7 @@ class _DashboardPageState extends State<DashboardPage> {
               value: s.topUser?.name ?? 'Sin datos',
             ),
             _ExecutiveItem(
-              label: 'Mejor grupo',
+              label: 'Mejor equipo',
               value: s.bestGroup == null
                   ? 'Sin datos'
                   : '${s.catalog.groupName(s.bestGroup!.groupId)} · ${s.bestGroup!.percent}%',
@@ -388,7 +388,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ]),
         ),
         const SizedBox(height: _kSectionGap),
-        _SectionTitle('Distribución de estados  ·  Cumplimiento por grupo'),
+        _SectionTitle('Distribución de estados  ·  Cumplimiento por equipo'),
         const SizedBox(height: _kCardGap),
         // 2 charts side by side
         _TwoColRow(
@@ -552,7 +552,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           const SizedBox(height: AppSpacing.md),
 
-          // ── Row 3: distribución + cumplimiento por grupo + tendencia ────
+          // ── Row 3: distribución + cumplimiento por equipo + tendencia ────
           IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -577,7 +577,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _SectionTitle('Cumplimiento por grupo', fontSize: 16),
+                        _SectionTitle('Cumplimiento por equipo', fontSize: 16),
                         const SizedBox(height: AppSpacing.md),
                         _GroupComplianceChart(
                             groups: s.groupCompliance, catalog: s.catalog),
@@ -631,7 +631,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
                     child: _ExecutiveHorizontalItem(
                       icon: LucideIcons.users,
-                      label: 'Mejor grupo',
+                      label: 'Mejor equipo',
                       value: s.bestGroup == null
                           ? 'No hay suficiente información todavía.'
                           : '${s.catalog.groupName(s.bestGroup!.groupId)} · ${s.bestGroup!.percent}%',
@@ -1525,7 +1525,7 @@ class _StatusDistributionChart extends StatelessWidget {
   }
 }
 
-/// Part 6.2: horizontal-bar ranking for "Cumplimiento por grupo".
+/// Part 6.2: horizontal-bar ranking for "Cumplimiento por equipo".
 class _GroupComplianceChart extends StatelessWidget {
   const _GroupComplianceChart({required this.groups, required this.catalog});
 
@@ -1726,7 +1726,7 @@ void _showOverdueTasksSheet(
           lines: [
             '${AppDateUtils.formatShortDate(task.scheduledDateTime)} · ${task.hour}',
             'Usuario: ${catalog.userName(task.assignedUserId)}',
-            'Grupo: ${catalog.groupName(task.groupId)}',
+            'Equipo: ${catalog.groupName(task.groupId)}',
             'Estado: ${catalog.statusName(task.statusId)}',
           ],
         );
@@ -1759,7 +1759,7 @@ void _showUpcomingTasksSheet(
           lines: [
             '${AppDateUtils.formatShortDate(task.scheduledDateTime)} · ${task.hour}',
             'Usuario: ${catalog.userName(task.assignedUserId)}',
-            'Grupo: ${catalog.groupName(task.groupId)}',
+            'Equipo: ${catalog.groupName(task.groupId)}',
             'Tipo: ${catalog.taskTypeName(task.taskTypeId)}',
           ],
         );
@@ -1790,7 +1790,7 @@ void _showInactiveUsersSheet(
           title: stat.user.name,
           color: context.colors.statusRescheduled,
           lines: [
-            'Grupo: ${catalog.groupName(stat.user.groupId)}',
+            'Equipo: ${catalog.groupName(stat.user.groupId)}',
             'Completadas (7 días): ${stat.completedLast7Days}',
             'Último acceso: ${AppDateUtils.formatDateTimeOrDash(stat.user.lastLogin)}',
           ],

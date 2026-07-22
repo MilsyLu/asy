@@ -243,8 +243,8 @@ class _NotificationsSection extends StatelessWidget {
             const SizedBox(height: AppSpacing.xs),
             _NotifRow(
               icon: LucideIcons.users,
-              label: 'Solo tareas de mi grupo',
-              description: 'Solo notificaciones del grupo asignado.',
+              label: 'Solo tareas de mi equipo',
+              description: 'Solo notificaciones del equipo asignado.',
               selected: current == AppPushNotificationModes.groupOnly,
               onTap: () => pick(AppPushNotificationModes.groupOnly),
             ),

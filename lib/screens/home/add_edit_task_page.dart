@@ -522,7 +522,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
       return;
     }
     if (_groupId == null) {
-      SnackbarUtils.showError(context, 'Selecciona un grupo');
+      SnackbarUtils.showError(context, 'Selecciona un equipo');
       return;
     }
 
@@ -804,7 +804,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
               initialValue:
                   groupOptions.any((g) => g.id == _groupId) ? _groupId : null,
               decoration: InputDecoration(
-                labelText: 'Grupo',
+                labelText: 'Equipo',
                 prefixIcon: Icon(LucideIcons.users, color: colors.primary),
                 suffixIcon: isGroupLocked
                     ? Icon(LucideIcons.lock,
@@ -822,16 +822,16 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                         _groupId = v;
                         _taskTypeId = null;
                       }),
-              validator: (v) => v == null ? 'Selecciona un grupo' : null,
+              validator: (v) => v == null ? 'Selecciona un equipo' : null,
             ),
             const SizedBox(height: 8),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               activeThumbColor: colors.primary,
               secondary: Icon(LucideIcons.globe, color: colors.primary),
-              title: const Text('Visible para todos los grupos'),
+              title: const Text('Visible para todos los equipos'),
               subtitle: Text(
-                'Si está desactivado, solo el grupo seleccionado podrá ver esta tarea.',
+                'Si está desactivado, solo el equipo seleccionado podrá ver esta tarea.',
                 style: TextStyle(color: colors.textSecondary, fontSize: 12),
               ),
               value: _visibleToAllGroups,

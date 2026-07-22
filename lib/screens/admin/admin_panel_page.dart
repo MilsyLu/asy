@@ -37,8 +37,8 @@ class AdminPanelPage extends StatelessWidget {
     final modules = <_AdminModuleData>[
       _AdminModuleData(
         icon: LucideIcons.users,
-        title: 'Grupos',
-        subtitle: 'Crear grupos y asignar trabajadores.',
+        title: 'Equipos',
+        subtitle: 'Crear equipos y asignar trabajadores.',
         moduleKey: 'grupos',
         accentColor: const Color(0xFF43C97A),
         builder: (_) => const GroupsPage(),
@@ -70,7 +70,7 @@ class AdminPanelPage extends StatelessWidget {
       _AdminModuleData(
         icon: LucideIcons.settings,
         title: 'Usuarios',
-        subtitle: 'Roles, grupos, contraseñas y dispositivos.',
+        subtitle: 'Roles, equipos, contraseñas y dispositivos.',
         moduleKey: 'usuarios',
         accentColor: const Color(0xFF26C6DA),
         builder: (_) => const UsersPage(),

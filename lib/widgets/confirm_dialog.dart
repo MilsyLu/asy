@@ -31,7 +31,11 @@ Future<bool> showConfirmDialog(
           style: destructive
               ? ElevatedButton.styleFrom(
                   backgroundColor: colors.error,
-                  foregroundColor: confirmForegroundColor ?? colors.textPrimary,
+                  // `colors.textPrimary` (the old default) is a dark color in
+                  // this theme, giving near-unreadable dark-on-red text —
+                  // white is the correct default for any red destructive
+                  // button regardless of light/dark theme.
+                  foregroundColor: confirmForegroundColor ?? Colors.white,
                 )
               : null,
           onPressed: () => Navigator.of(ctx).pop(true),

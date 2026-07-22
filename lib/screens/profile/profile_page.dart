@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
@@ -17,11 +18,9 @@ import '../../services/auth_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/task_repository.dart';
 import '../../services/user_repository.dart';
-import '../../widgets/brand_logo.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/user_avatar.dart';
-import 'settings_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -71,16 +70,65 @@ class _ProfilePageState extends State<ProfilePage> {
     return result;
   }
 
+  /// Builds the "Elegir de galería / Tomar foto / Eliminar foto / Cancelar"
+  /// option list shared by both presentations below — the content never
+  /// differs, only the container around it does.
+  List<Widget> _photoOptionTiles(
+    BuildContext dialogOrSheetContext,
+    AppUser user,
+  ) {
+    final colors = context.colors;
+    void pop() => Navigator.of(dialogOrSheetContext).pop();
+    return [
+      if (!kIsWeb)
+        ListTile(
+          leading: Icon(LucideIcons.camera, color: colors.primary),
+          title: const Text('Tomar foto'),
+          onTap: () {
+            pop();
+            _pickPhoto(ImageSource.camera, user.id);
+          },
+        ),
+      ListTile(
+        leading: Icon(LucideIcons.image, color: colors.primary),
+        title: const Text('Elegir de galería'),
+        onTap: () {
+          pop();
+          _pickPhoto(ImageSource.gallery, user.id);
+        },
+      ),
+      if (user.photoUrl != null && user.photoUrl!.isNotEmpty)
+        ListTile(
+          leading: Icon(LucideIcons.trash2, color: colors.error),
+          title: Text('Eliminar foto', style: TextStyle(color: colors.error)),
+          onTap: () {
+            pop();
+            _deletePhoto(user.id);
+          },
+        ),
+      ListTile(
+        leading: Icon(LucideIcons.x, color: colors.textSecondary),
+        title: const Text('Cancelar'),
+        onTap: pop,
+      ),
+    ];
+  }
+
+  /// Mobile: bottom sheet (the standard mobile pattern for this kind of
+  /// action list). Tablet/desktop: a centered floating dialog instead — a
+  /// sheet pinned to the bottom of a tall desktop viewport could render
+  /// clipped/oddly placed, and "floating like the task detail dialog" is
+  /// exactly the reference the user asked for.
   Future<void> _showPhotoOptions(AppUser user) async {
     final colors = context.colors;
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: colors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (sheetCtx) {
-        return SafeArea(
+    if (context.isMobile) {
+      await showModalBottomSheet<void>(
+        context: context,
+        backgroundColor: colors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (sheetCtx) => SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -96,46 +144,113 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
               const Divider(),
-              if (!kIsWeb)
-                ListTile(
-                  leading: Icon(LucideIcons.camera, color: colors.primary),
-                  title: const Text('Tomar foto'),
-                  onTap: () {
-                    Navigator.of(sheetCtx).pop();
-                    _pickPhoto(ImageSource.camera, user.id);
-                  },
-                ),
-              ListTile(
-                leading: Icon(LucideIcons.image, color: colors.primary),
-                title: const Text('Elegir de galería'),
-                onTap: () {
-                  Navigator.of(sheetCtx).pop();
-                  _pickPhoto(ImageSource.gallery, user.id);
-                },
-              ),
-              if (user.photoUrl != null && user.photoUrl!.isNotEmpty)
-                ListTile(
-                  leading: Icon(LucideIcons.trash2, color: colors.error),
-                  title: Text(
-                    'Eliminar foto',
-                    style: TextStyle(color: colors.error),
-                  ),
-                  onTap: () {
-                    Navigator.of(sheetCtx).pop();
-                    _deletePhoto(user.id);
-                  },
-                ),
-              ListTile(
-                leading: Icon(LucideIcons.x, color: colors.textSecondary),
-                title: const Text('Cancelar'),
-                onTap: () => Navigator.of(sheetCtx).pop(),
-              ),
+              ..._photoOptionTiles(sheetCtx, user),
               const SizedBox(height: 8),
             ],
           ),
-        );
-      },
+        ),
+      );
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => Dialog(
+        backgroundColor: colors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 340),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Foto de perfil',
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              ..._photoOptionTiles(dialogCtx, user),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
     );
+  }
+
+  /// Full-size, zoomable view of the current profile photo — the "ver la
+  /// imagen" affordance that was missing (tapping the avatar only offered
+  /// ways to change it). Reached by tapping the avatar photo itself; the
+  /// small camera badge on top of it still opens [_showPhotoOptions].
+  void _showPhotoViewer(String url) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (dialogCtx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(24),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+              child: InteractiveViewer(
+                minScale: 1,
+                maxScale: 4,
+                child: Image.network(
+                  url,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => Container(
+                    width: 240,
+                    height: 240,
+                    color: Colors.black26,
+                    child: const Icon(LucideIcons.imageOff,
+                        color: Colors.white70, size: 40),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: IconButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(),
+                icon: const Icon(LucideIcons.x, color: Colors.white),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black45,
+                  shape: const CircleBorder(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Tap target for the avatar photo itself (not the camera badge): view it
+  /// full-size if there's a real photo, otherwise fall through to the
+  /// upload options (nothing to view yet).
+  void _onAvatarPhotoTap(AppUser user) {
+    final url = user.photoUrl;
+    if (url != null && url.isNotEmpty) {
+      _showPhotoViewer(url);
+    } else {
+      _showPhotoOptions(user);
+    }
   }
 
   Future<void> _pickPhoto(ImageSource source, String uid) async {
@@ -203,7 +318,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 user: user,
                 catalog: catalog,
                 uploading: _uploading,
-                onAvatarTap: () => _showPhotoOptions(user),
+                onAvatarTap: () => _onAvatarPhotoTap(user),
+                onEditPhotoTap: () => _showPhotoOptions(user),
               ),
               const SizedBox(height: AppSpacing.md),
               _ProfileStreakCard(
@@ -250,36 +366,45 @@ class _ProfilePageState extends State<ProfilePage> {
                   );
                 },
               ),
-              const SizedBox(height: AppSpacing.md),
-              _ProfileAccountCard(user: user, catalog: catalog),
-              const SizedBox(height: AppSpacing.md),
-              const _SettingsCard(),
-              const SizedBox(height: AppSpacing.md),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final confirm = await showConfirmDialog(
-                    context,
-                    title: 'Cerrar sesión',
-                    message: '¿Estás seguro que deseas cerrar sesión?',
-                    confirmLabel: 'Cerrar sesión',
-                    destructive: true,
-                    confirmForegroundColor: Colors.white,
-                  );
-                  if (confirm && context.mounted) {
-                    try {
-                      await context.read<AuthProvider>().signOut();
-                    } catch (e) {
-                      if (context.mounted) {
-                        SnackbarUtils.showError(
-                            context, SnackbarUtils.firebaseErrorMessage(e));
+              // Tablet/desktop: Rol/Equipo/Correo/Miembro desde now live in the
+              // Hero (see _HeroUserInfo), and Configuración/Cerrar sesión are
+              // already permanent Sidebar entries (main_shell.dart) — showing
+              // them again here would just be the same data/actions in two
+              // places. Mobile has neither a Hero-integrated info grid nor a
+              // permanent sidebar (it gets AppDrawer instead), so it keeps
+              // these three exactly as before.
+              if (context.isMobile) ...[
+                const SizedBox(height: AppSpacing.md),
+                _ProfileAccountCard(user: user, catalog: catalog),
+                const SizedBox(height: AppSpacing.md),
+                // Configuración lives in AppDrawer (mobile's nav menu) —
+                // showing it again here was the same entry in two places.
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final confirm = await showConfirmDialog(
+                      context,
+                      title: 'Cerrar sesión',
+                      message: '¿Estás seguro que deseas cerrar sesión?',
+                      confirmLabel: 'Cerrar sesión',
+                      destructive: true,
+                      confirmForegroundColor: Colors.white,
+                    );
+                    if (confirm && context.mounted) {
+                      try {
+                        await context.read<AuthProvider>().signOut();
+                      } catch (e) {
+                        if (context.mounted) {
+                          SnackbarUtils.showError(
+                              context, SnackbarUtils.firebaseErrorMessage(e));
+                        }
                       }
                     }
-                  }
-                },
-                style: OutlinedButton.styleFrom(foregroundColor: colors.error),
-                icon: const Icon(LucideIcons.logOut),
-                label: const Text('Cerrar sesión'),
-              ),
+                  },
+                  style: OutlinedButton.styleFrom(foregroundColor: colors.error),
+                  icon: const Icon(LucideIcons.logOut),
+                  label: const Text('Cerrar sesión'),
+                ),
+              ],
               const SizedBox(height: AppSpacing.lg),
             ],
           ),
@@ -304,12 +429,14 @@ class _ProfileHeroCard extends StatelessWidget {
     required this.catalog,
     required this.uploading,
     required this.onAvatarTap,
+    required this.onEditPhotoTap,
   });
 
   final AppUser user;
   final CatalogProvider catalog;
   final bool uploading;
   final VoidCallback onAvatarTap;
+  final VoidCallback onEditPhotoTap;
 
   @override
   Widget build(BuildContext context) {
@@ -339,6 +466,7 @@ class _ProfileHeroCard extends StatelessWidget {
                 catalog: catalog,
                 uploading: uploading,
                 onAvatarTap: onAvatarTap,
+                onEditPhotoTap: onEditPhotoTap,
                 centered: true,
               ),
             )
@@ -355,12 +483,19 @@ class _ProfileHeroCard extends StatelessWidget {
                         catalog: catalog,
                         uploading: uploading,
                         onAvatarTap: onAvatarTap,
+                        onEditPhotoTap: onEditPhotoTap,
                       ),
                     ),
                   ),
                   Expanded(
                     flex: 2,
-                    child: _HeroDecorativePanel(),
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      child: Align(
+                        alignment: Alignment.center,
+                        child: _HeroInfoGrid(user: user, catalog: catalog),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -369,12 +504,28 @@ class _ProfileHeroCard extends StatelessWidget {
   }
 }
 
+/// Human-readable tenure ("3 meses", "2 años", "5 días") from [createdAt] to
+/// now — richer context than a bare date for "Miembro desde".
+String _tenureLabel(DateTime? createdAt) {
+  if (createdAt == null) return '';
+  final days = DateTime.now().difference(createdAt).inDays;
+  if (days < 1) return 'Hoy';
+  if (days < 30) return '$days ${days == 1 ? 'día' : 'días'}';
+  if (days < 365) {
+    final months = (days / 30).floor();
+    return '$months ${months == 1 ? 'mes' : 'meses'}';
+  }
+  final years = (days / 365).floor();
+  return '$years ${years == 1 ? 'año' : 'años'}';
+}
+
 class _HeroUserInfo extends StatelessWidget {
   const _HeroUserInfo({
     required this.user,
     required this.catalog,
     required this.uploading,
     required this.onAvatarTap,
+    required this.onEditPhotoTap,
     this.centered = false,
   });
 
@@ -382,28 +533,53 @@ class _HeroUserInfo extends StatelessWidget {
   final CatalogProvider catalog;
   final bool uploading;
   final VoidCallback onAvatarTap;
+  final VoidCallback onEditPhotoTap;
   final bool centered;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final isMobile = context.isMobile;
     final align =
         centered ? CrossAxisAlignment.center : CrossAxisAlignment.start;
     final textAlign = centered ? TextAlign.center : TextAlign.start;
-    final wrapAlign =
-        centered ? WrapAlignment.center : WrapAlignment.start;
+
+    // Tablet/desktop gets a bigger, more prominent avatar (per user request)
+    // with a soft accent glow behind it; mobile keeps the original size.
+    final avatarSize = isMobile ? 128.0 : 180.0;
 
     return Column(
       crossAxisAlignment: align,
       mainAxisSize: MainAxisSize.min,
       children: [
-        GestureDetector(
-          onTap: uploading ? null : onAvatarTap,
-          child: Stack(
-            alignment: Alignment.bottomRight,
-            children: [
-              UserAvatarDisplay(user: user, size: 128, borderWidth: 3),
-              Container(
+        Stack(
+          alignment: Alignment.bottomRight,
+          children: [
+            Container(
+              decoration: isMobile
+                  ? null
+                  : BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: colors.primary.withValues(alpha: 0.28),
+                          blurRadius: 28,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+              child: GestureDetector(
+                // Tapping the photo itself views it (or starts upload if
+                // there's nothing to view yet) — separate from the camera
+                // badge below, which always opens the change/remove menu.
+                onTap: uploading ? null : onAvatarTap,
+                child: UserAvatarDisplay(
+                    user: user, size: avatarSize, borderWidth: 3),
+              ),
+            ),
+            GestureDetector(
+              onTap: uploading ? null : onEditPhotoTap,
+              child: Container(
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
@@ -414,8 +590,8 @@ class _HeroUserInfo extends StatelessWidget {
                 child:
                     Icon(LucideIcons.camera, color: colors.onPrimary, size: 15),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
         const SizedBox(height: AppSpacing.md),
         Text(
@@ -427,112 +603,179 @@ class _HeroUserInfo extends StatelessWidget {
           ),
           textAlign: textAlign,
         ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          user.email,
-          style: TextStyle(color: colors.textSecondary, fontSize: 13),
-          textAlign: textAlign,
-        ),
-        const SizedBox(height: AppSpacing.md),
-        Wrap(
-          spacing: AppSpacing.sm,
-          runSpacing: AppSpacing.sm,
-          alignment: wrapAlign,
-          children: [
-            _ProfileChip(
-              icon: LucideIcons.shieldCheck,
-              label: AuthService.roleLabel(user.role),
-            ),
-            user.groupId != null
-                ? _ProfileChip(
-                    icon: LucideIcons.users,
-                    label: catalog.groupName(user.groupId),
-                  )
-                : const _ProfileChip(
-                    icon: LucideIcons.users,
-                    label: 'Sin grupo',
-                    muted: true,
-                  ),
-          ],
-        ),
+        if (isMobile) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            user.email,
+            style: TextStyle(color: colors.textSecondary, fontSize: 13),
+            textAlign: textAlign,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            alignment: WrapAlignment.center,
+            children: [
+              _ProfileChip(
+                icon: LucideIcons.shieldCheck,
+                label: AuthService.roleLabel(user.role),
+              ),
+              user.groupId != null
+                  ? _ProfileChip(
+                      icon: LucideIcons.users,
+                      label: catalog.groupName(user.groupId),
+                    )
+                  : const _ProfileChip(
+                      icon: LucideIcons.users,
+                      label: 'Sin equipo',
+                      muted: true,
+                    ),
+            ],
+          ),
+        ],
+        // Tablet/desktop: Rol/Equipo/Correo/Miembro desde now sit in their
+        // own grid *beside* the avatar (see _ProfileHeroCard), not stacked
+        // underneath it — the old decorative side panel was replaced by
+        // that grid instead of duplicating this data in a separate card.
       ],
     );
   }
 }
 
-class _HeroDecorativePanel extends StatelessWidget {
+/// The Rol/Equipo/Correo/Miembro-desde grid embedded in the Hero on
+/// tablet/desktop — reuses [_AccountInfoBlock] (previously only used by the
+/// now tablet/desktop-hidden `_ProfileAccountCard`) so both places stay in
+/// sync if the fields ever change.
+class _HeroInfoGrid extends StatelessWidget {
+  const _HeroInfoGrid({required this.user, required this.catalog});
+
+  final AppUser user;
+  final CatalogProvider catalog;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // Base gradient
-        Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                colors.primary.withValues(alpha: 0.14),
-                colors.primary.withValues(alpha: 0.04),
-              ],
+    final createdAtText = user.createdAt != null
+        ? AppDateUtils.formatShortDate(user.createdAt!)
+        : 'Sin información';
+    final tenure = _tenureLabel(user.createdAt);
+
+    // Role gets its own accent (gold for super_admin, primary for regular
+    // workers) instead of the uniform icon color the other three blocks
+    // use — a quick visual cue for "who am I looking at" without reading
+    // the text.
+    final roleColor =
+        user.isSuperAdmin ? const Color(0xFFD4AF37) : colors.primary;
+
+    final rows = <Widget>[
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: _AccountInfoBlock(
+              icon: LucideIcons.shieldCheck,
+              iconColor: roleColor,
+              title: 'Rol',
+              value: AuthService.roleLabel(user.role),
+              subtitle:
+                  user.isSuperAdmin ? 'Administrador del sistema' : 'Colaborador',
             ),
           ),
-        ),
-        // Large ring — top-right overflow
-        Positioned(
-          top: -50,
-          right: -50,
-          child: Container(
-            width: 200,
-            height: 200,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: colors.primary.withValues(alpha: 0.10),
-                width: 1.5,
-              ),
+          const SizedBox(width: AppSpacing.lg),
+          Expanded(
+            child: _AccountInfoBlock(
+              icon: LucideIcons.users,
+              title: 'Equipo',
+              value:
+                  user.groupId != null ? catalog.groupName(user.groupId) : 'Sin equipo',
+              subtitle: user.groupId != null ? 'Equipo asignado' : 'Sin asignación',
             ),
           ),
-        ),
-        // Filled circle — bottom-left overflow
-        Positioned(
-          bottom: -70,
-          left: -40,
-          child: Container(
-            width: 240,
-            height: 240,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: colors.primary.withValues(alpha: 0.06),
+        ],
+      ),
+      const SizedBox(height: AppSpacing.md),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: _AccountInfoBlock(
+              icon: LucideIcons.mail,
+              title: 'Correo',
+              value: user.email,
+              subtitle: 'Cuenta de acceso',
+              trailing: _CopyIconButton(text: user.email),
             ),
           ),
-        ),
-        // Small accent circle — mid-right
-        Positioned(
-          top: 48,
-          right: 28,
-          child: Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: colors.primary.withValues(alpha: 0.09),
+          const SizedBox(width: AppSpacing.lg),
+          Expanded(
+            child: _AccountInfoBlock(
+              icon: LucideIcons.calendar,
+              title: 'Miembro desde',
+              value: createdAtText,
+              subtitle: tenure.isEmpty ? 'Fecha de registro' : 'Hace $tenure',
             ),
           ),
-        ),
-        // CheCu brand logo — centered, very subtle
-        Center(
-          child: Opacity(
-            opacity: 0.18,
-            child: const BrandLogo(size: 80),
-          ),
-        ),
-      ],
+        ],
+      ),
+    ];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: colors.background,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        border: Border.all(color: colors.divider),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows),
     );
   }
 }
+
+/// Small copy-to-clipboard icon button — used next to the Correo value so
+/// copying the email doesn't require selecting text manually.
+class _CopyIconButton extends StatefulWidget {
+  const _CopyIconButton({required this.text});
+
+  final String text;
+
+  @override
+  State<_CopyIconButton> createState() => _CopyIconButtonState();
+}
+
+class _CopyIconButtonState extends State<_CopyIconButton> {
+  bool _copied = false;
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.text));
+    if (!mounted) return;
+    setState(() => _copied = true);
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Tooltip(
+      message: _copied ? 'Copiado' : 'Copiar correo',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: _copy,
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Icon(
+            _copied ? LucideIcons.check : LucideIcons.copy,
+            size: 14,
+            color: _copied ? colors.success : colors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 
 // ── Streak Card ───────────────────────────────────────────────────────────────
 
@@ -808,9 +1051,6 @@ class _ProfileKpiGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final isDesktop = context.isDesktop;
-    final isTablet = context.isTablet;
-    final crossAxisCount = isDesktop ? 3 : isTablet ? 2 : 1;
 
     Color barColor = colors.textSecondary;
     if (compliance != null) {
@@ -825,13 +1065,6 @@ class _ProfileKpiGrid extends StatelessWidget {
 
     final cards = <Widget>[
       _ProfileKpiCard(
-        icon: LucideIcons.trophy,
-        accentColor: const Color(0xFFD4AF37),
-        label: 'Mejor racha',
-        value: '${user.maxStreakDays}',
-        suffix: user.maxStreakDays == 1 ? 'día' : 'días',
-      ),
-      _ProfileKpiCard(
         icon: LucideIcons.checkCircle,
         accentColor: const Color(0xFF43C97A),
         label: 'Completadas',
@@ -840,6 +1073,13 @@ class _ProfileKpiGrid extends StatelessWidget {
             : (completedCount != null ? '$completedCount' : '—'),
         suffix: '90 días',
       ),
+      _ProfileKpiCard(
+        icon: LucideIcons.trophy,
+        accentColor: const Color(0xFFD4AF37),
+        label: 'Mejor racha',
+        value: '${user.maxStreakDays}',
+        suffix: user.maxStreakDays == 1 ? 'día' : 'días',
+      ),
       _ProfileComplianceKpiCard(
         compliance: compliance,
         isLoading: isLoadingCompliance,
@@ -847,26 +1087,18 @@ class _ProfileKpiGrid extends StatelessWidget {
       ),
     ];
 
-    if (crossAxisCount == 1) {
-      return Column(
-        children: [
-          for (var i = 0; i < cards.length; i++) ...[
-            cards[i],
-            if (i < cards.length - 1)
-              const SizedBox(height: AppSpacing.cardSpacing),
-          ],
-        ],
-      );
-    }
-
+    // Always 3 across, on every screen size — narrow phones just get
+    // narrower cards (compact padding + wrapping labels below) instead of
+    // stacking to one-per-row and pushing the rest below the fold.
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        crossAxisSpacing: AppSpacing.cardSpacing,
+        crossAxisCount: 3,
+        crossAxisSpacing: AppSpacing.sm,
         mainAxisSpacing: AppSpacing.cardSpacing,
-        mainAxisExtent: 130,
+        // Tall enough for a 2-line wrapped label on the narrowest phones.
+        mainAxisExtent: 140,
       ),
       itemCount: cards.length,
       itemBuilder: (_, i) => cards[i],
@@ -906,12 +1138,16 @@ class _ProfileKpiCardState extends State<_ProfileKpiCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeInOut,
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.xs,
+          vertical: AppSpacing.sm,
+        ),
         decoration: BoxDecoration(
           color: colors.surface,
           borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
           border: Border.all(
-            color: _hovered ? accent.withValues(alpha: 0.45) : colors.divider,
+            color: accent.withValues(alpha: _hovered ? 0.6 : 0.35),
+            width: _hovered ? 1.5 : 1.25,
           ),
           boxShadow: [
             BoxShadow(
@@ -924,39 +1160,46 @@ class _ProfileKpiCardState extends State<_ProfileKpiCard> {
           ],
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Container(
-              width: 34,
-              height: 34,
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
                 color: accent.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
               ),
-              child: Icon(widget.icon, color: accent, size: 17),
-            ),
-            const Spacer(),
-            Text(
-              widget.value,
-              style: TextStyle(
-                color: colors.textPrimary,
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                height: 1,
-              ),
+              child: Icon(widget.icon, color: accent, size: 16),
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(
               widget.label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: colors.textPrimary,
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              widget.value,
+              style: TextStyle(
+                color: accent,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                height: 1,
               ),
             ),
             Text(
               widget.suffix,
-              style: TextStyle(color: colors.textSecondary, fontSize: 11),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: colors.textSecondary, fontSize: 10),
             ),
           ],
         ),
@@ -994,13 +1237,16 @@ class _ProfileComplianceKpiCardState extends State<_ProfileComplianceKpiCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeInOut,
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.xs,
+          vertical: AppSpacing.sm,
+        ),
         decoration: BoxDecoration(
           color: colors.surface,
           borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
           border: Border.all(
-            color:
-                _hovered ? accent.withValues(alpha: 0.45) : colors.divider,
+            color: widget.barColor.withValues(alpha: _hovered ? 0.6 : 0.35),
+            width: _hovered ? 1.5 : 1.25,
           ),
           boxShadow: [
             BoxShadow(
@@ -1013,39 +1259,48 @@ class _ProfileComplianceKpiCardState extends State<_ProfileComplianceKpiCard> {
           ],
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Row(
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-                  ),
-                  child:
-                      const Icon(LucideIcons.pieChart, color: accent, size: 17),
-                ),
-                const Spacer(),
-                Text(
-                  '30 días',
-                  style: TextStyle(color: colors.textSecondary, fontSize: 10),
-                ),
-              ],
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+              ),
+              child: const Icon(LucideIcons.pieChart, color: accent, size: 16),
             ),
-            const Spacer(),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Cumplimiento',
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
             if (widget.isLoading)
-              LinearProgressIndicator(
-                backgroundColor: colors.divider,
-                color: accent,
+              SizedBox(
+                width: 80,
+                child: LinearProgressIndicator(
+                  backgroundColor: colors.divider,
+                  color: accent,
+                ),
               )
             else if (widget.compliance == null) ...[
               Text(
                 'Sin datos',
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: colors.textSecondary,
-                  fontSize: 20,
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                   height: 1,
                 ),
@@ -1055,30 +1310,29 @@ class _ProfileComplianceKpiCardState extends State<_ProfileComplianceKpiCard> {
                 '${widget.compliance}%',
                 style: TextStyle(
                   color: widget.barColor,
-                  fontSize: 28,
+                  fontSize: 24,
                   fontWeight: FontWeight.bold,
                   height: 1,
                 ),
               ),
               const SizedBox(height: 4),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: widget.compliance! / 100.0,
-                  minHeight: 5,
-                  backgroundColor: colors.divider,
-                  valueColor: AlwaysStoppedAnimation<Color>(widget.barColor),
+              SizedBox(
+                width: double.infinity,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: widget.compliance! / 100.0,
+                    minHeight: 5,
+                    backgroundColor: colors.divider,
+                    valueColor: AlwaysStoppedAnimation<Color>(widget.barColor),
+                  ),
                 ),
               ),
             ],
-            const SizedBox(height: AppSpacing.xs),
+            const SizedBox(height: 4),
             Text(
-              'Cumplimiento',
-              style: TextStyle(
-                color: colors.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
+              '30 días',
+              style: TextStyle(color: colors.textSecondary, fontSize: 10),
             ),
           ],
         ),
@@ -1114,9 +1368,9 @@ class _ProfileAccountCard extends StatelessWidget {
       ),
       _AccountInfoBlock(
         icon: LucideIcons.users,
-        title: 'Grupo',
-        value: user.groupId != null ? catalog.groupName(user.groupId) : 'Sin grupo',
-        subtitle: user.groupId != null ? 'Grupo asignado' : 'Sin asignación',
+        title: 'Equipo',
+        value: user.groupId != null ? catalog.groupName(user.groupId) : 'Sin equipo',
+        subtitle: user.groupId != null ? 'Equipo asignado' : 'Sin asignación',
       ),
       _AccountInfoBlock(
         icon: LucideIcons.mail,
@@ -1248,12 +1502,22 @@ class _AccountInfoBlock extends StatelessWidget {
     required this.title,
     required this.value,
     required this.subtitle,
+    this.iconColor,
+    this.trailing,
   });
 
   final IconData icon;
   final String title;
   final String value;
   final String subtitle;
+
+  /// Overrides the icon's default `colors.primary` — used for the Rol block
+  /// in the Hero grid so role has its own accent at a glance.
+  final Color? iconColor;
+
+  /// Optional trailing widget next to the title row (e.g. a copy button for
+  /// Correo).
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -1264,17 +1528,20 @@ class _AccountInfoBlock extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(icon, size: 13, color: colors.primary),
+            Icon(icon, size: 13, color: iconColor ?? colors.primary),
             const SizedBox(width: AppSpacing.xs),
-            Text(
-              title,
-              style: TextStyle(
-                color: colors.textSecondary,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 0.3,
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  color: colors.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.3,
+                ),
               ),
             ),
+            ?trailing,
           ],
         ),
         const SizedBox(height: AppSpacing.xs),
@@ -1339,64 +1606,3 @@ class _ProfileChip extends StatelessWidget {
   }
 }
 
-// ── Settings card ─────────────────────────────────────────────────────────────
-
-class _SettingsCard extends StatelessWidget {
-  const _SettingsCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return InkWell(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const SettingsPage()),
-      ),
-      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md, vertical: 14),
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-          border: Border.all(color: colors.divider),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: colors.primary.withValues(alpha: 0.12),
-                borderRadius:
-                    BorderRadius.circular(AppSpacing.radiusSm + 2),
-              ),
-              child: Icon(LucideIcons.settings, color: colors.primary, size: 20),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Configuración',
-                    style: TextStyle(
-                      color: colors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  Text(
-                    'Personaliza apariencia y preferencias',
-                    style: TextStyle(color: colors.textSecondary, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            Icon(LucideIcons.chevronRight,
-                color: colors.textSecondary, size: 18),
-          ],
-        ),
-      ),
-    );
-  }
-}

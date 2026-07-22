@@ -11,7 +11,7 @@ import '../../../widgets/loading_indicator.dart';
 /// plus a cumplimiento-ranked list (Sprint 6.1 Part 5).
 ///
 /// Tasks created before this feature (`groupId == null`) are bucketed under
-/// "Sin grupo" (see [CatalogProvider.groupName]). [tasks] is the already-
+/// "Sin equipo" (see [CatalogProvider.groupName]). [tasks] is the already-
 /// loaded, visibility-filtered list shared by every report tab.
 class GroupsReportTab extends StatelessWidget {
   const GroupsReportTab({super.key, required this.tasks});
@@ -70,7 +70,7 @@ class GroupsReportTab extends StatelessWidget {
       }
     }
 
-    // Part 5 (Sprint 6.1): ranking de grupos por cumplimiento, reusing the
+    // Part 5 (Sprint 6.1): ranking de equipos por cumplimiento, reusing the
     // already-computed `entries` — no new query, no logic change to `stats`.
     final ranked = entries.toList()
       ..sort((a, b) {
@@ -120,7 +120,7 @@ class GroupsReportTab extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         Text(
-          'Ranking de grupos · Cumplimiento',
+          'Ranking de equipos · Cumplimiento',
           style: TextStyle(color: colors.textPrimary, fontSize: 14, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 10),
@@ -131,7 +131,7 @@ class GroupsReportTab extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           child: DataTable(
             columns: const [
-              DataColumn(label: Text('Grupo')),
+              DataColumn(label: Text('Equipo')),
               DataColumn(label: Text('Asignadas')),
               DataColumn(label: Text('Completadas')),
               DataColumn(label: Text('Pendientes')),

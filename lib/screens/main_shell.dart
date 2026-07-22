@@ -180,7 +180,7 @@ class _AdminSectionState extends State<_AdminSection> {
   }
 
   String _subTitle(String key) => switch (key) {
-        'grupos' => 'Grupos',
+        'grupos' => 'Equipos',
         'tiposTarea' => 'Tipos de tarea',
         'estados' => 'Estados',
         'horarios' => 'Horarios disponibles',

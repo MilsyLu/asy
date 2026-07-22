@@ -4,10 +4,13 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/responsive/app_spacing.dart';
+import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../core/utils/validators.dart';
 import '../../models/app_user.dart';
+import '../../models/group_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/auth_service.dart';
@@ -15,6 +18,8 @@ import '../../services/task_repository.dart';
 import '../../services/user_repository.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/side_panel_shell.dart';
+import '../../widgets/user_avatar.dart';
 
 enum _UserStatusFilter { all, active, inactive }
 
@@ -33,29 +38,75 @@ class UsersPage extends StatefulWidget {
 
 class _UsersPageState extends State<UsersPage> {
   _UserStatusFilter _filter = _UserStatusFilter.all;
+  String? _groupFilter;
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
-    final colors = context.colors;
+    final isMobile = context.isMobile;
     final users = List<AppUser>.from(catalog.users)
       ..sort((a, b) => a.name.compareTo(b.name));
+    final query = _searchQuery.trim().toLowerCase();
     final filtered = users.where((u) {
-      switch (_filter) {
-        case _UserStatusFilter.active:
-          return u.isActive;
-        case _UserStatusFilter.inactive:
-          return !u.isActive;
-        case _UserStatusFilter.all:
-          return true;
+      if (_filter == _UserStatusFilter.active && !u.isActive) return false;
+      if (_filter == _UserStatusFilter.inactive && u.isActive) return false;
+      if (_groupFilter != null && u.groupId != _groupFilter) return false;
+      if (query.isNotEmpty &&
+          !u.name.toLowerCase().contains(query) &&
+          !u.email.toLowerCase().contains(query)) {
+        return false;
       }
+      return true;
     }).toList();
 
-    final body = Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Row(
+    final groups = List.of(catalog.groups)..sort((a, b) => a.name.compareTo(b.name));
+
+    final filtersBlock = Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          isMobile
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _UserSearchField(controller: _searchController, onChanged: (v) => setState(() => _searchQuery = v)),
+                    const SizedBox(height: 8),
+                    _GroupFilterDropdown(
+                      groups: groups,
+                      value: _groupFilter,
+                      onChanged: (v) => setState(() => _groupFilter = v),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: _UserSearchField(
+                          controller: _searchController,
+                          onChanged: (v) => setState(() => _searchQuery = v)),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _GroupFilterDropdown(
+                        groups: groups,
+                        value: _groupFilter,
+                        onChanged: (v) => setState(() => _groupFilter = v),
+                      ),
+                    ),
+                  ],
+                ),
+          const SizedBox(height: 10),
+          Row(
             children: [
               _StatusFilterChip(
                 label: 'Todos',
@@ -76,58 +127,376 @@ class _UsersPageState extends State<UsersPage> {
               ),
             ],
           ),
-        ),
-        Expanded(
-          child: filtered.isEmpty
-              ? const EmptyState(
-                  message: 'No hay usuarios para este filtro.',
-                  icon: LucideIcons.users,
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-                  itemCount: filtered.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final user = filtered[index];
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: colors.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
+        ],
+      ),
+    );
+
+    Widget buildList({required bool shrink}) {
+      if (filtered.isEmpty) {
+        return const EmptyState(
+          message: 'No hay usuarios para estos filtros.',
+          icon: LucideIcons.users,
+        );
+      }
+      return ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+        shrinkWrap: shrink,
+        physics: shrink ? const NeverScrollableScrollPhysics() : null,
+        itemCount: filtered.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          final user = filtered[index];
+          return _UserCard(
+            user: user,
+            groupName: user.groupId != null ? catalog.groupName(user.groupId) : null,
+            onTap: () => _showUserDetailSheet(context, user),
+          );
+        },
+      );
+    }
+
+    Widget body;
+    if (isMobile) {
+      body = Column(children: [filtersBlock, Expanded(child: buildList(shrink: false))]);
+    } else {
+      // Same rule as Equipos: below ~900px of *actual* available width (not
+      // just device category — a collapsed vs. expanded sidebar changes this
+      // just as much as screen size), stack the panel under the list instead
+      // of squeezing both side by side into illegibility.
+      body = LayoutBuilder(
+        builder: (context, constraints) {
+          final sideBySide = constraints.maxWidth >= 900;
+          const panel = _CreateUserPanel(key: ValueKey('create-user'));
+
+          if (sideBySide) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints:
+                          const BoxConstraints(maxWidth: AppLayout.contentMaxWidthWide),
+                      child: Column(
+                        children: [filtersBlock, Expanded(child: buildList(shrink: false))],
                       ),
-                      child: ListTile(
-                        leading: Icon(LucideIcons.userCircle, color: colors.primary, size: 28),
-                        title: Text(user.name, style: TextStyle(color: colors.textPrimary)),
-                        subtitle: Text(
-                          user.email,
-                          style: TextStyle(color: colors.textSecondary, fontSize: 12),
-                        ),
-                        trailing: Wrap(
-                          spacing: 6,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            _Tag(label: AuthService.roleLabel(user.role)),
-                            if (user.groupId != null) _Tag(label: catalog.groupName(user.groupId)),
-                            _StatusBadge(isActive: user.isActive),
-                          ],
-                        ),
-                        onTap: () => _showUserDetailSheet(context, user),
-                      ),
-                    );
-                  },
+                    ),
+                  ),
                 ),
-        ),
-      ],
-    );
-    final fab = FloatingActionButton(
-      onPressed: () => _showCreateUserDialog(context),
-      child: const Icon(LucideIcons.userPlus),
-    );
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 12, 16, 16),
+                  child: SizedBox(width: 320, child: panel),
+                ),
+              ],
+            );
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                filtersBlock,
+                buildList(shrink: true),
+                const SizedBox(height: 16),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: panel,
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
+    // Tablet/desktop: the panel replaces the FAB for creating a user, so no
+    // FAB there. Mobile keeps it (no persistent panel to hold the form).
+    final fab = isMobile
+        ? FloatingActionButton(
+            onPressed: () => _showCreateUserDialog(context),
+            child: const Icon(LucideIcons.userPlus),
+          )
+        : null;
     if (!widget.showAppBar) return Scaffold(body: body, floatingActionButton: fab);
     return Scaffold(
       appBar: AppBar(title: const Text('Usuarios')),
       body: body,
       floatingActionButton: fab,
+    );
+  }
+}
+
+/// Tablet/desktop always-visible right panel for creating a user — mirrors
+/// [_showCreateUserDialog]'s fields, embedded instead of behind a FAB dialog.
+/// Stays in place after a successful save (fields just clear) so an admin
+/// can add several users in a row.
+class _CreateUserPanel extends StatefulWidget {
+  const _CreateUserPanel({super.key});
+
+  @override
+  State<_CreateUserPanel> createState() => _CreateUserPanelState();
+}
+
+class _CreateUserPanelState extends State<_CreateUserPanel> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  String _role = AppRoles.trabajadorNormal;
+  String? _groupId;
+  bool _isSaving = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isSaving = true);
+    final authService = context.read<AuthService>();
+    try {
+      await authService.createUser(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+        name: _nameController.text.trim(),
+        role: _role,
+        groupId: _groupId,
+      );
+      if (mounted) {
+        _formKey.currentState!.reset();
+        _nameController.clear();
+        _emailController.clear();
+        _passwordController.clear();
+        setState(() => _groupId = null);
+        SnackbarUtils.showSuccess(context, 'Usuario creado correctamente');
+      }
+    } catch (e) {
+      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final catalog = context.watch<CatalogProvider>();
+    return SidePanelShell(
+      title: 'Nuevo usuario',
+      icon: LucideIcons.userPlus,
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              controller: _nameController,
+              style: TextStyle(color: colors.textPrimary),
+              decoration: const InputDecoration(labelText: 'Nombre'),
+              validator: (v) => Validators.required(v, fieldName: 'El nombre'),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              style: TextStyle(color: colors.textPrimary),
+              decoration: const InputDecoration(labelText: 'Email'),
+              validator: Validators.email,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _passwordController,
+              obscureText: true,
+              style: TextStyle(color: colors.textPrimary),
+              decoration: const InputDecoration(labelText: 'Contraseña temporal'),
+              validator: Validators.password,
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _role,
+              dropdownColor: colors.surface,
+              decoration: const InputDecoration(labelText: 'Rol'),
+              items: [
+                DropdownMenuItem(
+                  value: AppRoles.trabajadorNormal,
+                  child: Text(AuthService.roleLabel(AppRoles.trabajadorNormal)),
+                ),
+                DropdownMenuItem(
+                  value: AppRoles.superAdmin,
+                  child: Text(AuthService.roleLabel(AppRoles.superAdmin)),
+                ),
+              ],
+              onChanged: (v) => setState(() => _role = v ?? _role),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String?>(
+              initialValue: _groupId,
+              dropdownColor: colors.surface,
+              decoration: const InputDecoration(labelText: 'Equipo (opcional)'),
+              items: [
+                const DropdownMenuItem<String?>(value: null, child: Text('Sin equipo')),
+                for (final group in catalog.groups)
+                  DropdownMenuItem<String?>(value: group.id, child: Text(group.name)),
+              ],
+              onChanged: (v) => setState(() => _groupId = v),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _isSaving ? null : _save,
+              child: _isSaving
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Crear'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UserSearchField extends StatelessWidget {
+  const _UserSearchField({required this.controller, required this.onChanged});
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return TextField(
+      controller: controller,
+      style: TextStyle(color: colors.textPrimary, fontSize: 14),
+      decoration: InputDecoration(
+        isDense: true,
+        labelText: 'Buscar',
+        hintText: 'Nombre o correo',
+        prefixIcon: Icon(LucideIcons.search, color: colors.primary, size: 18),
+        suffixIcon: controller.text.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(LucideIcons.xCircle, size: 16),
+                onPressed: () {
+                  controller.clear();
+                  onChanged('');
+                },
+              ),
+      ),
+      onChanged: onChanged,
+    );
+  }
+}
+
+class _GroupFilterDropdown extends StatelessWidget {
+  const _GroupFilterDropdown({
+    required this.groups,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final List<GroupModel> groups;
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return DropdownButtonFormField<String?>(
+      initialValue: value,
+      isExpanded: true,
+      decoration: InputDecoration(
+        isDense: true,
+        labelText: 'Equipo',
+        prefixIcon: Icon(LucideIcons.users, color: colors.primary, size: 18),
+      ),
+      dropdownColor: colors.surface,
+      items: [
+        const DropdownMenuItem<String?>(value: null, child: Text('Todos')),
+        for (final g in groups) DropdownMenuItem<String?>(value: g.id, child: Text(g.name)),
+      ],
+      onChanged: onChanged,
+    );
+  }
+}
+
+/// Nombre + Correo, then Rol/Grupo/Estado tags in their own row below —
+/// separated instead of crammed into one ListTile row/trailing, and with a
+/// real profile photo instead of a generic icon.
+class _UserCard extends StatelessWidget {
+  const _UserCard({required this.user, required this.groupName, required this.onTap});
+
+  final AppUser user;
+  final String? groupName;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                UserAvatarDisplay(user: user, size: 44, borderWidth: 1.5),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        user.name,
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        user.email,
+                        style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _Tag(label: AuthService.roleLabel(user.role)),
+                _Tag(label: groupName ?? 'Sin equipo', muted: groupName == null),
+                _StatusBadge(isActive: user.isActive),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -190,21 +559,23 @@ class _StatusBadge extends StatelessWidget {
 }
 
 class _Tag extends StatelessWidget {
-  const _Tag({required this.label});
+  const _Tag({required this.label, this.muted = false});
 
   final String label;
+  final bool muted;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final color = muted ? colors.textSecondary : colors.primary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: colors.background,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colors.primary.withValues(alpha: 0.4)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
-      child: Text(label, style: TextStyle(color: colors.primary, fontSize: 10)),
+      child: Text(label, style: TextStyle(color: color, fontSize: 10)),
     );
   }
 }
@@ -246,7 +617,7 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                 children: [
                   Row(
                     children: [
-                      Icon(LucideIcons.userCircle, color: colors.primary, size: 32),
+                      UserAvatarDisplay(user: user, size: 44, borderWidth: 1.5),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -315,13 +686,13 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                     },
                   ),
                   const SizedBox(height: 16),
-                  Text('Grupo', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+                  Text('Equipo', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String?>(
                     initialValue: selectedGroupId,
                     dropdownColor: colors.surface,
                     items: [
-                      const DropdownMenuItem<String?>(value: null, child: Text('Sin grupo')),
+                      const DropdownMenuItem<String?>(value: null, child: Text('Sin equipo')),
                       for (final group in catalog.groups)
                         DropdownMenuItem<String?>(value: group.id, child: Text(group.name)),
                     ],
@@ -331,7 +702,7 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                         await userRepo.updateGroup(user.id, value);
                         setState(() => selectedGroupId = value);
                         if (sheetContext.mounted) {
-                          SnackbarUtils.showSuccess(sheetContext, 'Grupo actualizado');
+                          SnackbarUtils.showSuccess(sheetContext, 'Equipo actualizado');
                         }
                       } catch (e) {
                         if (sheetContext.mounted) {
@@ -620,9 +991,9 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                     DropdownButtonFormField<String?>(
                       initialValue: groupId,
                       dropdownColor: colors.surface,
-                      decoration: const InputDecoration(labelText: 'Grupo (opcional)'),
+                      decoration: const InputDecoration(labelText: 'Equipo (opcional)'),
                       items: [
-                        const DropdownMenuItem<String?>(value: null, child: Text('Sin grupo')),
+                        const DropdownMenuItem<String?>(value: null, child: Text('Sin equipo')),
                         for (final group in catalog.groups)
                           DropdownMenuItem<String?>(value: group.id, child: Text(group.name)),
                       ],

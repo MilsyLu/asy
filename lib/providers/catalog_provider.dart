@@ -72,7 +72,7 @@ class CatalogProvider extends ChangeNotifier {
     return null;
   }
 
-  String groupName(String? id) => groupById(id)?.name ?? 'Sin grupo';
+  String groupName(String? id) => groupById(id)?.name ?? 'Sin equipo';
 
   TaskTypeModel? taskTypeById(String? id) {
     if (id == null) return null;

@@ -125,6 +125,11 @@
         navigator.serviceWorker.getRegistrations().then(function (regs) {
           var foundWaiting = false;
           regs.forEach(function (reg) {
+            // Same FCM-scope exclusion as watchReg()/visibilitychange above —
+            // only Flutter's own SW should ever receive 'skipWaiting'.
+            if (reg.scope && reg.scope.indexOf('firebase-cloud-messaging-push-scope') !== -1) {
+              return;
+            }
             if (reg.waiting) {
               // Flutter's generated SW handles the string 'skipWaiting'.
               reg.waiting.postMessage('skipWaiting');
@@ -144,6 +149,31 @@
         }).catch(function () { window.location.reload(); });
       };
     })();
+  </script>
+
+  <!-- ── CheCu: let native browser zoom (Ctrl + mouse wheel) through ─────────
+       Flutter Web's engine attaches its own 'wheel' listener to the glass
+       pane (the element it renders into) and calls preventDefault() on every
+       wheel event, including Ctrl+wheel — which is exactly the gesture
+       Chrome/Edge/Firefox use for zooming the page in/out. Without this,
+       users can't Ctrl+scroll to zoom CheCu to 90%/110%/etc; Ctrl+Plus/Minus
+       still work regardless (browsers reserve those shortcuts and no page
+       can intercept them), only the mouse-wheel variant is affected.
+
+       Fix: a capture-phase listener on `window` runs before any listener
+       Flutter attaches deeper in the DOM (capture always goes
+       outermost-ancestor → target, regardless of registration order), so
+       calling stopImmediatePropagation() here stops the event from ever
+       reaching Flutter's handler. Since neither listener then calls
+       preventDefault(), the browser's native zoom handling proceeds as
+       normal. `passive: true` is safe — it only blocks preventDefault(),
+       which this listener never calls. -->
+  <script>
+    window.addEventListener('wheel', function (event) {
+      if (event.ctrlKey) {
+        event.stopImmediatePropagation();
+      }
+    }, { capture: true, passive: true });
   </script>
 
   <!-- Register FCM Service Worker at Firebase's default push scope so that

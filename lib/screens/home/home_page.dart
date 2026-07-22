@@ -3,10 +3,13 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/responsive/app_spacing.dart';
+import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/task_type_colors.dart';
 import '../../core/utils/task_visibility.dart';
+import '../../core/utils/validators.dart';
 import '../../models/app_user.dart';
 import '../../models/task_model.dart';
 import '../../providers/auth_provider.dart';
@@ -26,12 +29,20 @@ String _capitalize(String input) {
   return input[0].toUpperCase() + input.substring(1);
 }
 
+// ── Desktop agenda table column widths (Home redesign) ──────────────────────
+// Shared between _DesktopAgendaColumnHeader and _DesktopAgendaRow so labels
+// and values line up like spreadsheet columns.
+const double _kDesktopColHour = 56;
+const double _kDesktopColContacto = 140;
+const double _kDesktopColEstado = 116;
+const double _kDesktopColActions = 148;
+
 /// Home tab: the day's operational agenda — "¿qué debo atender hoy?".
 ///
 /// Shows today's pending + rescheduled tasks (the agenda), today's
 /// completed tasks (collapsed by default) and overdue pending tasks from
 /// previous days, each filtered through [isTaskVisibleToUser] and the
-/// Grupo/Encargado/Cliente/Estado filters. Full history lives in Reportes.
+/// Equipo/Encargado/Cliente/Estado filters. Full history lives in Reportes.
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -117,6 +128,26 @@ class _HomePageState extends State<HomePage> {
                 final nextTask =
                     allAgenda.agendaToday.isNotEmpty ? allAgenda.agendaToday.first : null;
 
+                if (context.isDesktop) {
+                  return _buildDesktopBody(
+                    context,
+                    currentUser: currentUser,
+                    allAgenda: allAgenda,
+                    agenda: agenda,
+                    nextTask: nextTask,
+                  );
+                }
+
+                if (context.isTablet) {
+                  return _buildTabletBody(
+                    context,
+                    currentUser: currentUser,
+                    allAgenda: allAgenda,
+                    agenda: agenda,
+                    nextTask: nextTask,
+                  );
+                }
+
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
                   children: [
@@ -167,6 +198,195 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  /// Desktop (≥1024 px) layout: two columns instead of the mobile
+  /// single-column stack, so the screen uses the available width instead of
+  /// stretching mobile cards edge-to-edge and forcing a page-level scroll.
+  ///
+  /// Left column (flexible): header summary, filters, and the agenda table.
+  /// Only the agenda table scrolls internally (via `Expanded` + `ListView`);
+  /// everything else is sized to fit so the page itself never needs to
+  /// scroll on a typical desktop viewport.
+  ///
+  /// Right column (fixed width): the "Próxima tarea" full detail — the same
+  /// fields as [showTaskDetailDialog] but always visible, so seeing the next
+  /// task's details costs zero clicks instead of one — plus the 2×2 counters
+  /// grid below it.
+  Widget _buildDesktopBody(
+    BuildContext context, {
+    required AppUser currentUser,
+    required _Agenda allAgenda,
+    required _Agenda agenda,
+    required TaskModel? nextTask,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _DesktopHeaderCard(user: currentUser, today: _today, agenda: allAgenda),
+                const SizedBox(height: AppSpacing.md),
+                _FiltersBar(
+                  catalog: context.watch<CatalogProvider>(),
+                  groupFilter: _groupFilter,
+                  userFilter: _userFilter,
+                  statusFilter: _statusFilter,
+                  clientController: _clientController,
+                  singleRow: true,
+                  onGroupChanged: (v) => setState(() => _groupFilter = v),
+                  onUserChanged: (v) => setState(() => _userFilter = v),
+                  onStatusChanged: (v) => setState(() => _statusFilter = v),
+                  onClientChanged: (v) => setState(() => _clientQuery = v),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Expanded(
+                  child: _DesktopAgendaPanel(
+                    allAgenda: allAgenda,
+                    agenda: agenda,
+                    completedExpanded: _completedExpanded,
+                    onToggleCompleted: () =>
+                        setState(() => _completedExpanded = !_completedExpanded),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.lg),
+          SizedBox(
+            width: 360,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: _DesktopTaskDetailPanel(task: nextTask)),
+                const SizedBox(height: AppSpacing.md),
+                _CountersGrid(agenda: agenda),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Tablet (600–1023 px) layout: still a single scrolling column (there
+  /// isn't enough width for the desktop two-column layout), but reorganized
+  /// per the same redundancy-elimination logic — the header and the next-task
+  /// summary sit side by side in one row instead of stacked as two separate
+  /// blocks, the 4 counters (Pendientes/Reprogramadas/Completadas/Atrasadas)
+  /// sit narrow, side by side in a single row instead of a taller 2×2 grid,
+  /// and Filtros moves up to occupy the row that grid used to need instead of
+  /// requiring a scroll to reach it. The former standalone "Próxima tarea"
+  /// card is folded into one "Listado de órdenes para hoy" panel together
+  /// with the rest of the day's tasks, instead of duplicating that task's
+  /// data in two cards.
+  Widget _buildTabletBody(
+    BuildContext context, {
+    required AppUser currentUser,
+    required _Agenda allAgenda,
+    required _Agenda agenda,
+    required TaskModel? nextTask,
+  }) {
+    final colors = context.colors;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePaddingTablet,
+        AppSpacing.md,
+        AppSpacing.pagePaddingTablet,
+        AppSpacing.xxl,
+      ),
+      children: [
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                flex: 3,
+                child: _DesktopHeaderCard(user: currentUser, today: _today, agenda: allAgenda),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(flex: 2, child: _NextTaskCard(task: nextTask)),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Row(
+          children: [
+            Expanded(
+              child: _CounterCard(
+                label: 'Pendientes',
+                count: agenda.pendingToday.length,
+                icon: LucideIcons.circleDot,
+                color: colors.statusPending,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _CounterCard(
+                label: 'Reprogramadas',
+                count: agenda.rescheduledToday.length,
+                icon: LucideIcons.repeat,
+                color: colors.statusRescheduled,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _CounterCard(
+                label: 'Completadas',
+                count: agenda.completedToday.length,
+                icon: LucideIcons.checkCircle2,
+                color: colors.success,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _CounterCard(
+                label: 'Atrasadas',
+                count: agenda.overdue.length,
+                icon: LucideIcons.alertTriangle,
+                color: colors.error,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        _FiltersBar(
+          catalog: context.watch<CatalogProvider>(),
+          groupFilter: _groupFilter,
+          userFilter: _userFilter,
+          statusFilter: _statusFilter,
+          clientController: _clientController,
+          onGroupChanged: (v) => setState(() => _groupFilter = v),
+          onUserChanged: (v) => setState(() => _userFilter = v),
+          onStatusChanged: (v) => setState(() => _statusFilter = v),
+          onClientChanged: (v) => setState(() => _clientQuery = v),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        if (allAgenda.isEmpty)
+          const EmptyState(
+            message: 'No tienes tareas pendientes para hoy. ¡Buen trabajo!',
+            icon: LucideIcons.checkCircle2,
+          )
+        else if (agenda.isEmpty)
+          const EmptyState(
+            message: 'Ningún resultado coincide con los filtros seleccionados.',
+            icon: LucideIcons.search,
+          )
+        else ...[
+          _SectionHeader(
+            icon: LucideIcons.listTodo,
+            title: 'Listado de órdenes para hoy',
+            count: agenda.agendaToday.length,
+          ),
+          const SizedBox(height: 10),
+          ..._buildAgendaRows(agenda),
+        ],
+      ],
+    );
+  }
+
   List<Widget> _buildSections(_Agenda agenda) {
     return [
       const _SectionHeader(
@@ -174,6 +394,16 @@ class _HomePageState extends State<HomePage> {
         title: 'Agenda de hoy',
       ),
       const SizedBox(height: 10),
+      ..._buildAgendaRows(agenda),
+    ];
+  }
+
+  /// The task rows themselves (today's agenda + completed-today + overdue),
+  /// without a leading section header — shared by [_buildSections] (mobile,
+  /// prepends its own "Agenda de hoy" header) and [_buildTabletBody] (prepends
+  /// "Listado de órdenes para hoy" instead, see below).
+  List<Widget> _buildAgendaRows(_Agenda agenda) {
+    return [
       if (agenda.agendaToday.isEmpty)
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
@@ -285,7 +515,7 @@ class _Agenda {
 /// the user's day ("Tienes N tareas para hoy" / "N tareas atrasadas
 /// requieren atención"). [agenda] is intentionally the *unfiltered* agenda
 /// (visibility-filtered only) so this summary always reflects the user's
-/// real day regardless of the Grupo/Encargado/Cliente/Estado filters below.
+/// real day regardless of the Equipo/Encargado/Cliente/Estado filters below.
 class _HomeHeader extends StatelessWidget {
   const _HomeHeader({required this.user, required this.today, required this.agenda});
 
@@ -628,7 +858,7 @@ class _QuickActionButton extends StatelessWidget {
 
 /// Compact 2x2 summary grid: Pendientes / Reprogramadas / Completadas /
 /// Atrasadas. Reflects [agenda], which is already filtered by visibility and
-/// the active Grupo/Encargado/Cliente/Estado filters — the underlying counts
+/// the active Equipo/Encargado/Cliente/Estado filters — the underlying counts
 /// are unchanged from the previous design, only the presentation is more
 /// compact (big number + small label).
 class _CountersGrid extends StatelessWidget {
@@ -1069,7 +1299,7 @@ class _OverdueSection extends StatelessWidget {
   }
 }
 
-/// Combinable "Grupo / Encargado / Estado / Cliente" filter row. Every
+/// Combinable "Equipo / Encargado / Estado / Cliente" filter row. Every
 /// dropdown defaults to "Todos" (a null value, meaning no filter applied).
 class _FiltersBar extends StatelessWidget {
   const _FiltersBar({
@@ -1082,6 +1312,7 @@ class _FiltersBar extends StatelessWidget {
     required this.onUserChanged,
     required this.onStatusChanged,
     required this.onClientChanged,
+    this.singleRow = false,
   });
 
   final CatalogProvider catalog;
@@ -1094,12 +1325,57 @@ class _FiltersBar extends StatelessWidget {
   final ValueChanged<String?> onStatusChanged;
   final ValueChanged<String> onClientChanged;
 
+  /// Desktop layout: all 4 fields on one row instead of a 2×2 grid — there's
+  /// enough horizontal space and it saves a row of vertical space.
+  final bool singleRow;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final users = List.of(catalog.users)..sort((a, b) => a.name.compareTo(b.name));
     final groups = List.of(catalog.groups)..sort((a, b) => a.name.compareTo(b.name));
     final statuses = List.of(catalog.statuses)..sort((a, b) => a.name.compareTo(b.name));
+
+    final groupField = _FilterDropdown<String>(
+      label: 'Equipo',
+      icon: LucideIcons.users,
+      value: groupFilter,
+      items: [for (final g in groups) DropdownMenuItem(value: g.id, child: Text(g.name))],
+      onChanged: onGroupChanged,
+    );
+    final userField = _FilterDropdown<String>(
+      label: 'Encargado',
+      icon: LucideIcons.userCheck,
+      value: userFilter,
+      items: [for (final u in users) DropdownMenuItem(value: u.id, child: Text(u.name))],
+      onChanged: onUserChanged,
+    );
+    final statusField = _FilterDropdown<String>(
+      label: 'Estado',
+      icon: LucideIcons.listChecks,
+      value: statusFilter,
+      items: [for (final s in statuses) DropdownMenuItem(value: s.id, child: Text(s.name))],
+      onChanged: onStatusChanged,
+    );
+    final clientField = TextField(
+      controller: clientController,
+      style: TextStyle(color: colors.textPrimary, fontSize: 14),
+      decoration: InputDecoration(
+        isDense: true,
+        labelText: 'Cliente',
+        prefixIcon: Icon(LucideIcons.search, color: colors.primary, size: 18),
+        suffixIcon: clientController.text.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(LucideIcons.xCircle, size: 16),
+                onPressed: () {
+                  clientController.clear();
+                  onClientChanged('');
+                },
+              ),
+      ),
+      onChanged: onClientChanged,
+    );
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -1121,71 +1397,35 @@ class _FiltersBar extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _FilterDropdown<String>(
-                  label: 'Grupo',
-                  icon: LucideIcons.users,
-                  value: groupFilter,
-                  items: [
-                    for (final g in groups) DropdownMenuItem(value: g.id, child: Text(g.name)),
-                  ],
-                  onChanged: onGroupChanged,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _FilterDropdown<String>(
-                  label: 'Encargado',
-                  icon: LucideIcons.userCheck,
-                  value: userFilter,
-                  items: [
-                    for (final u in users) DropdownMenuItem(value: u.id, child: Text(u.name)),
-                  ],
-                  onChanged: onUserChanged,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _FilterDropdown<String>(
-                  label: 'Estado',
-                  icon: LucideIcons.listChecks,
-                  value: statusFilter,
-                  items: [
-                    for (final s in statuses) DropdownMenuItem(value: s.id, child: Text(s.name)),
-                  ],
-                  onChanged: onStatusChanged,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  controller: clientController,
-                  style: TextStyle(color: colors.textPrimary, fontSize: 14),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    labelText: 'Cliente',
-                    prefixIcon: Icon(LucideIcons.search, color: colors.primary, size: 18),
-                    suffixIcon: clientController.text.isEmpty
-                        ? null
-                        : IconButton(
-                            icon: const Icon(LucideIcons.xCircle, size: 16),
-                            onPressed: () {
-                              clientController.clear();
-                              onClientChanged('');
-                            },
-                          ),
-                  ),
-                  onChanged: onClientChanged,
-                ),
-              ),
-            ],
-          ),
+          if (singleRow)
+            Row(
+              children: [
+                Expanded(child: groupField),
+                const SizedBox(width: 10),
+                Expanded(child: userField),
+                const SizedBox(width: 10),
+                Expanded(child: statusField),
+                const SizedBox(width: 10),
+                Expanded(child: clientField),
+              ],
+            )
+          else ...[
+            Row(
+              children: [
+                Expanded(child: groupField),
+                const SizedBox(width: 10),
+                Expanded(child: userField),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(child: statusField),
+                const SizedBox(width: 10),
+                Expanded(child: clientField),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -1223,6 +1463,691 @@ class _FilterDropdown<T> extends StatelessWidget {
         ...items,
       ],
       onChanged: onChanged,
+    );
+  }
+}
+
+// ── Desktop layout (Home redesign) ───────────────────────────────────────────
+// Everything below is reached from [_HomePageState._buildDesktopBody]
+// (context.isDesktop, ≥1024 px). [_DesktopHeaderCard] is also reused by
+// [_HomePageState._buildTabletBody] (600–1023 px). Mobile keeps using
+// [_HomeHeader], [_AgendaTaskTile], [_CompletedTodaySection] and
+// [_OverdueSection] above, completely unchanged.
+
+/// Wraps [_HomeHeader] in a bordered card so it reads as one of the
+/// desktop panels instead of floating on the bare background — same
+/// treatment as the filters bar and the agenda table below it.
+class _DesktopHeaderCard extends StatelessWidget {
+  const _DesktopHeaderCard({required this.user, required this.today, required this.agenda});
+
+  final AppUser user;
+  final DateTime today;
+  final _Agenda agenda;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.divider),
+      ),
+      child: _HomeHeader(user: user, today: today, agenda: agenda),
+    );
+  }
+}
+
+/// Left-column panel: the same fields [showTaskDetailDialog] shows for
+/// [task] (the next pending/rescheduled task today), rendered inline and
+/// always visible instead of behind a "Ver detalles" click. Reuses
+/// [TaskDetailRow], [CopyPhoneButton] and [reminderLabel] from
+/// `task_detail_dialog.dart` so both places show identical data.
+class _DesktopTaskDetailPanel extends StatelessWidget {
+  const _DesktopTaskDetailPanel({required this.task});
+
+  final TaskModel? task;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final task = this.task;
+
+    if (task == null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: colors.success.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: colors.success.withValues(alpha: 0.4), width: 1.5),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.checkCircle2, size: 32, color: colors.success),
+              const SizedBox(height: 10),
+              Text(
+                '¡Todo en orden!',
+                style: TextStyle(color: colors.textPrimary, fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'No tienes tareas pendientes por el momento.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: colors.textSecondary, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final catalog = context.watch<CatalogProvider>();
+    final auth = context.watch<AuthProvider>();
+    final formattedPhone = Validators.formatPhone(task.clientPhone);
+
+    final isPending = task.statusId == catalog.pendingStatusId;
+    final isCompleted = task.statusId == catalog.completedStatusId;
+    final canEdit = auth.isSuperAdmin || isPending;
+    final canComplete = !isCompleted;
+    final canReschedule = !isCompleted;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.primary, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.star, size: 16, color: colors.primary),
+              const SizedBox(width: 8),
+              Text(
+                'PRÓXIMA TAREA',
+                style: TextStyle(
+                  color: colors.primary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TaskDetailRow(
+                    icon: LucideIcons.userCircle,
+                    label: 'Cliente',
+                    value: task.clientName,
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: colors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: colors.primary.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(LucideIcons.phone, size: 18, color: colors.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Teléfono',
+                                style: TextStyle(color: colors.textSecondary, fontSize: 11),
+                              ),
+                              Text(
+                                formattedPhone.isEmpty ? 'Sin teléfono' : formattedPhone,
+                                style: TextStyle(
+                                  color: colors.textPrimary,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (formattedPhone.isNotEmpty)
+                          CopyPhoneButton(phone: Validators.cleanPhone(task.clientPhone)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TaskDetailRow(
+                    icon: LucideIcons.tag,
+                    label: 'Tipo',
+                    valueWidget: TaskTypeChip(
+                      label: catalog.taskTypeName(task.taskTypeId),
+                      color: catalog.taskTypeById(task.taskTypeId)?.parsedColor ?? colors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TaskDetailRow(
+                    icon: LucideIcons.calendar,
+                    label: 'Fecha',
+                    value: AppDateUtils.formatShortDate(AppDateUtils.parseDateKey(task.date)),
+                  ),
+                  const SizedBox(height: 12),
+                  TaskDetailRow(icon: LucideIcons.clock, label: 'Hora', value: task.hour),
+                  const SizedBox(height: 12),
+                  TaskDetailRow(
+                    icon: LucideIcons.userCheck,
+                    label: 'Encargado',
+                    value: catalog.userName(task.assignedUserId),
+                  ),
+                  const SizedBox(height: 12),
+                  TaskDetailRow(
+                    icon: LucideIcons.users,
+                    label: 'Equipo',
+                    value: catalog.groupName(task.groupId),
+                  ),
+                  const SizedBox(height: 12),
+                  TaskDetailRow(
+                    icon: LucideIcons.fileText,
+                    label: 'Observaciones',
+                    value: task.observations.isEmpty ? 'Sin observaciones' : task.observations,
+                  ),
+                  const SizedBox(height: 12),
+                  TaskDetailRow(
+                    icon: LucideIcons.bell,
+                    label: 'Recordatorio',
+                    value: reminderLabel(task),
+                  ),
+                  const SizedBox(height: 12),
+                  TaskDetailRow(
+                    icon: LucideIcons.userPlus,
+                    label: 'Creado por',
+                    value: task.createdBy != null
+                        ? catalog.userName(task.createdBy)
+                        : 'No disponible',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Divider(height: 1),
+          const SizedBox(height: 8),
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 4,
+            children: [
+              if (canEdit)
+                TextButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => AddEditTaskPage(existingTask: task)),
+                  ),
+                  icon: const Icon(LucideIcons.pencil, size: 16),
+                  label: const Text('Editar'),
+                ),
+              if (canReschedule)
+                TextButton.icon(
+                  onPressed: () => showRescheduleDialog(context, task),
+                  icon: const Icon(LucideIcons.repeat, size: 16),
+                  label: const Text('Reprogramar'),
+                ),
+              if (canComplete)
+                TextButton.icon(
+                  style: TextButton.styleFrom(foregroundColor: colors.success),
+                  onPressed: () => completeTaskWithConfirm(context, task),
+                  icon: const Icon(LucideIcons.checkCircle, size: 16),
+                  label: const Text('Completar'),
+                ),
+              TextButton.icon(
+                style: TextButton.styleFrom(foregroundColor: colors.error),
+                onPressed: () => sendTaskToTrashWithConfirm(context, task),
+                icon: const Icon(LucideIcons.trash2, size: 16),
+                label: const Text('Papelera'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Right-column panel: "Agenda de hoy" as a compact data table instead of
+/// stacked cards — hour / cliente / contacto / encargado / estado columns
+/// plus inline quick actions, so acting on a task never requires opening a
+/// dialog first. Only this panel's task list scrolls (via the inner
+/// `Expanded` + `ListView`); the header and column labels stay pinned.
+class _DesktopAgendaPanel extends StatelessWidget {
+  const _DesktopAgendaPanel({
+    required this.allAgenda,
+    required this.agenda,
+    required this.completedExpanded,
+    required this.onToggleCompleted,
+  });
+
+  final _Agenda allAgenda;
+  final _Agenda agenda;
+  final bool completedExpanded;
+  final VoidCallback onToggleCompleted;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            child: _SectionHeader(
+              icon: LucideIcons.listTodo,
+              title: 'Agenda de hoy',
+              count: agenda.agendaToday.length,
+            ),
+          ),
+          if (allAgenda.isEmpty)
+            const Expanded(
+              child: EmptyState(
+                message: 'No tienes tareas pendientes para hoy. ¡Buen trabajo!',
+                icon: LucideIcons.checkCircle2,
+              ),
+            )
+          else if (agenda.isEmpty)
+            const Expanded(
+              child: EmptyState(
+                message: 'Ningún resultado coincide con los filtros seleccionados.',
+                icon: LucideIcons.search,
+              ),
+            )
+          else ...[
+            if (agenda.agendaToday.isNotEmpty) ...[
+              const _DesktopAgendaColumnHeader(),
+              Divider(height: 1, color: colors.divider),
+            ],
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                children: [
+                  if (agenda.agendaToday.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+                      child: Text(
+                        'No hay tareas pendientes ni reprogramadas para hoy.',
+                        style: TextStyle(color: colors.textSecondary),
+                      ),
+                    )
+                  else
+                    for (final t in agenda.agendaToday) _DesktopAgendaRow(task: t),
+                  if (agenda.completedToday.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    _DesktopCompletedTodaySection(
+                      tasks: agenda.completedToday,
+                      expanded: completedExpanded,
+                      onToggle: onToggleCompleted,
+                    ),
+                  ],
+                  if (agenda.overdue.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    _DesktopOverdueSection(tasks: agenda.overdue),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Column labels aligned with [_DesktopAgendaRow]'s fixed-width columns.
+class _DesktopAgendaColumnHeader extends StatelessWidget {
+  const _DesktopAgendaColumnHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(
+      color: context.colors.textSecondary,
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.3,
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Row(
+        children: [
+          SizedBox(width: _kDesktopColHour, child: Text('HORA', style: style)),
+          const SizedBox(width: 12),
+          Expanded(flex: 3, child: Text('CLIENTE', style: style)),
+          SizedBox(width: _kDesktopColContacto, child: Text('CONTACTO', style: style)),
+          const SizedBox(width: 12),
+          Expanded(flex: 2, child: Text('ENCARGADO', style: style)),
+          SizedBox(width: _kDesktopColEstado, child: Text('ESTADO', style: style)),
+          SizedBox(width: _kDesktopColActions),
+        ],
+      ),
+    );
+  }
+}
+
+/// Desktop equivalent of [_AgendaTaskTile]: one spreadsheet-style row
+/// (hour / cliente / contacto / encargado / estado) with inline quick-action
+/// icons (Editar / Reprogramar / Completar / Papelera) so common actions
+/// don't require opening the full detail dialog first. Tapping anywhere else
+/// on the row still opens it, for anything not covered by the quick actions.
+class _DesktopAgendaRow extends StatefulWidget {
+  const _DesktopAgendaRow({
+    required this.task,
+    this.overrideChipColor,
+    this.showDate = false,
+  });
+
+  final TaskModel task;
+  final Color? overrideChipColor;
+  final bool showDate;
+
+  @override
+  State<_DesktopAgendaRow> createState() => _DesktopAgendaRowState();
+}
+
+class _DesktopAgendaRowState extends State<_DesktopAgendaRow> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final catalog = context.watch<CatalogProvider>();
+    final auth = context.watch<AuthProvider>();
+    final task = widget.task;
+    final statusName = catalog.statusName(task.statusId);
+    final chipColor = widget.overrideChipColor ?? _statusChipColor(colors, statusName);
+    final isCompleted = task.statusId == catalog.completedStatusId;
+    final isPending = task.statusId == catalog.pendingStatusId;
+    final typeColor = catalog.taskTypeById(task.taskTypeId)?.parsedColor ?? colors.primary;
+    final canEdit = auth.isSuperAdmin || isPending;
+    final formattedPhone = Validators.formatPhone(task.clientPhone);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => showTaskDetailDialog(context, task),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: _hovered ? colors.primary.withValues(alpha: 0.05) : colors.background,
+            borderRadius: BorderRadius.circular(10),
+            border: Border(left: BorderSide(color: typeColor, width: 4)),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: _kDesktopColHour,
+                child: Text(
+                  task.hour,
+                  style: TextStyle(color: colors.primary, fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      task.clientName,
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        if (widget.showDate) ...[
+                          Text(
+                            AppDateUtils.formatShortDate(AppDateUtils.parseDateKey(task.date)),
+                            style: TextStyle(color: colors.textSecondary, fontSize: 11),
+                          ),
+                          const SizedBox(width: 6),
+                          Text('·', style: TextStyle(color: colors.textSecondary, fontSize: 11)),
+                          const SizedBox(width: 6),
+                        ],
+                        Flexible(
+                          child: Text(
+                            catalog.taskTypeName(task.taskTypeId),
+                            style: TextStyle(color: colors.textSecondary, fontSize: 11),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: _kDesktopColContacto,
+                child: Text(
+                  formattedPhone.isEmpty ? '—' : formattedPhone,
+                  style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  catalog.userName(task.assignedUserId),
+                  style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              SizedBox(
+                width: _kDesktopColEstado,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: chipColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: chipColor.withValues(alpha: 0.5)),
+                    ),
+                    child: Text(
+                      statusName,
+                      style: TextStyle(color: chipColor, fontSize: 11, fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: _kDesktopColActions,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (canEdit)
+                      _RowIconAction(
+                        icon: LucideIcons.pencil,
+                        tooltip: 'Editar',
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => AddEditTaskPage(existingTask: task)),
+                        ),
+                      ),
+                    if (!isCompleted)
+                      _RowIconAction(
+                        icon: LucideIcons.repeat,
+                        tooltip: 'Reprogramar',
+                        color: colors.statusRescheduled,
+                        onPressed: () => showRescheduleDialog(context, task),
+                      ),
+                    if (!isCompleted)
+                      _RowIconAction(
+                        icon: LucideIcons.checkCircle2,
+                        tooltip: 'Completar',
+                        color: colors.success,
+                        onPressed: () => completeTaskWithConfirm(context, task),
+                      ),
+                    _RowIconAction(
+                      icon: LucideIcons.trash2,
+                      tooltip: 'Papelera',
+                      color: colors.error,
+                      onPressed: () => sendTaskToTrashWithConfirm(context, task),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Small icon-only quick action for [_DesktopAgendaRow].
+class _RowIconAction extends StatelessWidget {
+  const _RowIconAction({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.color,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: IconButton(
+        icon: Icon(icon, size: 16),
+        color: color ?? context.colors.textSecondary,
+        onPressed: onPressed,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        splashRadius: 18,
+      ),
+    );
+  }
+}
+
+/// Desktop variant of [_CompletedTodaySection] — same collapsible behavior,
+/// rendering [_DesktopAgendaRow] instead of [_AgendaTaskTile] so it matches
+/// the table styling of the section above it.
+class _DesktopCompletedTodaySection extends StatelessWidget {
+  const _DesktopCompletedTodaySection({
+    required this.tasks,
+    required this.expanded,
+    required this.onToggle,
+  });
+
+  final List<TaskModel> tasks;
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: context.colors.background,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: context.colors.success.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: onToggle,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: _SectionHeader(
+                icon: LucideIcons.checkCircle2,
+                title: 'Completadas hoy',
+                count: tasks.length,
+                color: context.colors.success,
+                trailing: Icon(
+                  expanded ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                  color: context.colors.textSecondary,
+                  size: 18,
+                ),
+              ),
+            ),
+          ),
+          if (expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Column(children: [for (final t in tasks) _DesktopAgendaRow(task: t)]),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Desktop variant of [_OverdueSection] — same red-accent grouping, rendering
+/// [_DesktopAgendaRow] (with [_DesktopAgendaRow.showDate] on, since these
+/// tasks aren't from today) instead of [_AgendaTaskTile].
+class _DesktopOverdueSection extends StatelessWidget {
+  const _DesktopOverdueSection({required this.tasks});
+
+  final List<TaskModel> tasks;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.error.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colors.error.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SectionHeader(
+            icon: LucideIcons.alertTriangle,
+            title: 'Tareas atrasadas',
+            count: tasks.length,
+            color: colors.error,
+          ),
+          const SizedBox(height: 10),
+          for (final t in tasks)
+            _DesktopAgendaRow(task: t, overrideChipColor: colors.error, showDate: true),
+        ],
+      ),
     );
   }
 }
