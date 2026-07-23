@@ -1,71 +1,28 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/responsive/app_spacing.dart';
+import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../core/utils/validators.dart';
 import '../../models/app_user.dart';
+import '../../models/group_model.dart';
 import '../../models/task_model.dart';
+import '../../models/task_type_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../providers/system_config_provider.dart';
 import '../../services/task_repository.dart';
 import '../../services/task_scheduling_service.dart';
 import '../../widgets/confirm_dialog.dart';
+import '../../widgets/form_section_card.dart';
 import '../../widgets/gold_button.dart';
 import 'widgets/hour_grid_selector.dart';
-
-enum _ReminderOption {
-  none,
-  min5,
-  min10,
-  min15,
-  min30,
-  hour1,
-  custom;
-
-  String get label {
-    switch (this) {
-      case _ReminderOption.none:
-        return 'Sin recordatorio';
-      case _ReminderOption.min5:
-        return '5 minutos antes';
-      case _ReminderOption.min10:
-        return '10 minutos antes';
-      case _ReminderOption.min15:
-        return '15 minutos antes';
-      case _ReminderOption.min30:
-        return '30 minutos antes';
-      case _ReminderOption.hour1:
-        return '1 hora antes';
-      case _ReminderOption.custom:
-        return 'Personalizado';
-    }
-  }
-
-  Duration? get offsetFromTask {
-    switch (this) {
-      case _ReminderOption.none:
-        return null;
-      case _ReminderOption.min5:
-        return const Duration(minutes: 5);
-      case _ReminderOption.min10:
-        return const Duration(minutes: 10);
-      case _ReminderOption.min15:
-        return const Duration(minutes: 15);
-      case _ReminderOption.min30:
-        return const Duration(minutes: 30);
-      case _ReminderOption.hour1:
-        return const Duration(hours: 1);
-      case _ReminderOption.custom:
-        return null;
-    }
-  }
-}
+import 'widgets/reminder_picker.dart';
 
 /// Form used to both create and edit a task.
 ///
@@ -95,7 +52,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
   String? _groupId;
   bool _visibleToAllGroups = false;
   DateTime? _reminderDateTime;
-  _ReminderOption _reminderOption = _ReminderOption.none;
+  ReminderOption _reminderOption = ReminderOption.none;
   bool _isSaving = false;
 
   bool get _isEditing => widget.existingTask != null;
@@ -116,9 +73,9 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
       _reminderDateTime = task.reminderTime;
       _groupId = task.groupId;
       _visibleToAllGroups = task.visibleToAllGroups;
-      _reminderOption = _detectOption(
+      _reminderOption = detectReminderOption(
         _reminderDateTime,
-        _taskDateTimeFromHour(_selectedDate, _selectedHour),
+        taskDateTimeFromHour(_selectedDate, _selectedHour),
       );
     } else {
       _selectedDate = widget.initialDate ?? DateTime.now();
@@ -134,340 +91,30 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // Reminder helpers
+  // Reminder helpers — the sheet/custom-picker UI itself lives in
+  // widgets/reminder_picker.dart, shared with the inline TaskCreatePanel.
   // ---------------------------------------------------------------------------
 
-  static _ReminderOption _detectOption(
-      DateTime? reminderTime, DateTime? taskDt) {
-    if (reminderTime == null) return _ReminderOption.none;
-    if (taskDt == null) return _ReminderOption.custom;
-    final diff = taskDt.difference(reminderTime);
-    for (final opt in _ReminderOption.values) {
-      final offset = opt.offsetFromTask;
-      if (offset != null && diff == offset) return opt;
-    }
-    return _ReminderOption.custom;
-  }
+  DateTime? _taskDateTime() => taskDateTimeFromHour(_selectedDate, _selectedHour);
 
-  static DateTime? _taskDateTimeFromHour(DateTime date, String? hourStr) {
-    if (hourStr == null) return null;
-    final parts = hourStr.split(':');
-    if (parts.length != 2) return null;
-    final hour = int.tryParse(parts[0]);
-    final minute = int.tryParse(parts[1]);
-    if (hour == null || minute == null) return null;
-    return DateTime(date.year, date.month, date.day, hour, minute);
-  }
+  String _reminderLabel() => formatReminderLabel(
+        option: _reminderOption,
+        reminderDateTime: _reminderDateTime,
+        taskDateTime: _taskDateTime(),
+      );
 
-  DateTime? _taskDateTime() =>
-      _taskDateTimeFromHour(_selectedDate, _selectedHour);
-
-  String _reminderLabel() {
-    switch (_reminderOption) {
-      case _ReminderOption.none:
-        return 'Sin recordatorio';
-      case _ReminderOption.custom:
-        return _reminderDateTime != null
-            ? _formatReminderDateTime(_reminderDateTime!)
-            : 'Sin recordatorio';
-      default:
-        return _reminderOption.label;
-    }
-  }
-
-  /// Shows just the time when the reminder falls on the same day as the
-  /// task (the common case, unchanged from before Sprint 7.4.9B); prefixes
-  /// the short date when the user picked a different day (e.g. the day
-  /// before), so that distinction is always visible rather than implied.
-  String _formatReminderDateTime(DateTime dt) {
-    final taskDt = _taskDateTime();
-    final sameDay = taskDt != null && AppDateUtils.isSameDay(dt, taskDt);
-    final time = AppDateUtils.formatTime12h(dt);
-    return sameDay ? time : '${AppDateUtils.formatShortDate(dt)} · $time';
-  }
-
-  // ---------------------------------------------------------------------------
-  // Picker sheets
-  // ---------------------------------------------------------------------------
-
-  Future<void> _showReminderSheet() async {
-    final current = _reminderOption;
-    final reminderDt = _reminderDateTime;
-
-    final result = await showModalBottomSheet<_ReminderOption>(
-      context: context,
-      backgroundColor: context.colors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) {
-        final colors = sheetCtx.colors;
-        return SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  margin: const EdgeInsets.only(top: 12, bottom: 4),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: colors.textSecondary.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-                child: Row(
-                  children: [
-                    Icon(LucideIcons.bell, color: colors.primary, size: 20),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Recordatorio',
-                      style: TextStyle(
-                        color: colors.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Divider(color: colors.divider, height: 16),
-              for (final opt in _ReminderOption.values)
-                InkWell(
-                  onTap: () => Navigator.pop(sheetCtx, opt),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 14),
-                    child: Row(
-                      children: [
-                        Icon(
-                          current == opt
-                              ? Icons.radio_button_checked
-                              : Icons.radio_button_unchecked,
-                          color: current == opt
-                              ? colors.primary
-                              : colors.textSecondary,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Text(
-                            opt.label,
-                            style: TextStyle(
-                              color: current == opt
-                                  ? colors.primary
-                                  : colors.textPrimary,
-                              fontSize: 15,
-                              fontWeight: current == opt
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                            ),
-                          ),
-                        ),
-                        if (opt == _ReminderOption.custom &&
-                            current == _ReminderOption.custom &&
-                            reminderDt != null)
-                          Text(
-                            _formatReminderDateTime(reminderDt),
-                            style: TextStyle(
-                                color: colors.textSecondary, fontSize: 13),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
+  Future<void> _pickReminder() async {
+    final result = await pickReminder(
+      context,
+      current: _reminderOption,
+      currentReminderDateTime: _reminderDateTime,
+      taskDateTime: _taskDateTime(),
     );
-
-    if (!mounted || result == null) return;
-
-    if (result == _ReminderOption.custom) {
-      await _showCustomReminderPicker();
-      return;
-    }
-
-    final taskDt = _taskDateTime();
+    if (result == null || !mounted) return;
     setState(() {
-      _reminderOption = result;
-      if (result == _ReminderOption.none) {
-        _reminderDateTime = null;
-      } else if (taskDt != null) {
-        _reminderDateTime = taskDt.subtract(result.offsetFromTask!);
-      }
+      _reminderOption = result.option;
+      _reminderDateTime = result.dateTime;
     });
-  }
-
-  /// Custom reminder: lets the user pick a date (defaulting to the task's
-  /// own date, but any earlier day is allowed — Sprint 7.4.9B Objetivo A/B)
-  /// followed by a time, instead of forcing the reminder onto the task's
-  /// own day as the previous time-only picker did.
-  Future<void> _showCustomReminderPicker() async {
-    final taskDt = _taskDateTime();
-    final initial = _reminderDateTime ?? taskDt ?? DateTime.now();
-
-    final pickedDate = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: taskDt ?? DateTime.now().add(const Duration(days: 365 * 2)),
-      helpText: 'Fecha del recordatorio',
-    );
-    if (!mounted || pickedDate == null) return;
-
-    DateTime picked = DateTime(
-      pickedDate.year,
-      pickedDate.month,
-      pickedDate.day,
-      initial.hour,
-      initial.minute,
-    );
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogCtx) {
-        final colors = dialogCtx.colors;
-        return Dialog(
-          backgroundColor: colors.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 24,
-            vertical: 40,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Icon(LucideIcons.clock,
-                          color: colors.primary, size: 22),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Hora del recordatorio',
-                            style: TextStyle(
-                              color: colors.textPrimary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Para el ${AppDateUtils.formatShortDate(pickedDate)}',
-                            style: TextStyle(
-                              color: colors.textSecondary,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Divider(color: colors.divider, height: 1),
-              ),
-              SizedBox(
-                height: 200,
-                child: CupertinoTheme(
-                  data: CupertinoThemeData(
-                    brightness: Theme.of(dialogCtx).brightness,
-                    textTheme: CupertinoTextThemeData(
-                      pickerTextStyle: TextStyle(
-                        color: colors.textPrimary,
-                        fontSize: 21,
-                      ),
-                    ),
-                  ),
-                  child: CupertinoDatePicker(
-                    mode: CupertinoDatePickerMode.time,
-                    initialDateTime: picked,
-                    use24hFormat: false,
-                    onDateTimeChanged: (dt) => picked = DateTime(
-                      pickedDate.year,
-                      pickedDate.month,
-                      pickedDate.day,
-                      dt.hour,
-                      dt.minute,
-                    ),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        style: TextButton.styleFrom(
-                          foregroundColor: colors.textSecondary,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                        ),
-                        onPressed: () => Navigator.pop(dialogCtx),
-                        child: const Text(
-                          'Cancelar',
-                          style: TextStyle(fontSize: 14),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: colors.primary,
-                          foregroundColor: colors.onPrimary,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _reminderOption = _ReminderOption.custom;
-                            _reminderDateTime = picked;
-                          });
-                          Navigator.pop(dialogCtx);
-                        },
-                        child: const Text(
-                          'Confirmar',
-                          style: TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
   }
 
   // ---------------------------------------------------------------------------
@@ -727,8 +374,29 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
             .toList()
         : catalog.groups;
 
+    final title = _isEditing ? 'Editar tarea' : 'Nueva tarea';
+
+    // Tablet/desktop gets a restructured two-zone layout (see
+    // _buildDesktopScaffold); mobile keeps the exact original single-column
+    // Form below, untouched, per the redesign brief.
+    if (!context.isMobile) {
+      return _buildDesktopScaffold(
+        context,
+        title: title,
+        colors: colors,
+        catalog: catalog,
+        useFreePicker: useFreePicker,
+        assignableUsers: assignableUsers,
+        groupOptions: groupOptions,
+        isGroupLocked: isGroupLocked,
+        availableTaskTypes: availableTaskTypes,
+        isAdmin: isAdmin,
+        canEditReminder: canEditReminder,
+      );
+    }
+
     return Scaffold(
-      appBar: AppBar(title: Text(_isEditing ? 'Editar tarea' : 'Nueva tarea')),
+      appBar: AppBar(title: Text(title)),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -916,7 +584,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
             ),
             const SizedBox(height: 16),
             InkWell(
-              onTap: canEditReminder ? _showReminderSheet : null,
+              onTap: canEditReminder ? _pickReminder : null,
               child: InputDecorator(
                 decoration: InputDecoration(
                   labelText: 'Recordatorio (opcional)',
@@ -924,13 +592,13 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                   suffixIcon: !canEditReminder
                       ? Icon(LucideIcons.lock,
                           color: colors.textSecondary, size: 18)
-                      : (_reminderOption != _ReminderOption.none
+                      : (_reminderOption != ReminderOption.none
                           ? IconButton(
                               icon: Icon(LucideIcons.xCircle,
                                   color: colors.textSecondary),
                               onPressed: () => setState(() {
                                 _reminderDateTime = null;
-                                _reminderOption = _ReminderOption.none;
+                                _reminderOption = ReminderOption.none;
                               }),
                             )
                           : null),
@@ -963,4 +631,444 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
       ),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Tablet/desktop layout (redesign — see project conversation history for
+  // the agreed brief). Reuses every field widget, validator, controller and
+  // handler from the mobile form above unchanged — only the arrangement
+  // differs: two zones ("Programación" + "Cliente y notas") instead of one
+  // long column, and the primary action moves into the AppBar so it's
+  // always reachable without scrolling. Mobile is untouched (see build()).
+  // ---------------------------------------------------------------------------
+
+  Widget _buildDesktopScaffold(
+    BuildContext context, {
+    required String title,
+    required AppColorsExtension colors,
+    required CatalogProvider catalog,
+    required bool useFreePicker,
+    required List<AppUser> assignableUsers,
+    required List<GroupModel> groupOptions,
+    required bool isGroupLocked,
+    required List<TaskTypeModel> availableTaskTypes,
+    required bool isAdmin,
+    required bool canEditReminder,
+  }) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.md),
+            child: IntrinsicWidth(
+              child: GoldButton(
+                label: _isEditing ? 'Guardar cambios' : 'Crear tarea',
+                loading: _isSaving,
+                onPressed: _save,
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: Form(
+        key: _formKey,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: AppLayout.contentMaxWidthWide),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final scheduleSection = _buildScheduleSection(
+                    colors: colors,
+                    catalog: catalog,
+                    useFreePicker: useFreePicker,
+                    assignableUsers: assignableUsers,
+                    groupOptions: groupOptions,
+                    isGroupLocked: isGroupLocked,
+                    availableTaskTypes: availableTaskTypes,
+                    isAdmin: isAdmin,
+                    canEditReminder: canEditReminder,
+                  );
+                  final clientSection = _buildClientSection(colors: colors);
+
+                  if (constraints.maxWidth >= 760) {
+                    return SingleChildScrollView(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 3, child: scheduleSection),
+                          const SizedBox(width: AppSpacing.lg),
+                          Expanded(flex: 2, child: clientSection),
+                        ],
+                      ),
+                    );
+                  }
+
+                  // Stacked (narrow) layout: Cliente y notas first, then
+                  // Programación — matches the order Michel asked for in the
+                  // centered edit dialog (which always lands here, being
+                  // narrower than the 760px threshold above).
+                  return SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        clientSection,
+                        const SizedBox(height: AppSpacing.lg),
+                        scheduleSection,
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// "Programación": Fecha+Hora, Encargado+Equipo, Tipo de tarea(+Estado) and
+  /// the "visible para todos los equipos" toggle — the highest-frequency
+  /// decisions, grouped by proximity instead of one field per row.
+  Widget _buildScheduleSection({
+    required AppColorsExtension colors,
+    required CatalogProvider catalog,
+    required bool useFreePicker,
+    required List<AppUser> assignableUsers,
+    required List<GroupModel> groupOptions,
+    required bool isGroupLocked,
+    required List<TaskTypeModel> availableTaskTypes,
+    required bool isAdmin,
+    required bool canEditReminder,
+  }) {
+    final dateField = InkWell(
+      onTap: _pickDate,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Fecha',
+          prefixIcon: Icon(LucideIcons.calendar, color: colors.primary),
+        ),
+        child: Text(AppDateUtils.formatShortDate(_selectedDate)),
+      ),
+    );
+
+    final hourField = useFreePicker
+        ? InkWell(
+            onTap: () async {
+              final initial = _selectedHour != null
+                  ? TaskSchedulingService.parseHourString(_selectedHour!)
+                  : TimeOfDay.now();
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: initial,
+              );
+              if (!mounted || picked == null) return;
+              setState(() {
+                _selectedHour = TaskSchedulingService.formatTimeOfDay(picked);
+              });
+            },
+            child: InputDecorator(
+              decoration: InputDecoration(
+                labelText: 'Hora',
+                prefixIcon: Icon(LucideIcons.clock, color: colors.primary),
+              ),
+              child: Text(
+                _selectedHour ?? 'Seleccionar hora',
+                style: _selectedHour == null
+                    ? TextStyle(color: colors.textSecondary)
+                    : null,
+              ),
+            ),
+          )
+        : HourGridSelector(
+            hours: TaskSchedulingService.catalogHours(catalog),
+            selectedDate: _selectedDate,
+            selectedHour: _selectedHour,
+            onHourSelected: (h) => setState(() => _selectedHour = h),
+          );
+
+    final assignedField = DropdownButtonFormField<String>(
+      initialValue: assignableUsers.any((u) => u.id == _assignedUserId)
+          ? _assignedUserId
+          : null,
+      decoration: InputDecoration(
+        labelText: 'Encargado',
+        prefixIcon: Icon(LucideIcons.userCheck, color: colors.primary),
+      ),
+      dropdownColor: colors.surface,
+      items: assignableUsers
+          .map((u) => DropdownMenuItem(value: u.id, child: Text(u.name)))
+          .toList(),
+      onChanged: (v) => setState(() => _assignedUserId = v),
+      validator: (v) => v == null ? 'Selecciona un encargado' : null,
+    );
+
+    final groupField = DropdownButtonFormField<String>(
+      initialValue: groupOptions.any((g) => g.id == _groupId) ? _groupId : null,
+      decoration: InputDecoration(
+        labelText: 'Equipo',
+        prefixIcon: Icon(LucideIcons.users, color: colors.primary),
+        suffixIcon: isGroupLocked
+            ? Icon(LucideIcons.lock, color: colors.textSecondary, size: 18)
+            : null,
+      ),
+      dropdownColor: colors.surface,
+      items: groupOptions
+          .map((g) => DropdownMenuItem(value: g.id, child: Text(g.name)))
+          .toList(),
+      onChanged: isGroupLocked
+          ? null
+          : (v) => setState(() {
+                _groupId = v;
+                _taskTypeId = null;
+              }),
+      validator: (v) => v == null ? 'Selecciona un equipo' : null,
+    );
+
+    final taskTypeField = DropdownButtonFormField<String>(
+      initialValue: availableTaskTypes.any((t) => t.id == _taskTypeId)
+          ? _taskTypeId
+          : null,
+      decoration: InputDecoration(
+        labelText: 'Tipo de tarea',
+        prefixIcon: Icon(LucideIcons.tag, color: colors.primary),
+      ),
+      dropdownColor: colors.surface,
+      items: availableTaskTypes
+          .map((t) => DropdownMenuItem(value: t.id, child: Text(t.name)))
+          .toList(),
+      onChanged: (v) => setState(() => _taskTypeId = v),
+      validator: (v) => v == null ? 'Selecciona un tipo de tarea' : null,
+    );
+
+    final statusField = isAdmin
+        ? DropdownButtonFormField<String>(
+            initialValue:
+                catalog.statuses.any((s) => s.id == _statusId) ? _statusId : null,
+            decoration: InputDecoration(
+              labelText: 'Estado',
+              prefixIcon: Icon(LucideIcons.listChecks, color: colors.primary),
+            ),
+            dropdownColor: colors.surface,
+            items: catalog.statuses
+                .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name)))
+                .toList(),
+            onChanged: (v) => setState(() => _statusId = v),
+          )
+        : null;
+
+    return FormSectionCard(
+      icon: LucideIcons.calendarClock,
+      title: 'Programación',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 220, child: dateField),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(child: hourField),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          InkWell(
+            onTap: canEditReminder ? _pickReminder : null,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm,
+              ),
+              decoration: BoxDecoration(
+                color: colors.background,
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                border: Border.all(color: colors.divider),
+              ),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.bell, color: colors.primary, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Recordatorio',
+                          style: TextStyle(color: colors.textSecondary, fontSize: 11),
+                        ),
+                        Text(
+                          _reminderLabel(),
+                          style: TextStyle(
+                            color: !canEditReminder
+                                ? colors.textSecondary
+                                : colors.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!canEditReminder)
+                    Icon(LucideIcons.lock, color: colors.textSecondary, size: 18)
+                  else if (_reminderOption != ReminderOption.none)
+                    IconButton(
+                      icon: Icon(LucideIcons.xCircle, color: colors.textSecondary),
+                      onPressed: () => setState(() {
+                        _reminderDateTime = null;
+                        _reminderOption = ReminderOption.none;
+                      }),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            canEditReminder
+                ? 'El recordatorio debe ser anterior a la hora de la tarea.'
+                : 'Solo el encargado o un administrador pueden modificar el recordatorio.',
+            style: TextStyle(color: colors.textSecondary, fontSize: 11),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(child: assignedField),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(child: groupField),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          statusField != null
+              ? Row(
+                  children: [
+                    Expanded(child: taskTypeField),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(child: statusField),
+                  ],
+                )
+              : taskTypeField,
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Icon(LucideIcons.globe, color: colors.primary, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Visible para todos los equipos',
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      'Si está desactivado, solo el equipo seleccionado podrá ver esta tarea.',
+                      style: TextStyle(color: colors.textSecondary, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                activeThumbColor: colors.primary,
+                value: _visibleToAllGroups,
+                onChanged: (v) => setState(() => _visibleToAllGroups = v),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextFormField(
+            controller: _observationsController,
+            maxLines: 3,
+            style: TextStyle(color: colors.textPrimary),
+            decoration: InputDecoration(
+              labelText: 'Observaciones',
+              alignLabelWithHint: true,
+              prefixIcon: Padding(
+                padding: const EdgeInsets.only(bottom: 40),
+                child: Icon(LucideIcons.pencil, color: colors.primary),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// "Cliente y notas": solo los datos de contacto del cliente — visualmente
+  /// más corta que Programación, que concentra el resto de los campos.
+  Widget _buildClientSection({required AppColorsExtension colors}) {
+    return FormSectionCard(
+      icon: LucideIcons.userCircle,
+      title: 'Cliente',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextFormField(
+            controller: _clientNameController,
+            style: TextStyle(color: colors.textPrimary),
+            decoration: InputDecoration(
+              labelText: 'Nombre del cliente',
+              prefixIcon: Icon(LucideIcons.userCircle, color: colors.primary),
+            ),
+            validator: (v) =>
+                Validators.required(v, fieldName: 'El nombre del cliente'),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextFormField(
+            controller: _clientPhoneController,
+            keyboardType: TextInputType.phone,
+            style: TextStyle(color: colors.textPrimary),
+            decoration: InputDecoration(
+              labelText: 'Teléfono del cliente',
+              prefixIcon: Icon(LucideIcons.phone, color: colors.primary),
+              hintText: '300 225 7755 o +57 300 225 7755',
+            ),
+            validator: Validators.phone,
+          ),
+        ],
+      ),
+    );
+  }
 }
+
+/// Opens the edit flow for [task]. On tablet/desktop this is a centered
+/// floating window instead of taking over the whole screen — the same
+/// [AddEditTaskPage] content, just presented as a [Dialog] (closing it via
+/// the AppBar's back arrow, the "Guardar cambios" button, or tapping
+/// outside all just pop the dialog's route, exactly like before). Mobile is
+/// unchanged: still a full-page push.
+///
+/// The window is deliberately narrower than [AddEditTaskPage]'s ≥760px
+/// side-by-side threshold, so "Cliente y notas" and "Programación" stack
+/// vertically here (Cliente y notas on top) instead of sitting side by side —
+/// the same responsive rule already used inside the page, just landing on
+/// its stacked branch because this window is smaller.
+Future<void> openEditTaskFlow(BuildContext context, TaskModel task) {
+  if (context.isMobile) {
+    return Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => AddEditTaskPage(existingTask: task)),
+    );
+  }
+  return showDialog<void>(
+    context: context,
+    builder: (dialogContext) => Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 620, maxHeight: 880),
+        child: AddEditTaskPage(existingTask: task),
+      ),
+    ),
+  );
+}
+

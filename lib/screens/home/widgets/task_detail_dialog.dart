@@ -180,11 +180,7 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
                       TextButton.icon(
                         onPressed: () {
                           Navigator.of(dialogContext).pop();
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => AddEditTaskPage(existingTask: task),
-                            ),
-                          );
+                          openEditTaskFlow(context, task);
                         },
                         icon: const Icon(LucideIcons.pencil, size: 16),
                         label: const Text('Editar'),

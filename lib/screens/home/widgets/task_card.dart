@@ -176,13 +176,7 @@ class TaskCard extends StatelessWidget {
                         children: [
                           if (canEdit)
                             TextButton.icon(
-                              onPressed: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => AddEditTaskPage(existingTask: task),
-                                  ),
-                                );
-                              },
+                              onPressed: () => openEditTaskFlow(context, task),
                               icon: const Icon(LucideIcons.pencil, size: 16),
                               label: const Text('Editar'),
                             ),
@@ -364,9 +358,7 @@ Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
                 title: const Text('Editar'),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => AddEditTaskPage(existingTask: task)),
-                  );
+                  openEditTaskFlow(context, task);
                 },
               ),
             if (canReschedule)

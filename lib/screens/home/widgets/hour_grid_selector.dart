@@ -3,7 +3,6 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/responsive/app_spacing.dart';
-import '../../../core/responsive/responsive.dart';
 import '../../../core/theme/theme_colors.dart';
 import '../../../models/task_model.dart';
 import '../../../services/task_repository.dart';
@@ -77,15 +76,29 @@ class _HourGridSelectorState extends State<HourGridSelector> {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final w = MediaQuery.sizeOf(context).width;
-    final cols = w < 360
-        ? 1
-        : w < Breakpoints.mobile
-            ? 2
-            : w < Breakpoints.tablet
-                ? 3
-                : 4;
 
+    // Column count follows the *actual* space this widget has, not the
+    // device's full screen width — it can be embedded in a narrower column
+    // (e.g. the tablet/desktop task form's "Programación" section) that's
+    // much smaller than the screen itself.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final cols = w < 220
+            ? 1
+            : w < 380
+                ? 2
+                : w < 560
+                    ? 3
+                    : w < 820
+                        ? 4
+                        : 5;
+        return _buildContent(context, colors, cols);
+      },
+    );
+  }
+
+  Widget _buildContent(BuildContext context, AppColorsExtension colors, int cols) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
