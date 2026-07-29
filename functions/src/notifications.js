@@ -158,6 +158,18 @@ async function sendNotificationToUser(userId, { title, body, data = {} }) {
         data,
         android: { priority: "high" },
         apns: { payload: { aps: { sound: "default" } } },
+        // Without this, Chrome's own auto-display of the `notification`
+        // payload (which fires for background tabs independently of the
+        // service worker's onBackgroundMessage handler) falls back to a
+        // blank/generic icon — the "notification without the logo" the
+        // user was seeing alongside the one the service worker shows
+        // manually with an icon (web/firebase-messaging-sw.js).
+        webpush: {
+          notification: {
+            icon: "/icons/Icon-192.png",
+            badge: "/icons/Icon-192.png",
+          },
+        },
       }),
       recordPromise,
     ]);

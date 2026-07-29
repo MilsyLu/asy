@@ -15,17 +15,16 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+// Chrome auto-displays the push's `notification` payload for background
+// tabs on its own (independent of this handler) — the Cloud Functions
+// payload now carries `webpush.notification.icon` (see
+// functions/src/notifications.js) so that auto-displayed notification
+// already shows the logo. Calling `showNotification` here too used to
+// produce a *second*, icon-less notification for every push; this handler
+// is kept only in case future custom background handling is needed, and
+// intentionally does not display anything itself.
 messaging.onBackgroundMessage((payload) => {
-  const notif = (payload && payload.notification) || {};
-  const title = notif.title || 'CheCu';
-  const body  = notif.body  || '';
-
-  return self.registration.showNotification(title, {
-    body,
-    icon: '/icons/Icon-192.png',
-    badge: '/icons/Icon-192.png',
-    data: { url: self.location.origin + '/', ...(payload.data || {}) },
-  });
+  console.log('[FCM] Background message received (auto-displayed by the browser):', payload);
 });
 
 self.addEventListener('notificationclick', (event) => {
