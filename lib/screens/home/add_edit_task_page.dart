@@ -164,10 +164,6 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
       SnackbarUtils.showError(context, 'Selecciona un encargado');
       return;
     }
-    if (_taskTypeId == null) {
-      SnackbarUtils.showError(context, 'Selecciona un tipo de tarea');
-      return;
-    }
     if (_groupId == null) {
       SnackbarUtils.showError(context, 'Selecciona un equipo');
       return;
@@ -264,7 +260,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
           id: '',
           hour: _selectedHour!,
           assignedUserId: _assignedUserId!,
-          taskTypeId: _taskTypeId!,
+          taskTypeId: _taskTypeId,
           clientName: _clientNameController.text.trim(),
           clientPhone: Validators.cleanPhone(_clientPhoneController.text),
           statusId: statusId,
@@ -354,12 +350,12 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     // offered (types with no groups assigned are universal, see
     // TaskTypeModel.appliesToGroup). The currently selected type is always
     // kept so it isn't silently dropped if it no longer matches.
+    // Tipo de tarea is optional — no default auto-selection, so leaving it
+    // unset (or explicitly picking "Sin tipo") is a real, reachable state
+    // instead of the field always landing on the first available type.
     final availableTaskTypes = catalog.taskTypes
         .where((t) => t.appliesToGroup(_groupId) || t.id == _taskTypeId)
         .toList();
-    if (_taskTypeId == null && availableTaskTypes.isNotEmpty) {
-      _taskTypeId = availableTaskTypes.first.id;
-    }
 
     final assignableUsers = _assignableUsers(catalog, currentUser);
     // Non-admins can only create/edit tasks for their own group, so the
@@ -506,23 +502,22 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
               onChanged: (v) => setState(() => _visibleToAllGroups = v),
             ),
             const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
+            DropdownButtonFormField<String?>(
               initialValue:
                   availableTaskTypes.any((t) => t.id == _taskTypeId)
                       ? _taskTypeId
                       : null,
               decoration: InputDecoration(
-                labelText: 'Tipo de tarea',
+                labelText: 'Tipo de tarea (opcional)',
                 prefixIcon: Icon(LucideIcons.tag, color: colors.primary),
               ),
               dropdownColor: colors.surface,
-              items: availableTaskTypes
-                  .map((t) =>
-                      DropdownMenuItem(value: t.id, child: Text(t.name)))
-                  .toList(),
+              items: [
+                const DropdownMenuItem<String?>(value: null, child: Text('Sin tipo')),
+                ...availableTaskTypes
+                    .map((t) => DropdownMenuItem<String?>(value: t.id, child: Text(t.name))),
+              ],
               onChanged: (v) => setState(() => _taskTypeId = v),
-              validator: (v) =>
-                  v == null ? 'Selecciona un tipo de tarea' : null,
             ),
             if (isAdmin) ...[
               const SizedBox(height: 16),
@@ -827,20 +822,21 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
       validator: (v) => v == null ? 'Selecciona un equipo' : null,
     );
 
-    final taskTypeField = DropdownButtonFormField<String>(
+    final taskTypeField = DropdownButtonFormField<String?>(
       initialValue: availableTaskTypes.any((t) => t.id == _taskTypeId)
           ? _taskTypeId
           : null,
       decoration: InputDecoration(
-        labelText: 'Tipo de tarea',
+        labelText: 'Tipo de tarea (opcional)',
         prefixIcon: Icon(LucideIcons.tag, color: colors.primary),
       ),
       dropdownColor: colors.surface,
-      items: availableTaskTypes
-          .map((t) => DropdownMenuItem(value: t.id, child: Text(t.name)))
-          .toList(),
+      items: [
+        const DropdownMenuItem<String?>(value: null, child: Text('Sin tipo')),
+        ...availableTaskTypes
+            .map((t) => DropdownMenuItem<String?>(value: t.id, child: Text(t.name))),
+      ],
       onChanged: (v) => setState(() => _taskTypeId = v),
-      validator: (v) => v == null ? 'Selecciona un tipo de tarea' : null,
     );
 
     final statusField = isAdmin

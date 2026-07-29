@@ -6,7 +6,7 @@ class TaskModel {
   final String id;
   final String hour; // "HH:MM"
   final String assignedUserId;
-  final String taskTypeId;
+  final String? taskTypeId;
   final String clientName;
   final String clientPhone;
   final String statusId;
@@ -32,7 +32,7 @@ class TaskModel {
     required this.id,
     required this.hour,
     required this.assignedUserId,
-    required this.taskTypeId,
+    this.taskTypeId,
     required this.clientName,
     required this.clientPhone,
     required this.statusId,
@@ -66,7 +66,7 @@ class TaskModel {
       id: id,
       hour: map['hour'] as String? ?? '00:00',
       assignedUserId: map['assignedUserId'] as String? ?? '',
-      taskTypeId: map['taskTypeId'] as String? ?? '',
+      taskTypeId: map['taskTypeId'] as String?,
       clientName: map['clientName'] as String? ?? '',
       clientPhone: map['clientPhone'] as String? ?? '',
       statusId: map['statusId'] as String? ?? '',
@@ -144,12 +144,13 @@ class TaskModel {
     bool? clearDeletedBy,
     String? deletedByName,
     bool? clearDeletedByName,
+    bool? clearTaskTypeId,
   }) {
     return TaskModel(
       id: id,
       hour: hour ?? this.hour,
       assignedUserId: assignedUserId ?? this.assignedUserId,
-      taskTypeId: taskTypeId ?? this.taskTypeId,
+      taskTypeId: clearTaskTypeId == true ? null : (taskTypeId ?? this.taskTypeId),
       clientName: clientName ?? this.clientName,
       clientPhone: clientPhone ?? this.clientPhone,
       statusId: statusId ?? this.statusId,

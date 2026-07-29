@@ -155,10 +155,6 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
       SnackbarUtils.showError(context, 'Selecciona un encargado');
       return;
     }
-    if (_taskTypeId == null) {
-      SnackbarUtils.showError(context, 'Selecciona un tipo de tarea');
-      return;
-    }
     if (_groupId == null) {
       SnackbarUtils.showError(context, 'Selecciona un equipo');
       return;
@@ -218,7 +214,7 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
         id: '',
         hour: _selectedHour!,
         assignedUserId: _assignedUserId!,
-        taskTypeId: _taskTypeId!,
+        taskTypeId: _taskTypeId,
         clientName: _clientNameController.text.trim(),
         clientPhone: Validators.cleanPhone(_clientPhoneController.text),
         statusId: statusId,
@@ -263,12 +259,11 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
     }
     _groupId ??= catalog.userById(_assignedUserId)?.groupId ?? currentUser.groupId;
 
+    // Tipo de tarea is optional — no default auto-selection, so leaving it
+    // unset (or explicitly picking "Sin tipo") is a real, reachable state.
     final availableTaskTypes = catalog.taskTypes
         .where((t) => t.appliesToGroup(_groupId) || t.id == _taskTypeId)
         .toList();
-    if (_taskTypeId == null && availableTaskTypes.isNotEmpty) {
-      _taskTypeId = availableTaskTypes.first.id;
-    }
 
     final assignableUsers = _assignableUsers(catalog, currentUser);
     final isGroupLocked = !isAdmin && currentUser.groupId != null;
@@ -409,20 +404,21 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
       validator: (v) => v == null ? 'Selecciona un equipo' : null,
     );
 
-    final taskTypeField = DropdownButtonFormField<String>(
+    final taskTypeField = DropdownButtonFormField<String?>(
       initialValue: availableTaskTypes.any((t) => t.id == _taskTypeId)
           ? _taskTypeId
           : null,
       decoration: InputDecoration(
-        labelText: 'Tipo de tarea',
+        labelText: 'Tipo de tarea (opcional)',
         prefixIcon: Icon(LucideIcons.tag, color: colors.primary),
       ),
       dropdownColor: colors.surface,
-      items: availableTaskTypes
-          .map((t) => DropdownMenuItem(value: t.id, child: Text(t.name)))
-          .toList(),
+      items: [
+        const DropdownMenuItem<String?>(value: null, child: Text('Sin tipo')),
+        ...availableTaskTypes
+            .map((t) => DropdownMenuItem<String?>(value: t.id, child: Text(t.name))),
+      ],
       onChanged: (v) => setState(() => _taskTypeId = v),
-      validator: (v) => v == null ? 'Selecciona un tipo de tarea' : null,
     );
 
     final statusField = isAdmin

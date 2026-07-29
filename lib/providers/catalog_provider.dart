@@ -82,7 +82,7 @@ class CatalogProvider extends ChangeNotifier {
     return null;
   }
 
-  String taskTypeName(String? id) => taskTypeById(id)?.name ?? '-';
+  String taskTypeName(String? id) => taskTypeById(id)?.name ?? 'Sin tipo';
 
   /// Task types offered for [groupId] (Sprint 5.4): types with no
   /// [TaskTypeModel.groupIds] assigned are universal and always included.
