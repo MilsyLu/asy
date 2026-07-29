@@ -58,9 +58,13 @@ function isPushAllowed(mode, type) {
     case "none":
       return false;
     case "assigned_only":
-      return type === "task_created_assigned" || type === "task_reminder";
+      return (
+        type === "task_created_assigned" ||
+        type === "task_reminder" ||
+        type === "task_reprogrammed_assigned"
+      );
     case "group_only":
-      return type === "task_created_group";
+      return type === "task_created_group" || type === "task_reprogrammed_group";
     case "all":
     default:
       return true;
