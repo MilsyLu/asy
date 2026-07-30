@@ -9,6 +9,12 @@ class TaskModel {
   final String? taskTypeId;
   final String clientName;
   final String clientPhone;
+  /// Links this task to a `clients/{id}` record. Nullable: legacy tasks
+  /// (created before the Clientes feature) never have one, and even new
+  /// tasks may briefly not until save-time auto-linking resolves it. See
+  /// [ClientModel] and the `_resolveOrCreateClientId` helper duplicated in
+  /// `add_edit_task_page.dart`/`task_create_panel.dart`.
+  final String? clientId;
   final String statusId;
   final String observations;
   final DateTime? reminderTime;
@@ -35,6 +41,7 @@ class TaskModel {
     this.taskTypeId,
     required this.clientName,
     required this.clientPhone,
+    this.clientId,
     required this.statusId,
     required this.date,
     this.observations = '',
@@ -69,6 +76,7 @@ class TaskModel {
       taskTypeId: map['taskTypeId'] as String?,
       clientName: map['clientName'] as String? ?? '',
       clientPhone: map['clientPhone'] as String? ?? '',
+      clientId: map['clientId'] as String?,
       statusId: map['statusId'] as String? ?? '',
       observations: map['observations'] as String? ?? '',
       reminderTime: (map['reminderTime'] as Timestamp?)?.toDate(),
@@ -98,6 +106,7 @@ class TaskModel {
       'taskTypeId': taskTypeId,
       'clientName': clientName,
       'clientPhone': clientPhone,
+      'clientId': clientId,
       'statusId': statusId,
       'observations': observations,
       'reminderTime':
@@ -126,6 +135,8 @@ class TaskModel {
     String? taskTypeId,
     String? clientName,
     String? clientPhone,
+    String? clientId,
+    bool? clearClientId,
     String? statusId,
     String? observations,
     DateTime? reminderTime,
@@ -153,6 +164,7 @@ class TaskModel {
       taskTypeId: clearTaskTypeId == true ? null : (taskTypeId ?? this.taskTypeId),
       clientName: clientName ?? this.clientName,
       clientPhone: clientPhone ?? this.clientPhone,
+      clientId: clearClientId == true ? null : (clientId ?? this.clientId),
       statusId: statusId ?? this.statusId,
       observations: observations ?? this.observations,
       reminderTime: clearReminder == true

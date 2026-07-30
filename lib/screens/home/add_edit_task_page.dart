@@ -15,11 +15,13 @@ import '../../models/task_model.dart';
 import '../../models/task_type_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
+import '../../services/catalog_repository.dart';
 import '../../services/task_repository.dart';
 import '../../services/task_scheduling_service.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/form_section_card.dart';
 import '../../widgets/gold_button.dart';
+import 'widgets/client_picker_field.dart';
 import 'widgets/hour_grid_selector.dart';
 import 'widgets/reminder_picker.dart';
 
@@ -42,6 +44,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
   final _clientNameController = TextEditingController();
   final _clientPhoneController = TextEditingController();
   final _observationsController = TextEditingController();
+  String? _clientId;
 
   late DateTime _selectedDate;
   String? _selectedHour;
@@ -68,6 +71,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
       _statusId = task.statusId;
       _clientNameController.text = task.clientName;
       _clientPhoneController.text = task.clientPhone;
+      _clientId = task.clientId;
       _observationsController.text = task.observations;
       _reminderDateTime = task.reminderTime;
       _groupId = task.groupId;
@@ -161,6 +165,26 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     if (picked != null) setState(() => _selectedDate = picked);
   }
 
+  /// Resolves [_clientId] to a real `clients/{id}` at save time: if already
+  /// linked (a suggestion was picked and neither field edited since),
+  /// reuses it as-is; otherwise looks for an existing client with the same
+  /// name+phone, and only creates a new one if none matches. This is what
+  /// makes the client list self-populate from ordinary task creation
+  /// without anyone having to visit the Clientes admin screen — see the
+  /// Clientes feature's plan doc for the full rationale. Returns null only
+  /// when the name field ended up empty (shouldn't happen — Nombre is
+  /// required — but guards against it defensively).
+  Future<String?> _resolveOrCreateClientId(CatalogProvider catalog) async {
+    if (_clientId != null) return _clientId;
+    final name = _clientNameController.text.trim();
+    if (name.isEmpty) return null;
+    final phone = Validators.cleanPhone(_clientPhoneController.text);
+    final existing = catalog.clientByNameAndPhone(name, phone);
+    if (existing != null) return existing.id;
+    final catalogRepo = context.read<CatalogRepository>();
+    return catalogRepo.addClient(name, phone);
+  }
+
   Future<void> _save() async {
     debugPrint(
       '[CREATE_TASK]\nsave_pressed\ntimestamp=${DateTime.now().millisecondsSinceEpoch}',
@@ -235,6 +259,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
       }
 
       final statusId = _statusId ?? catalog.pendingStatusId ?? '';
+      final resolvedClientId = await _resolveOrCreateClientId(catalog);
 
       if (_isEditing) {
         // Sprint 7.4.9B: a user without canEditReminder must not change
@@ -253,6 +278,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
           'statusId': statusId,
           'clientName': _clientNameController.text.trim(),
           'clientPhone': Validators.cleanPhone(_clientPhoneController.text),
+          'clientId': resolvedClientId,
           'observations': _observationsController.text.trim(),
           'reminderTime': reminderTimeToSave,
           'reminderSent': reminderSentToSave,
@@ -273,6 +299,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
           taskTypeId: _taskTypeId,
           clientName: _clientNameController.text.trim(),
           clientPhone: Validators.cleanPhone(_clientPhoneController.text),
+          clientId: resolvedClientId,
           statusId: statusId,
           observations: _observationsController.text.trim(),
           reminderTime: _reminderDateTime,
@@ -563,28 +590,12 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
               ),
             ],
             const SizedBox(height: 16),
-            TextFormField(
-              controller: _clientNameController,
-              style: TextStyle(color: colors.textPrimary),
-              decoration: InputDecoration(
-                labelText: 'Nombre del cliente',
-                prefixIcon:
-                    Icon(LucideIcons.userCircle, color: colors.primary),
-              ),
-              validator: (v) =>
-                  Validators.required(v, fieldName: 'El nombre del cliente'),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _clientPhoneController,
-              keyboardType: TextInputType.phone,
-              style: TextStyle(color: colors.textPrimary),
-              decoration: InputDecoration(
-                labelText: 'Teléfono del cliente',
-                prefixIcon: Icon(LucideIcons.phone, color: colors.primary),
-                hintText: '300 225 7755 o +57 300 225 7755',
-              ),
-              validator: Validators.phone,
+            ClientPickerField(
+              clients: catalog.clients,
+              nameController: _clientNameController,
+              phoneController: _clientPhoneController,
+              clientId: _clientId,
+              onClientIdChanged: (id) => setState(() => _clientId = id),
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -708,7 +719,8 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                     isAdmin: isAdmin,
                     canEditReminder: canEditReminder,
                   );
-                  final clientSection = _buildClientSection(colors: colors);
+                  final clientSection =
+                      _buildClientSection(colors: colors, catalog: catalog);
 
                   if (constraints.maxWidth >= 760) {
                     return SingleChildScrollView(
@@ -1024,36 +1036,19 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
 
   /// "Cliente y notas": solo los datos de contacto del cliente — visualmente
   /// más corta que Programación, que concentra el resto de los campos.
-  Widget _buildClientSection({required AppColorsExtension colors}) {
+  Widget _buildClientSection({
+    required AppColorsExtension colors,
+    required CatalogProvider catalog,
+  }) {
     return FormSectionCard(
       icon: LucideIcons.userCircle,
       title: 'Cliente',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextFormField(
-            controller: _clientNameController,
-            style: TextStyle(color: colors.textPrimary),
-            decoration: InputDecoration(
-              labelText: 'Nombre del cliente',
-              prefixIcon: Icon(LucideIcons.userCircle, color: colors.primary),
-            ),
-            validator: (v) =>
-                Validators.required(v, fieldName: 'El nombre del cliente'),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          TextFormField(
-            controller: _clientPhoneController,
-            keyboardType: TextInputType.phone,
-            style: TextStyle(color: colors.textPrimary),
-            decoration: InputDecoration(
-              labelText: 'Teléfono del cliente',
-              prefixIcon: Icon(LucideIcons.phone, color: colors.primary),
-              hintText: '300 225 7755 o +57 300 225 7755',
-            ),
-            validator: Validators.phone,
-          ),
-        ],
+      child: ClientPickerField(
+        clients: catalog.clients,
+        nameController: _clientNameController,
+        phoneController: _clientPhoneController,
+        clientId: _clientId,
+        onClientIdChanged: (id) => setState(() => _clientId = id),
       ),
     );
   }

@@ -8,6 +8,7 @@ import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../providers/auth_provider.dart';
 import 'available_hours_page.dart';
+import 'clients_page.dart';
 import 'groups_page.dart';
 import 'statuses_page.dart';
 import 'task_types_page.dart';
@@ -16,7 +17,7 @@ import 'users_page.dart';
 /// Hub for admin management screens — every module is visible to
 /// super_admin; a scoped admin_equipo only sees the ones matching their own
 /// [AppPermissions] (Equipos→manageTeams, Tipos de tarea/Estados/Horarios→
-/// manageCatalogs, Usuarios→manageUsers).
+/// manageCatalogs, Usuarios→manageUsers, Clientes→manageClients).
 class AdminPanelPage extends StatelessWidget {
   const AdminPanelPage({super.key, this.showAppBar = true, this.onModuleSelected});
 
@@ -26,7 +27,7 @@ class AdminPanelPage extends StatelessWidget {
 
   /// When provided (desktop/tablet shell context), called with a string key
   /// instead of pushing a new route, so the sidebar remains visible.
-  /// Keys: 'grupos' | 'tiposTarea' | 'estados' | 'horarios' | 'usuarios'
+  /// Keys: 'grupos' | 'tiposTarea' | 'estados' | 'horarios' | 'usuarios' | 'clientes'
   final void Function(String key)? onModuleSelected;
 
   @override
@@ -86,6 +87,15 @@ class AdminPanelPage extends StatelessWidget {
         accentColor: const Color(0xFF26C6DA),
         builder: (_) => const UsersPage(),
         requiredPermission: AppPermissions.manageUsers,
+      ),
+      _AdminModuleData(
+        icon: LucideIcons.contact,
+        title: 'Clientes',
+        subtitle: 'Ficha, teléfono e historial de cada cliente.',
+        moduleKey: 'clientes',
+        accentColor: const Color(0xFFE67E9C),
+        builder: (_) => const ClientsPage(),
+        requiredPermission: AppPermissions.manageClients,
       ),
     ].where((m) => auth.hasPermission(m.requiredPermission)).toList();
 

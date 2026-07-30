@@ -35,6 +35,13 @@ class AppDateUtils {
     return DateFormat('dd/MM/yyyy').format(date);
   }
 
+  /// Day + month only, no year, e.g. "09/06" — used for compact chart axis
+  /// labels where "Tendencia de tareas"' caption above the chart already
+  /// states the full range/year.
+  static String formatDayMonth(DateTime date) {
+    return DateFormat('dd/MM').format(date);
+  }
+
   /// Formats a [DateTime] as "HH:mm".
   static String formatHour(DateTime date) {
     return DateFormat('HH:mm').format(date);

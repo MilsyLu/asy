@@ -13,10 +13,12 @@ import '../../../models/task_model.dart';
 import '../../../models/task_type_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/catalog_provider.dart';
+import '../../../services/catalog_repository.dart';
 import '../../../services/task_repository.dart';
 import '../../../services/task_scheduling_service.dart';
 import '../../../widgets/confirm_dialog.dart';
 import '../../../widgets/form_section_card.dart';
+import 'client_picker_field.dart';
 import 'hour_grid_selector.dart';
 import 'reminder_picker.dart';
 
@@ -43,6 +45,7 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
   final _clientNameController = TextEditingController();
   final _clientPhoneController = TextEditingController();
   final _observationsController = TextEditingController();
+  String? _clientId;
 
   late DateTime _selectedDate;
   String? _selectedHour;
@@ -139,6 +142,7 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
     _observationsController.clear();
     _formKey.currentState?.reset();
     setState(() {
+      _clientId = null;
       _selectedDate = widget.initialDate ?? DateTime.now();
       _selectedHour = null;
       _assignedUserId = null;
@@ -149,6 +153,21 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
       _reminderDateTime = null;
       _reminderOption = ReminderOption.none;
     });
+  }
+
+  /// Resolves [_clientId] at save time — mirrors
+  /// `AddEditTaskPage._resolveOrCreateClientId` (see its doc comment for the
+  /// full rationale: this is what makes the client list self-populate from
+  /// ordinary task creation).
+  Future<String?> _resolveOrCreateClientId(CatalogProvider catalog) async {
+    if (_clientId != null) return _clientId;
+    final name = _clientNameController.text.trim();
+    if (name.isEmpty) return null;
+    final phone = Validators.cleanPhone(_clientPhoneController.text);
+    final existing = catalog.clientByNameAndPhone(name, phone);
+    if (existing != null) return existing.id;
+    final catalogRepo = context.read<CatalogRepository>();
+    return catalogRepo.addClient(name, phone);
   }
 
   Future<void> _save() async {
@@ -215,6 +234,7 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
       }
 
       final statusId = _statusId ?? catalog.pendingStatusId ?? '';
+      final resolvedClientId = await _resolveOrCreateClientId(catalog);
 
       final newTask = TaskModel(
         id: '',
@@ -223,6 +243,7 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
         taskTypeId: _taskTypeId,
         clientName: _clientNameController.text.trim(),
         clientPhone: Validators.cleanPhone(_clientPhoneController.text),
+        clientId: resolvedClientId,
         statusId: statusId,
         observations: _observationsController.text.trim(),
         reminderTime: _reminderDateTime,
@@ -489,27 +510,12 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
         children: [
           _sectionLabel(colors, LucideIcons.userCircle, 'CLIENTE'),
           const SizedBox(height: AppSpacing.sm),
-          TextFormField(
-            controller: _clientNameController,
-            style: TextStyle(color: colors.textPrimary),
-            decoration: InputDecoration(
-              labelText: 'Nombre del cliente',
-              prefixIcon: Icon(LucideIcons.userCircle, color: colors.primary),
-            ),
-            validator: (v) =>
-                Validators.required(v, fieldName: 'El nombre del cliente'),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          TextFormField(
-            controller: _clientPhoneController,
-            keyboardType: TextInputType.phone,
-            style: TextStyle(color: colors.textPrimary),
-            decoration: InputDecoration(
-              labelText: 'Teléfono del cliente',
-              prefixIcon: Icon(LucideIcons.phone, color: colors.primary),
-              hintText: '300 225 7755 o +57 300 225 7755',
-            ),
-            validator: Validators.phone,
+          ClientPickerField(
+            clients: catalog.clients,
+            nameController: _clientNameController,
+            phoneController: _clientPhoneController,
+            clientId: _clientId,
+            onClientIdChanged: (id) => setState(() => _clientId = id),
           ),
           const SizedBox(height: AppSpacing.md),
           Divider(color: colors.divider, height: 1),

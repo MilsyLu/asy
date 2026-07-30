@@ -35,7 +35,10 @@ class TopClientsReportTab extends StatelessWidget {
     // so the Part 4 summary cards can report total/reprogramaciones too.
     final fullStats = <String, _ClientStats>{};
     for (final t in tasks) {
-      final key = '${t.clientName}|${t.clientPhone}';
+      // Prefer the real clientId (accurate, dedupe-proof) when the task is
+      // linked to one; fall back to the old text-key for legacy/unlinked
+      // tasks — see the Clientes feature's plan doc.
+      final key = t.clientId ?? '${t.clientName}|${t.clientPhone}';
       final s = fullStats.putIfAbsent(key, () => _ClientStats(t.clientName, t.clientPhone));
       s.totalTasks++;
       if (t.statusId == completedId && t.taskTypeId == installationTypeId) s.installations++;

@@ -1645,7 +1645,7 @@ class _TrendChart extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 130,
+          height: 150,
           child: LineChart(
             LineChartData(
               minY: 0,
@@ -1658,8 +1658,32 @@ class _TrendChart extends StatelessWidget {
                     const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                 rightTitles:
                     const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                bottomTitles:
-                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                // Date labels along the bottom — previously off entirely, so
+                // the only way to know which day a point/spike belonged to
+                // was to count pixels against the "Del X al Y" caption above.
+                // ~4-5 evenly-spaced labels regardless of the range length
+                // (30 daily labels would overlap on a narrow chart).
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 22,
+                    interval: entries.length > 1 ? (entries.length / 4).ceilToDouble() : 1,
+                    getTitlesWidget: (value, meta) {
+                      final index = value.round();
+                      if (index < 0 || index >= entries.length) {
+                        return const SizedBox.shrink();
+                      }
+                      final date = AppDateUtils.parseDateKey(entries[index].key);
+                      return SideTitleWidget(
+                        axisSide: meta.axisSide,
+                        child: Text(
+                          AppDateUtils.formatDayMonth(date),
+                          style: TextStyle(color: colors.textSecondary, fontSize: 10),
+                        ),
+                      );
+                    },
+                  ),
+                ),
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,

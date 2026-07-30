@@ -19,6 +19,7 @@ import '../widgets/user_avatar.dart';
 import 'admin/admin_panel_page.dart';
 import '../widgets/update_banner.dart';
 import 'admin/available_hours_page.dart';
+import 'admin/clients_page.dart';
 import 'admin/groups_page.dart';
 import 'admin/statuses_page.dart';
 import 'admin/task_types_page.dart';
@@ -185,6 +186,7 @@ class _AdminSectionState extends State<_AdminSection> {
         'estados' => 'Estados',
         'horarios' => 'Horarios disponibles',
         'usuarios' => 'Usuarios',
+        'clientes' => 'Clientes',
         _ => key,
       };
 
@@ -194,6 +196,7 @@ class _AdminSectionState extends State<_AdminSection> {
         'estados' => const StatusesPage(showAppBar: false),
         'horarios' => const AvailableHoursPage(showAppBar: false),
         'usuarios' => const UsersPage(showAppBar: false),
+        'clientes' => const ClientsPage(showAppBar: false),
         _ => const SizedBox.shrink(),
       };
 }

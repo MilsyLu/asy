@@ -21,6 +21,7 @@ class AppPermissions {
   static const String manageTasks = 'manageTasks';
   static const String manageTeams = 'manageTeams';
   static const String manageCatalogs = 'manageCatalogs';
+  static const String manageClients = 'manageClients';
   static const String viewReports = 'viewReports';
 
   static const List<String> all = [
@@ -28,6 +29,7 @@ class AppPermissions {
     manageTasks,
     manageTeams,
     manageCatalogs,
+    manageClients,
     viewReports,
   ];
 
@@ -36,6 +38,7 @@ class AppPermissions {
     manageTasks: 'Gestionar tareas',
     manageTeams: 'Gestionar equipos',
     manageCatalogs: 'Gestionar catálogos (Tipos de tarea, Estados, Horarios)',
+    manageClients: 'Gestionar clientes',
     viewReports: 'Ver reportes',
   };
 }

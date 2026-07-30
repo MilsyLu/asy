@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../core/constants/app_constants.dart';
 import '../models/app_user.dart';
 import '../models/available_hour_model.dart';
+import '../models/client_model.dart';
 import '../models/group_model.dart';
 import '../models/status_model.dart';
 import '../models/task_type_model.dart';
@@ -12,8 +13,8 @@ import '../services/catalog_repository.dart';
 import '../services/user_repository.dart';
 
 /// Holds the small, frequently-referenced "catalog" collections
-/// (groups, taskTypes, statuses, availableHours, users) so any screen
-/// can resolve IDs to human-readable names without re-subscribing.
+/// (groups, taskTypes, statuses, availableHours, users, clients) so any
+/// screen can resolve IDs to human-readable names without re-subscribing.
 class CatalogProvider extends ChangeNotifier {
   CatalogProvider({
     CatalogRepository? repository,
@@ -40,6 +41,10 @@ class CatalogProvider extends ChangeNotifier {
       users = v;
       notifyListeners();
     });
+    _clientsSub = _repository.watchClients().listen((v) {
+      clients = v;
+      notifyListeners();
+    });
   }
 
   final CatalogRepository _repository;
@@ -50,12 +55,14 @@ class CatalogProvider extends ChangeNotifier {
   late final StreamSubscription<List<StatusModel>> _statusesSub;
   late final StreamSubscription<List<AvailableHourModel>> _hoursSub;
   late final StreamSubscription<List<AppUser>> _usersSub;
+  late final StreamSubscription<List<ClientModel>> _clientsSub;
 
   List<GroupModel> groups = [];
   List<TaskTypeModel> taskTypes = [];
   List<StatusModel> statuses = [];
   List<AvailableHourModel> availableHours = [];
   List<AppUser> users = [];
+  List<ClientModel> clients = [];
 
   bool get isReady =>
       groups.isNotEmpty ||
@@ -130,6 +137,28 @@ class CatalogProvider extends ChangeNotifier {
     return users.where((u) => u.groupId == groupId).toList();
   }
 
+  ClientModel? clientById(String? id) {
+    if (id == null) return null;
+    for (final c in clients) {
+      if (c.id == id) return c;
+    }
+    return null;
+  }
+
+  String clientName(String? id) => clientById(id)?.name ?? 'Sin cliente';
+
+  /// Finds an existing client with the same name+phone (case-insensitive,
+  /// trimmed) — used by the task-save auto-link flow to reuse a client
+  /// instead of creating a duplicate for the same name typed again.
+  ClientModel? clientByNameAndPhone(String name, String phone) {
+    final n = name.trim().toLowerCase();
+    final p = phone.trim();
+    for (final c in clients) {
+      if (c.name.trim().toLowerCase() == n && c.phone.trim() == p) return c;
+    }
+    return null;
+  }
+
   /// Returns the id of the "Pendiente" status, falling back to the
   /// first status by `order` if no match is found.
   String? get pendingStatusId =>
@@ -150,6 +179,7 @@ class CatalogProvider extends ChangeNotifier {
     _statusesSub.cancel();
     _hoursSub.cancel();
     _usersSub.cancel();
+    _clientsSub.cancel();
     super.dispose();
   }
 }

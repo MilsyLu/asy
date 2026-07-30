@@ -223,6 +223,24 @@ service cloud.firestore {
     }
 
     // -----------------------------------------------------------------
+    // clients — not team-scoped (any admin_equipo with manageClients may
+    // edit any client, regardless of managedGroupIds). `create` is
+    // deliberately open to any signed-in user (not gated by manageClients):
+    // the task-save flow (add_edit_task_page.dart/task_create_panel.dart)
+    // auto-creates a lightweight client record the first time a new
+    // name+phone is typed, for ANY user who can create a task — restricting
+    // create to manageClients would break that for everyone who doesn't
+    // hold the admin permission. Editing/deleting an existing client's
+    // info, and the admin "Clientes" screen itself, stay permission-gated.
+    // -----------------------------------------------------------------
+    match /clients/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSuperAdmin() || hasPermission('manageClients');
+      allow delete: if isSuperAdmin() || hasPermission('manageClients');
+    }
+
+    // -----------------------------------------------------------------
     // systemConfig — global system configuration (Sprint 22)
     // Readable by any signed-in user (all screens need the current mode);
     // writable only by super_admin. The time-selection toggle this doc used

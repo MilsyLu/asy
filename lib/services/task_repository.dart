@@ -21,6 +21,23 @@ class UserTaskHistory {
   bool get hasHistory => assigned > 0;
 }
 
+/// Same shape as [UserTaskHistory] but for a client — used by the
+/// "Eliminar" flow in `clients_page.dart` to decide whether deleting a
+/// client is safe, and to show a quick history summary in its detail sheet.
+class ClientTaskHistory {
+  const ClientTaskHistory({
+    required this.total,
+    required this.completed,
+    required this.rescheduled,
+  });
+
+  final int total;
+  final int completed;
+  final int rescheduled;
+
+  bool get hasHistory => total > 0;
+}
+
 /// CRUD + queries for the `tasks` collection.
 class TaskRepository {
   TaskRepository({FirebaseFirestore? firestore})
@@ -149,6 +166,33 @@ class TaskRepository {
     }
     return UserTaskHistory(
       assigned: snap.docs.length,
+      completed: completed,
+      rescheduled: rescheduled,
+    );
+  }
+
+  /// Same as [getUserTaskHistory] but keyed by `clientId` instead of
+  /// `assignedUserId` — includes soft-deleted tasks for the same reason
+  /// (historical data must be preserved regardless of trash state).
+  Future<ClientTaskHistory> getClientTaskHistory(
+    String clientId, {
+    String? completedStatusId,
+    String? rescheduledStatusId,
+  }) async {
+    final snap = await _collection.where('clientId', isEqualTo: clientId).get();
+    var completed = 0;
+    var rescheduled = 0;
+    for (final doc in snap.docs) {
+      final statusId = doc.data()['statusId'] as String?;
+      if (completedStatusId != null && statusId == completedStatusId) {
+        completed++;
+      }
+      if (rescheduledStatusId != null && statusId == rescheduledStatusId) {
+        rescheduled++;
+      }
+    }
+    return ClientTaskHistory(
+      total: snap.docs.length,
       completed: completed,
       rescheduled: rescheduled,
     );

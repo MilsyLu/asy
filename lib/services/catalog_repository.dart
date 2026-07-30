@@ -2,12 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/constants/firestore_paths.dart';
 import '../models/available_hour_model.dart';
+import '../models/client_model.dart';
 import '../models/group_model.dart';
 import '../models/status_model.dart';
 import '../models/task_type_model.dart';
 
 /// CRUD + streams for the small "catalog" collections managed from the
-/// admin panel: groups, taskTypes, statuses and availableHours.
+/// admin panel: groups, taskTypes, statuses, availableHours and clients.
 class CatalogRepository {
   CatalogRepository({FirebaseFirestore? firestore})
       : _firestore = firestore ?? FirebaseFirestore.instance;
@@ -140,4 +141,34 @@ class CatalogRepository {
 
   Future<void> deleteAvailableHour(String id) =>
       _availableHours.doc(id).delete();
+
+  // ---------------------------------------------------------------------
+  // Clients — not team-scoped (no groupIds), unlike the catalogs above.
+  // ---------------------------------------------------------------------
+  CollectionReference<Map<String, dynamic>> get _clients =>
+      _firestore.collection(FirestoreCollections.clients);
+
+  Stream<List<ClientModel>> watchClients() {
+    return _clients.orderBy('name').snapshots().map(
+        (snap) => snap.docs.map((d) => ClientModel.fromDoc(d)).toList());
+  }
+
+  /// Returns the new client's id — callers linking a task to it (the
+  /// create-or-reuse flow in add_edit_task_page.dart/task_create_panel.dart)
+  /// need it immediately, unlike the other `addX` methods above.
+  Future<String> addClient(String name, String phone, {String notes = ''}) async {
+    final ref = await _clients.add({
+      'name': name,
+      'phone': phone,
+      'notes': notes,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    return ref.id;
+  }
+
+  Future<void> updateClient(String id, String name, String phone, {String notes = ''}) {
+    return _clients.doc(id).update({'name': name, 'phone': phone, 'notes': notes});
+  }
+
+  Future<void> deleteClient(String id) => _clients.doc(id).delete();
 }
