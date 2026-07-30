@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
@@ -11,7 +12,10 @@ import '../models/app_user.dart';
 import '../providers/auth_provider.dart';
 import '../providers/catalog_provider.dart';
 import '../services/auth_service.dart';
+import '../services/notification_navigation.dart';
 import '../services/notification_repository.dart';
+import '../services/notification_web_api_stub.dart'
+    if (dart.library.js_interop) '../services/notification_web_api.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/confirm_dialog.dart';
@@ -285,6 +289,29 @@ class _MainShellState extends State<MainShell> {
   // is only non-null once the content area has been built.
   final _contentNavKey = GlobalKey<NavigatorState>();
   final _contentBaseKey = GlobalKey<_ContentBaseState>();
+
+  @override
+  void initState() {
+    super.initState();
+    // Tap-to-open-task, background/terminated-app case: the service worker
+    // (web/firebase-messaging-sw.js) sends a background push click to
+    // "<origin>/?openTask=<taskId>" — the foreground/in-app-list/mobile
+    // cases are handled directly in notification_service.dart and don't go
+    // through the URL at all. Deferred to a post-frame callback so the
+    // Provider tree (needed by openTaskFromNotification) is guaranteed to
+    // exist first; the query param is then stripped so refreshing the page
+    // doesn't reopen the same task forever (this app has no router to
+    // otherwise change the URL).
+    if (kIsWeb) {
+      final taskId = Uri.base.queryParameters['openTask'];
+      if (taskId != null && taskId.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          openTaskFromNotification(taskId);
+          clearOpenTaskQueryParam();
+        });
+      }
+    }
+  }
 
   /// Switches the shell to index [i]:
   ///   1. Pops any pushed pages back to the IndexedStack base route.

@@ -1,6 +1,9 @@
 const { getMessaging } = require("firebase-admin/messaging");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 
+/** Deployed web app origin — used to build the "open this task" click link. */
+const APP_ORIGIN = "https://chhecu.web.app";
+
 /** Strips null/empty/duplicate entries from a raw `fcmTokens` array. */
 function sanitizeTokens(tokens) {
   if (!Array.isArray(tokens)) return [];
@@ -155,11 +158,18 @@ async function sendNotificationToUser(userId, { title, body, data = {} }) {
       `[FCM_TIMING]\nsending_push\ntaskId=${data.taskId || "n/a"}\nuserId=${userId}\ntimestamp=${Date.now()}`
     );
 
+    // Tap-to-open-task: web/firebase-messaging-sw.js's notificationclick
+    // handler reads data.url to know where to send the user. Only added to
+    // the FCM payload (not to `data` itself, which is also what
+    // recordNotification above already persisted) — the in-app
+    // notification-center tap path doesn't need it, it already has taskId.
+    const pushData = data.taskId ? { ...data, url: `${APP_ORIGIN}/?openTask=${data.taskId}` } : data;
+
     const [response] = await Promise.all([
       getMessaging().sendEachForMulticast({
         tokens,
         notification: { title, body },
-        data,
+        data: pushData,
         android: { priority: "high" },
         apns: { payload: { aps: { sound: "default" } } },
         // Without this, Chrome's own auto-display of the `notification`

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import 'notification_navigation.dart';
 import 'notification_web_api_stub.dart'
     if (dart.library.js_interop) 'notification_web_api.dart';
 
@@ -104,6 +105,12 @@ class NotificationService {
       );
       await _localNotifications.initialize(
         const InitializationSettings(android: androidInit, iOS: iosInit),
+        // Mirrors the web foreground-click path: the notification's
+        // `payload` carries the taskId (set below in `.show()`'s
+        // `payload:` argument).
+        onDidReceiveNotificationResponse: (response) {
+          openTaskFromNotification(response.payload);
+        },
       );
 
       if (Platform.isAndroid) {
@@ -176,9 +183,9 @@ class NotificationService {
 
   /// Called when the user taps a push notification that brought the app to
   /// the foreground from background or terminated state (Sprint 7.1 Parts
-  /// 6-7). For now this only logs the parsed payload — no in-app navigation
-  /// happens yet; that's left for the sprint that adds business
-  /// notifications (task created/completed/reprogrammed) to dispatch on.
+  /// 6-7) — opens that notification's task detail via
+  /// [openTaskFromNotification]. Also invoked manually for
+  /// `getInitialMessage()` (the app was launched fresh by tapping a push).
   void handleOpenedNotification(RemoteMessage message) {
     final payload = NotificationPayload.fromMessage(message);
     debugPrint(
@@ -194,6 +201,7 @@ class NotificationService {
       );
     }
     debugPrint('Notification opened: $payload');
+    openTaskFromNotification(payload.taskId);
   }
 
   void _showForegroundNotification(RemoteMessage message) {
@@ -214,12 +222,17 @@ class NotificationService {
           // Background pushes are handled by firebase-messaging-sw.js via the
           // native push event. For foreground, use the Web Notification API
           // directly — flutter_local_notifications has no web implementation.
-          showWebNotification(n.title ?? 'CheCu', {
-            'body': n.body ?? '',
-            'icon': '/icons/Icon-192.png',
-            'badge': '/icons/Icon-192.png',
-            'tag': message.messageId ?? '',
-          });
+          showWebNotification(
+            n.title ?? 'CheCu',
+            {
+              'body': n.body ?? '',
+              'icon': '/icons/Icon-192.png',
+              'badge': '/icons/Icon-192.png',
+              'tag': message.messageId ?? '',
+            },
+            onClick: () =>
+                openTaskFromNotification(message.data['taskId'] as String?),
+          );
           debugPrint('[WEB_FCM] foreground: notification shown via Web Notification API');
         } catch (e) {
           debugPrint('[WEB_FCM] foreground: Notification API error — $e');
@@ -249,6 +262,7 @@ class NotificationService {
           presentSound: true,
         ),
       ),
+      payload: message.data['taskId'] as String?,
     );
   }
 

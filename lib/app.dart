@@ -14,6 +14,7 @@ import 'screens/main_shell.dart';
 import 'services/app_update_service.dart';
 import 'services/auth_service.dart';
 import 'services/catalog_repository.dart';
+import 'services/notification_navigation.dart';
 import 'services/notification_repository.dart';
 import 'services/task_repository.dart';
 import 'services/user_repository.dart';
@@ -45,6 +46,7 @@ class TaskFlowApp extends StatelessWidget {
         builder: (context) {
           final themeManager = context.watch<ThemeManager>();
           return MaterialApp(
+            navigatorKey: rootNavigatorKey,
             title: AppConstants.appName,
             debugShowCheckedModeBanner: false,
             theme: themeManager.lightTheme,

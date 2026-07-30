@@ -7,6 +7,7 @@ import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
 import '../../models/notification_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/notification_navigation.dart';
 import '../../services/notification_repository.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/loading_indicator.dart';
@@ -60,6 +61,7 @@ class NotificationsPage extends StatelessWidget {
               if (!notification.isRead) {
                 repo.markAsRead(notification.id);
               }
+              openTaskFromNotification(notification.taskId);
             },
             onDeleteNotification: (notification) {
               repo.deleteNotification(notification.id);

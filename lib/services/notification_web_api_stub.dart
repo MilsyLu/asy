@@ -4,4 +4,10 @@
 
 String get webNotificationPermission => 'denied';
 
-void showWebNotification(String title, Map<String, dynamic> opts) {}
+void showWebNotification(
+  String title,
+  Map<String, dynamic> opts, {
+  void Function()? onClick,
+}) {}
+
+void clearOpenTaskQueryParam() {}
