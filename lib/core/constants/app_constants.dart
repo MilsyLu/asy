@@ -5,7 +5,39 @@ class AppRoles {
   AppRoles._();
 
   static const String superAdmin = 'super_admin';
+  static const String adminEquipo = 'admin_equipo';
   static const String trabajadorNormal = 'trabajador_normal';
+}
+
+/// Granular permission keys for `admin_equipo` users, stored as booleans in
+/// `users/{userId}.permissions`. Only meaningful for that role — a
+/// `super_admin` implicitly has every permission and a `trabajador_normal`
+/// has none of these (workers are unaffected by this system for now).
+/// Mirrored server-side in `firestore.rules`' `hasPermission()`.
+class AppPermissions {
+  AppPermissions._();
+
+  static const String manageUsers = 'manageUsers';
+  static const String manageTasks = 'manageTasks';
+  static const String manageTeams = 'manageTeams';
+  static const String manageCatalogs = 'manageCatalogs';
+  static const String viewReports = 'viewReports';
+
+  static const List<String> all = [
+    manageUsers,
+    manageTasks,
+    manageTeams,
+    manageCatalogs,
+    viewReports,
+  ];
+
+  static const Map<String, String> labels = {
+    manageUsers: 'Gestionar usuarios',
+    manageTasks: 'Gestionar tareas',
+    manageTeams: 'Gestionar equipos',
+    manageCatalogs: 'Gestionar catálogos (Tipos de tarea, Estados, Horarios)',
+    viewReports: 'Ver reportes',
+  };
 }
 
 /// Well-known status names used by reports & business logic.

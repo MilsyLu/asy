@@ -11,6 +11,7 @@ import '../../core/utils/snackbar_utils.dart';
 import '../../core/utils/task_type_colors.dart';
 import '../../models/group_model.dart';
 import '../../models/task_type_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/catalog_repository.dart';
 import '../../widgets/confirm_dialog.dart';
@@ -61,12 +62,21 @@ class _TaskTypesPageState extends State<TaskTypesPage> {
   @override
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
+    final auth = context.watch<AuthProvider>();
+    final isSuperAdmin = auth.isSuperAdmin;
+    final canEditCatalogs = auth.hasPermission(AppPermissions.manageCatalogs);
+    final managedGroupIds = isSuperAdmin ? null : (auth.appUser?.managedGroupIds ?? const <String>[]);
     final colors = context.colors;
     final isMobile = context.isMobile;
     final query = _query.trim().toLowerCase();
     final groups = List.of(catalog.groups)..sort((a, b) => a.name.compareTo(b.name));
 
     final taskTypes = catalog.taskTypes.where((t) {
+      // A scoped admin_equipo sees universal types plus anything scoped to
+      // one of their own teams — same visibility rule as Estados/Horarios.
+      if (!isSuperAdmin && t.groupIds.isNotEmpty && !t.groupIds.any(auth.managesGroup)) {
+        return false;
+      }
       if (query.isNotEmpty && !t.name.toLowerCase().contains(query)) return false;
       if (_groupFilter == AppFilterValues.noGroup) {
         if (t.groupIds.isNotEmpty) return false;
@@ -154,11 +164,23 @@ class _TaskTypesPageState extends State<TaskTypesPage> {
         separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           final type = taskTypes[index];
+          final canEditThis = isSuperAdmin ||
+              (canEditCatalogs && type.groupIds.isNotEmpty && type.groupIds.every(auth.managesGroup));
           // Tablet/desktop: name/position/color/teams editable right on
           // the row. Mobile keeps the "Editar" dialog.
           return isMobile
-              ? _TaskTypeCardMobile(type: type, catalog: catalog)
-              : _TaskTypeRowEditable(type: type, groups: groups);
+              ? _TaskTypeCardMobile(
+                  type: type,
+                  catalog: catalog,
+                  canEdit: canEditThis,
+                  managedGroupIds: managedGroupIds,
+                )
+              : _TaskTypeRowEditable(
+                  type: type,
+                  groups: groups,
+                  canEdit: canEditThis,
+                  managedGroupIds: managedGroupIds,
+                );
         },
       );
     }
@@ -166,6 +188,15 @@ class _TaskTypesPageState extends State<TaskTypesPage> {
     Widget body;
     if (isMobile) {
       body = Column(children: [filters, Expanded(child: buildList(shrink: false))]);
+    } else if (!isSuperAdmin && !canEditCatalogs) {
+      body = Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: AppLayout.contentMaxWidthWide),
+          child: Column(
+            children: [filters, Expanded(child: buildList(shrink: false))],
+          ),
+        ),
+      );
     } else {
       // Same width-aware rule as Equipos/Usuarios/Estados: below ~900px of
       // actual available width, stack the "Nuevo tipo de tarea" panel under
@@ -176,6 +207,7 @@ class _TaskTypesPageState extends State<TaskTypesPage> {
           final panel = _CreateTaskTypePanel(
             key: const ValueKey('create-task-type'),
             groups: groups,
+            managedGroupIds: managedGroupIds,
           );
 
           if (sideBySide) {
@@ -221,9 +253,10 @@ class _TaskTypesPageState extends State<TaskTypesPage> {
     }
 
     // Tablet/desktop: the panel replaces the FAB for creating a task type.
-    final fab = isMobile
+    final fab = isMobile && (isSuperAdmin || canEditCatalogs)
         ? FloatingActionButton(
-            onPressed: () => _showTaskTypeFormDialog(context),
+            onPressed: () =>
+                _showTaskTypeFormDialog(context, managedGroupIds: managedGroupIds),
             child: const Icon(LucideIcons.plus),
           )
         : null;
@@ -238,10 +271,17 @@ class _TaskTypesPageState extends State<TaskTypesPage> {
 
 /// Mobile row — unchanged behavior (tap pencil/trash to open a dialog).
 class _TaskTypeCardMobile extends StatelessWidget {
-  const _TaskTypeCardMobile({required this.type, required this.catalog});
+  const _TaskTypeCardMobile({
+    required this.type,
+    required this.catalog,
+    required this.canEdit,
+    this.managedGroupIds,
+  });
 
   final TaskTypeModel type;
   final CatalogProvider catalog;
+  final bool canEdit;
+  final List<String>? managedGroupIds;
 
   @override
   Widget build(BuildContext context) {
@@ -266,19 +306,22 @@ class _TaskTypeCardMobile extends StatelessWidget {
           'Posición: ${type.order} • Equipos: ${_groupsLabel(catalog, type)}',
           style: TextStyle(color: colors.textSecondary, fontSize: 12),
         ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: Icon(LucideIcons.pencil, color: colors.primary, size: 18),
-              onPressed: () => _showTaskTypeFormDialog(context, existing: type),
-            ),
-            IconButton(
-              icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
-              onPressed: () => _deleteTaskType(context, type),
-            ),
-          ],
-        ),
+        trailing: canEdit
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: Icon(LucideIcons.pencil, color: colors.primary, size: 18),
+                    onPressed: () => _showTaskTypeFormDialog(context,
+                        existing: type, managedGroupIds: managedGroupIds),
+                  ),
+                  IconButton(
+                    icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
+                    onPressed: () => _deleteTaskType(context, type),
+                  ),
+                ],
+              )
+            : null,
       ),
     );
   }
@@ -289,10 +332,17 @@ class _TaskTypeCardMobile extends StatelessWidget {
 /// summary opens a small chip picker (a compact exception, like Equipos'
 /// Miembros checklist — a multi-select doesn't fit inline in a table row).
 class _TaskTypeRowEditable extends StatefulWidget {
-  const _TaskTypeRowEditable({required this.type, required this.groups});
+  const _TaskTypeRowEditable({
+    required this.type,
+    required this.groups,
+    required this.canEdit,
+    this.managedGroupIds,
+  });
 
   final TaskTypeModel type;
   final List<GroupModel> groups;
+  final bool canEdit;
+  final List<String>? managedGroupIds;
 
   @override
   State<_TaskTypeRowEditable> createState() => _TaskTypeRowEditableState();
@@ -401,7 +451,12 @@ class _TaskTypeRowEditableState extends State<_TaskTypeRowEditable> {
   }
 
   Future<void> _pickGroups() async {
-    final selected = <String>{...widget.type.groupIds};
+    final managedGroupIds = widget.managedGroupIds;
+    final selectable = managedGroupIds == null
+        ? widget.groups
+        : widget.groups.where((g) => managedGroupIds.contains(g.id)).toList();
+    final selected = <String>{...widget.type.groupIds}
+      ..removeWhere((id) => !selectable.any((g) => g.id == id));
     final colors = context.colors;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -415,7 +470,9 @@ class _TaskTypeRowEditableState extends State<_TaskTypeRowEditable> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Ninguno seleccionado = todos los equipos',
+                  managedGroupIds == null
+                      ? 'Ninguno seleccionado = todos los equipos'
+                      : 'Selecciona al menos uno de tus equipos.',
                   style: TextStyle(color: colors.textSecondary, fontSize: 12),
                 ),
                 const SizedBox(height: 10),
@@ -423,7 +480,7 @@ class _TaskTypeRowEditableState extends State<_TaskTypeRowEditable> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    for (final group in widget.groups)
+                    for (final group in selectable)
                       FilterChip(
                         label: Text(group.name),
                         selected: selected.contains(group.id),
@@ -446,7 +503,9 @@ class _TaskTypeRowEditableState extends State<_TaskTypeRowEditable> {
               child: const Text('Cancelar'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
+              onPressed: (managedGroupIds != null && selected.isEmpty)
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(true),
               child: const Text('Guardar'),
             ),
           ],
@@ -475,7 +534,7 @@ class _TaskTypeRowEditableState extends State<_TaskTypeRowEditable> {
               padding: const EdgeInsets.only(top: 4),
               child: InkWell(
                 borderRadius: BorderRadius.circular(20),
-                onTap: _pickColor,
+                onTap: widget.canEdit ? _pickColor : null,
                 child: Container(
                   width: 28,
                   height: 28,
@@ -496,6 +555,7 @@ class _TaskTypeRowEditableState extends State<_TaskTypeRowEditable> {
               child: TextField(
                 controller: _nameController,
                 focusNode: _nameFocus,
+                enabled: widget.canEdit,
                 style: TextStyle(
                   color: colors.textPrimary,
                   fontWeight: FontWeight.w600,
@@ -513,7 +573,7 @@ class _TaskTypeRowEditableState extends State<_TaskTypeRowEditable> {
               label: 'Equipos',
               child: InkWell(
                 borderRadius: BorderRadius.circular(6),
-                onTap: _pickGroups,
+                onTap: widget.canEdit ? _pickGroups : null,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(
@@ -534,6 +594,7 @@ class _TaskTypeRowEditableState extends State<_TaskTypeRowEditable> {
               child: TextField(
                 controller: _orderController,
                 focusNode: _orderFocus,
+                enabled: widget.canEdit,
                 keyboardType: TextInputType.number,
                 style: TextStyle(color: colors.textPrimary, fontSize: 14),
                 decoration: const InputDecoration(isDense: true),
@@ -541,14 +602,16 @@ class _TaskTypeRowEditableState extends State<_TaskTypeRowEditable> {
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          Padding(
-            padding: const EdgeInsets.only(top: 18),
-            child: IconButton(
-              icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
-              onPressed: () => _deleteTaskType(context, widget.type),
+          if (widget.canEdit) ...[
+            const SizedBox(width: 8),
+            Padding(
+              padding: const EdgeInsets.only(top: 18),
+              child: IconButton(
+                icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
+                onPressed: () => _deleteTaskType(context, widget.type),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -597,9 +660,10 @@ int _nextTaskTypeOrder(CatalogProvider catalog) {
 /// stays in place (fields reset, Posición advances to the next number)
 /// after a successful save.
 class _CreateTaskTypePanel extends StatefulWidget {
-  const _CreateTaskTypePanel({super.key, required this.groups});
+  const _CreateTaskTypePanel({super.key, required this.groups, this.managedGroupIds});
 
   final List<GroupModel> groups;
+  final List<String>? managedGroupIds;
 
   @override
   State<_CreateTaskTypePanel> createState() => _CreateTaskTypePanelState();
@@ -652,7 +716,12 @@ class _CreateTaskTypePanelState extends State<_CreateTaskTypePanel> {
   }
 
   Future<void> _pickGroups() async {
-    final selected = <String>{..._selectedGroupIds};
+    final managedGroupIds = widget.managedGroupIds;
+    final selectable = managedGroupIds == null
+        ? widget.groups
+        : widget.groups.where((g) => managedGroupIds.contains(g.id)).toList();
+    final selected = <String>{..._selectedGroupIds}
+      ..removeWhere((id) => !selectable.any((g) => g.id == id));
     final colors = context.colors;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -666,7 +735,9 @@ class _CreateTaskTypePanelState extends State<_CreateTaskTypePanel> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Ninguno seleccionado = todos los equipos',
+                  managedGroupIds == null
+                      ? 'Ninguno seleccionado = todos los equipos'
+                      : 'Selecciona al menos uno de tus equipos.',
                   style: TextStyle(color: colors.textSecondary, fontSize: 12),
                 ),
                 const SizedBox(height: 10),
@@ -674,7 +745,7 @@ class _CreateTaskTypePanelState extends State<_CreateTaskTypePanel> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    for (final group in widget.groups)
+                    for (final group in selectable)
                       FilterChip(
                         label: Text(group.name),
                         selected: selected.contains(group.id),
@@ -697,7 +768,9 @@ class _CreateTaskTypePanelState extends State<_CreateTaskTypePanel> {
               child: const Text('Cancelar'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
+              onPressed: (managedGroupIds != null && selected.isEmpty)
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(true),
               child: const Text('Guardar'),
             ),
           ],
@@ -715,6 +788,10 @@ class _CreateTaskTypePanelState extends State<_CreateTaskTypePanel> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (widget.managedGroupIds != null && _selectedGroupIds.isEmpty) {
+      SnackbarUtils.showError(context, 'Selecciona al menos uno de tus equipos');
+      return;
+    }
     setState(() => _isSaving = true);
     final repo = context.read<CatalogRepository>();
     final order = int.parse(_orderController.text.trim());
@@ -827,7 +904,11 @@ class _CreateTaskTypePanelState extends State<_CreateTaskTypePanel> {
   }
 }
 
-Future<void> _showTaskTypeFormDialog(BuildContext context, {TaskTypeModel? existing}) async {
+Future<void> _showTaskTypeFormDialog(
+  BuildContext context, {
+  TaskTypeModel? existing,
+  List<String>? managedGroupIds,
+}) async {
   final colors = context.colors;
   final repo = context.read<CatalogRepository>();
   final catalog = context.read<CatalogProvider>();
@@ -837,7 +918,11 @@ Future<void> _showTaskTypeFormDialog(BuildContext context, {TaskTypeModel? exist
   );
   final formKey = GlobalKey<FormState>();
   String? selectedColor = existing?.color;
-  final selectedGroupIds = <String>{...?existing?.groupIds};
+  final selectableGroups = managedGroupIds == null
+      ? catalog.groups
+      : catalog.groups.where((g) => managedGroupIds.contains(g.id)).toList();
+  final selectedGroupIds = <String>{...?existing?.groupIds}
+    ..removeWhere((id) => !selectableGroups.any((g) => g.id == id));
   bool isSaving = false;
 
   await showDialog<void>(
@@ -903,7 +988,9 @@ Future<void> _showTaskTypeFormDialog(BuildContext context, {TaskTypeModel? exist
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Equipos (ninguno seleccionado = todos)',
+                      managedGroupIds == null
+                          ? 'Equipos (ninguno seleccionado = todos)'
+                          : 'Equipos (selecciona al menos uno de los tuyos)',
                       style: TextStyle(color: colors.textSecondary, fontSize: 12),
                     ),
                     const SizedBox(height: 8),
@@ -911,7 +998,7 @@ Future<void> _showTaskTypeFormDialog(BuildContext context, {TaskTypeModel? exist
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        for (final group in catalog.groups)
+                        for (final group in selectableGroups)
                           FilterChip(
                             label: Text(group.name),
                             selected: selectedGroupIds.contains(group.id),
@@ -939,6 +1026,11 @@ Future<void> _showTaskTypeFormDialog(BuildContext context, {TaskTypeModel? exist
                     ? null
                     : () async {
                         if (!formKey.currentState!.validate()) return;
+                        if (managedGroupIds != null && selectedGroupIds.isEmpty) {
+                          SnackbarUtils.showError(
+                              dialogContext, 'Selecciona al menos uno de tus equipos');
+                          return;
+                        }
                         setState(() => isSaving = true);
                         final order = int.parse(orderController.text);
                         try {

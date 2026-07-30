@@ -274,8 +274,40 @@ async function notifyAdminsOfTaskCreated(adminIds, message) {
   return sendNotificationToUsers(adminIds, message);
 }
 
+/**
+ * Resolves every admin who should be notified about a task belonging to
+ * [groupId]: every super_admin (org-wide oversight, unchanged since
+ * Sprint 7.4.7), plus — for the permissions system — every admin_equipo
+ * whose `managedGroupIds` includes that team. `groupId` may be null/empty
+ * for legacy/ungrouped tasks, in which case only super_admins are returned,
+ * same as before this system existed.
+ *
+ * @param {FirebaseFirestore.Firestore} db
+ * @param {string | null | undefined} groupId
+ * @returns {Promise<string[]>} deduped admin user ids.
+ */
+async function getAdminIdsForTask(db, groupId) {
+  const queries = [db.collection("users").where("role", "==", "super_admin").get()];
+  if (groupId) {
+    queries.push(
+      db
+        .collection("users")
+        .where("role", "==", "admin_equipo")
+        .where("managedGroupIds", "array-contains", groupId)
+        .get()
+    );
+  }
+  const snaps = await Promise.all(queries);
+  const ids = new Set();
+  for (const snap of snaps) {
+    for (const doc of snap.docs) ids.add(doc.id);
+  }
+  return [...ids];
+}
+
 module.exports = {
   sendNotificationToUser,
   sendNotificationToUsers,
   notifyAdminsOfTaskCreated,
+  getAdminIdsForTask,
 };

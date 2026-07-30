@@ -52,11 +52,17 @@ class _UsersPageState extends State<UsersPage> {
   @override
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
+    final auth = context.watch<AuthProvider>();
     final isMobile = context.isMobile;
     final users = List<AppUser>.from(catalog.users)
       ..sort((a, b) => a.name.compareTo(b.name));
     final query = _searchQuery.trim().toLowerCase();
     final filtered = users.where((u) {
+      // A scoped admin_equipo only ever sees workers in their own managed
+      // teams — never other admins, never workers outside their reach.
+      if (!auth.isSuperAdmin && !(u.role == AppRoles.trabajadorNormal && auth.managesGroup(u.groupId))) {
+        return false;
+      }
       if (_filter == _UserStatusFilter.active && !u.isActive) return false;
       if (_filter == _UserStatusFilter.inactive && u.isActive) return false;
       if (_groupFilter == AppFilterValues.noGroup) {
@@ -268,6 +274,8 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
   final _passwordController = TextEditingController();
   String _role = AppRoles.trabajadorNormal;
   String? _groupId;
+  List<String> _managedGroupIds = [];
+  Map<String, bool> _permissions = {};
   bool _isSaving = false;
 
   @override
@@ -280,6 +288,10 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_role == AppRoles.adminEquipo && _managedGroupIds.isEmpty) {
+      SnackbarUtils.showError(context, 'Selecciona al menos un equipo para el administrador');
+      return;
+    }
     setState(() => _isSaving = true);
     final authService = context.read<AuthService>();
     try {
@@ -289,13 +301,20 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
         name: _nameController.text.trim(),
         role: _role,
         groupId: _groupId,
+        managedGroupIds: _managedGroupIds,
+        permissions: _permissions,
       );
       if (mounted) {
         _formKey.currentState!.reset();
         _nameController.clear();
         _emailController.clear();
         _passwordController.clear();
-        setState(() => _groupId = null);
+        setState(() {
+          _groupId = null;
+          _role = AppRoles.trabajadorNormal;
+          _managedGroupIds = [];
+          _permissions = {};
+        });
         SnackbarUtils.showSuccess(context, 'Usuario creado correctamente');
       }
     } catch (e) {
@@ -309,6 +328,9 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final catalog = context.watch<CatalogProvider>();
+    final auth = context.watch<AuthProvider>();
+    final isViewerSuperAdmin = auth.isSuperAdmin;
+    final viewerManagedGroupIds = auth.appUser?.managedGroupIds ?? const <String>[];
     return SidePanelShell(
       title: 'Nuevo usuario',
       icon: LucideIcons.userPlus,
@@ -341,34 +363,58 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
               validator: Validators.password,
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _role,
-              dropdownColor: colors.surface,
-              decoration: const InputDecoration(labelText: 'Rol'),
-              items: [
-                DropdownMenuItem(
-                  value: AppRoles.trabajadorNormal,
-                  child: Text(AuthService.roleLabel(AppRoles.trabajadorNormal)),
-                ),
-                DropdownMenuItem(
-                  value: AppRoles.superAdmin,
-                  child: Text(AuthService.roleLabel(AppRoles.superAdmin)),
-                ),
-              ],
-              onChanged: (v) => setState(() => _role = v ?? _role),
-            ),
+            // A scoped admin_equipo (manageUsers) may only create workers,
+            // never other admins — matches firestore.rules.
+            if (isViewerSuperAdmin)
+              DropdownButtonFormField<String>(
+                initialValue: _role,
+                dropdownColor: colors.surface,
+                decoration: const InputDecoration(labelText: 'Rol'),
+                items: [
+                  DropdownMenuItem(
+                    value: AppRoles.trabajadorNormal,
+                    child: Text(AuthService.roleLabel(AppRoles.trabajadorNormal)),
+                  ),
+                  DropdownMenuItem(
+                    value: AppRoles.adminEquipo,
+                    child: Text(AuthService.roleLabel(AppRoles.adminEquipo)),
+                  ),
+                  DropdownMenuItem(
+                    value: AppRoles.superAdmin,
+                    child: Text(AuthService.roleLabel(AppRoles.superAdmin)),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _role = v ?? _role),
+              ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String?>(
-              initialValue: _groupId,
-              dropdownColor: colors.surface,
-              decoration: const InputDecoration(labelText: 'Equipo (opcional)'),
-              items: [
-                const DropdownMenuItem<String?>(value: null, child: Text('Sin equipo')),
-                for (final group in catalog.groups)
-                  DropdownMenuItem<String?>(value: group.id, child: Text(group.name)),
-              ],
-              onChanged: (v) => setState(() => _groupId = v),
-            ),
+            if (_role == AppRoles.adminEquipo && isViewerSuperAdmin) ...[
+              _ManagedGroupsField(
+                groups: catalog.groups,
+                selected: _managedGroupIds,
+                onChanged: (v) => setState(() => _managedGroupIds = v),
+              ),
+              const SizedBox(height: 12),
+              _PermissionsChecklist(
+                value: _permissions,
+                onChanged: (v) => setState(() => _permissions = v),
+              ),
+            ] else ...[
+              DropdownButtonFormField<String?>(
+                initialValue: _groupId,
+                dropdownColor: colors.surface,
+                decoration: InputDecoration(
+                  labelText: isViewerSuperAdmin ? 'Equipo (opcional)' : 'Equipo',
+                ),
+                items: [
+                  if (isViewerSuperAdmin)
+                    const DropdownMenuItem<String?>(value: null, child: Text('Sin equipo')),
+                  for (final group in catalog.groups)
+                    if (isViewerSuperAdmin || viewerManagedGroupIds.contains(group.id))
+                      DropdownMenuItem<String?>(value: group.id, child: Text(group.name)),
+                ],
+                onChanged: (v) => setState(() => _groupId = v),
+              ),
+            ],
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _isSaving ? null : _save,
@@ -385,6 +431,154 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
       ),
     );
   }
+}
+
+/// Read-only chip summary of an admin_equipo's assigned teams, with a button
+/// that opens [_pickManagedGroups] to change the selection. An admin always
+/// needs at least one team — unlike Tipos de tarea's groupIds, empty here
+/// isn't a valid "universal" state.
+class _ManagedGroupsField extends StatelessWidget {
+  const _ManagedGroupsField({
+    required this.groups,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final List<GroupModel> groups;
+  final List<String> selected;
+  final ValueChanged<List<String>> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final namesById = {for (final g in groups) g.id: g.name};
+    final names = selected.map((id) => namesById[id]).whereType<String>().toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Equipos asignados', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+        const SizedBox(height: 6),
+        if (names.isEmpty)
+          Text('Ninguno seleccionado', style: TextStyle(color: colors.error, fontSize: 12))
+        else
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [for (final name in names) _Tag(label: name)],
+          ),
+        const SizedBox(height: 6),
+        OutlinedButton.icon(
+          onPressed: () async {
+            final result = await _pickManagedGroups(
+              context,
+              current: selected.toSet(),
+              groups: groups,
+            );
+            if (result != null) onChanged(result.toList());
+          },
+          icon: const Icon(LucideIcons.users, size: 16),
+          label: const Text('Elegir equipos'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Checklist of [AppPermissions] toggles for an admin_equipo user.
+class _PermissionsChecklist extends StatelessWidget {
+  const _PermissionsChecklist({required this.value, required this.onChanged});
+
+  final Map<String, bool> value;
+  final ValueChanged<Map<String, bool>> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Permisos', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+        for (final key in AppPermissions.all)
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            dense: true,
+            title: Text(
+              AppPermissions.labels[key]!,
+              style: TextStyle(color: colors.textPrimary, fontSize: 13),
+            ),
+            value: value[key] == true,
+            onChanged: (v) {
+              final next = Map<String, bool>.from(value);
+              next[key] = v ?? false;
+              onChanged(next);
+            },
+          ),
+      ],
+    );
+  }
+}
+
+/// Multi-select dialog for an admin_equipo's managed teams — same chip
+/// pattern as Tipos de tarea's groupIds picker, but requires at least one
+/// selection (Guardar stays disabled while empty).
+Future<Set<String>?> _pickManagedGroups(
+  BuildContext context, {
+  required Set<String> current,
+  required List<GroupModel> groups,
+}) {
+  final selected = {...current};
+  final colors = context.colors;
+  return showDialog<Set<String>>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setState) => AlertDialog(
+        title: const Text('Equipos asignados'),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Selecciona al menos un equipo que este administrador podrá gestionar.',
+                style: TextStyle(color: colors.textSecondary, fontSize: 12),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final group in groups)
+                    FilterChip(
+                      label: Text(group.name),
+                      selected: selected.contains(group.id),
+                      onSelected: (v) => setState(() {
+                        if (v) {
+                          selected.add(group.id);
+                        } else {
+                          selected.remove(group.id);
+                        }
+                      }),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: selected.isEmpty ? null : () => Navigator.of(dialogContext).pop(selected),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _UserSearchField extends StatelessWidget {
@@ -478,6 +672,10 @@ class _RoleFilterDropdown extends StatelessWidget {
         DropdownMenuItem<String?>(
           value: AppRoles.superAdmin,
           child: Text(AuthService.roleLabel(AppRoles.superAdmin)),
+        ),
+        DropdownMenuItem<String?>(
+          value: AppRoles.adminEquipo,
+          child: Text(AuthService.roleLabel(AppRoles.adminEquipo)),
         ),
         DropdownMenuItem<String?>(
           value: AppRoles.trabajadorNormal,
@@ -647,10 +845,18 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
   final userRepo = context.read<UserRepository>();
   final authService = context.read<AuthService>();
   final taskRepo = context.read<TaskRepository>();
-  final currentUserId = context.read<AuthProvider>().appUser?.id;
+  final viewerAuth = context.read<AuthProvider>();
+  final currentUserId = viewerAuth.appUser?.id;
+  // Only the super usuario assigns roles/managed-teams/permissions — a
+  // scoped admin_equipo (even with manageUsers) never sees these controls,
+  // mirroring firestore.rules (which never lets them touch role at all).
+  final isViewerSuperAdmin = viewerAuth.isSuperAdmin;
+  final viewerManagedGroupIds = viewerAuth.appUser?.managedGroupIds ?? const <String>[];
 
   String selectedRole = user.role;
   String? selectedGroupId = user.groupId;
+  List<String> selectedManagedGroupIds = List.of(user.managedGroupIds);
+  Map<String, bool> selectedPermissions = Map.of(user.permissions);
   bool tokensExpanded = false;
   bool isUserActive = user.isActive;
 
@@ -704,75 +910,129 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                   const SizedBox(height: 20),
                   Text('Rol', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
                   const SizedBox(height: 6),
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedRole,
-                    dropdownColor: colors.surface,
-                    items: [
-                      DropdownMenuItem(
-                        value: AppRoles.superAdmin,
-                        child: Text(AuthService.roleLabel(AppRoles.superAdmin)),
-                      ),
-                      DropdownMenuItem(
-                        value: AppRoles.trabajadorNormal,
-                        child: Text(AuthService.roleLabel(AppRoles.trabajadorNormal)),
-                      ),
-                    ],
-                    onChanged: (value) async {
-                      if (value == null || value == selectedRole) return;
-                      if (user.id == currentUserId && value != AppRoles.superAdmin) {
-                        final confirm = await showConfirmDialog(
-                          sheetContext,
-                          title: 'Cambiar tu propio rol',
-                          message:
-                              'Estás a punto de quitarte el rol de administrador. '
-                              'Podrías perder acceso al panel de administración. '
-                              '¿Deseas continuar?',
-                          confirmLabel: 'Continuar',
-                          destructive: true,
-                        );
-                        if (!confirm) return;
-                      }
-                      try {
-                        await userRepo.updateRole(user.id, value);
-                        setState(() => selectedRole = value);
-                        if (sheetContext.mounted) {
-                          SnackbarUtils.showSuccess(sheetContext, 'Rol actualizado');
+                  if (isViewerSuperAdmin)
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedRole,
+                      dropdownColor: colors.surface,
+                      items: [
+                        DropdownMenuItem(
+                          value: AppRoles.superAdmin,
+                          child: Text(AuthService.roleLabel(AppRoles.superAdmin)),
+                        ),
+                        DropdownMenuItem(
+                          value: AppRoles.adminEquipo,
+                          child: Text(AuthService.roleLabel(AppRoles.adminEquipo)),
+                        ),
+                        DropdownMenuItem(
+                          value: AppRoles.trabajadorNormal,
+                          child: Text(AuthService.roleLabel(AppRoles.trabajadorNormal)),
+                        ),
+                      ],
+                      onChanged: (value) async {
+                        if (value == null || value == selectedRole) return;
+                        if (user.id == currentUserId && value != AppRoles.superAdmin) {
+                          final confirm = await showConfirmDialog(
+                            sheetContext,
+                            title: 'Cambiar tu propio rol',
+                            message:
+                                'Estás a punto de quitarte el rol de administrador. '
+                                'Podrías perder acceso al panel de administración. '
+                                '¿Deseas continuar?',
+                            confirmLabel: 'Continuar',
+                            destructive: true,
+                          );
+                          if (!confirm) return;
                         }
-                      } catch (e) {
-                        if (sheetContext.mounted) {
-                          SnackbarUtils.showError(
-                              sheetContext, SnackbarUtils.firebaseErrorMessage(e));
+                        try {
+                          await userRepo.updateRole(user.id, value);
+                          setState(() => selectedRole = value);
+                          if (sheetContext.mounted) {
+                            SnackbarUtils.showSuccess(sheetContext, 'Rol actualizado');
+                          }
+                        } catch (e) {
+                          if (sheetContext.mounted) {
+                            SnackbarUtils.showError(
+                                sheetContext, SnackbarUtils.firebaseErrorMessage(e));
+                          }
                         }
-                      }
-                    },
-                  ),
+                      },
+                    )
+                  else
+                    Text(
+                      AuthService.roleLabel(selectedRole),
+                      style: TextStyle(color: colors.textPrimary, fontSize: 14),
+                    ),
                   const SizedBox(height: 16),
-                  Text('Equipo', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
-                  const SizedBox(height: 6),
-                  DropdownButtonFormField<String?>(
-                    initialValue: selectedGroupId,
-                    dropdownColor: colors.surface,
-                    items: [
-                      const DropdownMenuItem<String?>(value: null, child: Text('Sin equipo')),
-                      for (final group in catalog.groups)
-                        DropdownMenuItem<String?>(value: group.id, child: Text(group.name)),
-                    ],
-                    onChanged: (value) async {
-                      if (value == selectedGroupId) return;
-                      try {
-                        await userRepo.updateGroup(user.id, value);
-                        setState(() => selectedGroupId = value);
-                        if (sheetContext.mounted) {
-                          SnackbarUtils.showSuccess(sheetContext, 'Equipo actualizado');
+                  if (selectedRole == AppRoles.adminEquipo) ...[
+                    if (isViewerSuperAdmin) ...[
+                      _ManagedGroupsField(
+                        groups: catalog.groups,
+                        selected: selectedManagedGroupIds,
+                        onChanged: (v) async {
+                          try {
+                            await userRepo.updateManagedGroupIds(user.id, v);
+                            setState(() => selectedManagedGroupIds = v);
+                            if (sheetContext.mounted) {
+                              SnackbarUtils.showSuccess(sheetContext, 'Equipos actualizados');
+                            }
+                          } catch (e) {
+                            if (sheetContext.mounted) {
+                              SnackbarUtils.showError(
+                                  sheetContext, SnackbarUtils.firebaseErrorMessage(e));
+                            }
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      _PermissionsChecklist(
+                        value: selectedPermissions,
+                        onChanged: (v) async {
+                          try {
+                            await userRepo.updatePermissions(user.id, v);
+                            setState(() => selectedPermissions = v);
+                          } catch (e) {
+                            if (sheetContext.mounted) {
+                              SnackbarUtils.showError(
+                                  sheetContext, SnackbarUtils.firebaseErrorMessage(e));
+                            }
+                          }
+                        },
+                      ),
+                    ] else
+                      Text(
+                        'Administra: ${selectedManagedGroupIds.map((id) => catalog.groupName(id)).join(", ")}',
+                        style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                      ),
+                  ] else ...[
+                    Text('Equipo', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String?>(
+                      initialValue: selectedGroupId,
+                      dropdownColor: colors.surface,
+                      items: [
+                        if (isViewerSuperAdmin)
+                          const DropdownMenuItem<String?>(value: null, child: Text('Sin equipo')),
+                        for (final group in catalog.groups)
+                          if (isViewerSuperAdmin || viewerManagedGroupIds.contains(group.id))
+                            DropdownMenuItem<String?>(value: group.id, child: Text(group.name)),
+                      ],
+                      onChanged: (value) async {
+                        if (value == selectedGroupId) return;
+                        try {
+                          await userRepo.updateGroup(user.id, value);
+                          setState(() => selectedGroupId = value);
+                          if (sheetContext.mounted) {
+                            SnackbarUtils.showSuccess(sheetContext, 'Equipo actualizado');
+                          }
+                        } catch (e) {
+                          if (sheetContext.mounted) {
+                            SnackbarUtils.showError(
+                                sheetContext, SnackbarUtils.firebaseErrorMessage(e));
+                          }
                         }
-                      } catch (e) {
-                        if (sheetContext.mounted) {
-                          SnackbarUtils.showError(
-                              sheetContext, SnackbarUtils.firebaseErrorMessage(e));
-                        }
-                      }
-                    },
-                  ),
+                      },
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   OutlinedButton.icon(
                     onPressed: () async {
@@ -866,6 +1126,9 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                       icon: const Icon(LucideIcons.userCheck),
                       label: const Text('Reactivar usuario'),
                     ),
+                    // Permanent delete stays super_admin-only, mirroring
+                    // firestore.rules and the deleteUserPermanently function.
+                    if (isViewerSuperAdmin) ...[
                     const SizedBox(height: 10),
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
@@ -928,6 +1191,7 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                       icon: const Icon(LucideIcons.trash2),
                       label: const Text('Eliminar permanentemente'),
                     ),
+                    ],
                   ],
                   const SizedBox(height: 12),
                   InkWell(
@@ -993,6 +1257,8 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
   final passwordController = TextEditingController();
   String role = AppRoles.trabajadorNormal;
   String? groupId;
+  List<String> managedGroupIds = [];
+  Map<String, bool> permissions = {};
   bool isSaving = false;
 
   await showDialog<void>(
@@ -1042,6 +1308,10 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                           child: Text(AuthService.roleLabel(AppRoles.trabajadorNormal)),
                         ),
                         DropdownMenuItem(
+                          value: AppRoles.adminEquipo,
+                          child: Text(AuthService.roleLabel(AppRoles.adminEquipo)),
+                        ),
+                        DropdownMenuItem(
                           value: AppRoles.superAdmin,
                           child: Text(AuthService.roleLabel(AppRoles.superAdmin)),
                         ),
@@ -1049,17 +1319,29 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                       onChanged: (v) => setState(() => role = v ?? role),
                     ),
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<String?>(
-                      initialValue: groupId,
-                      dropdownColor: colors.surface,
-                      decoration: const InputDecoration(labelText: 'Equipo (opcional)'),
-                      items: [
-                        const DropdownMenuItem<String?>(value: null, child: Text('Sin equipo')),
-                        for (final group in catalog.groups)
-                          DropdownMenuItem<String?>(value: group.id, child: Text(group.name)),
-                      ],
-                      onChanged: (v) => setState(() => groupId = v),
-                    ),
+                    if (role == AppRoles.adminEquipo) ...[
+                      _ManagedGroupsField(
+                        groups: catalog.groups,
+                        selected: managedGroupIds,
+                        onChanged: (v) => setState(() => managedGroupIds = v),
+                      ),
+                      const SizedBox(height: 12),
+                      _PermissionsChecklist(
+                        value: permissions,
+                        onChanged: (v) => setState(() => permissions = v),
+                      ),
+                    ] else
+                      DropdownButtonFormField<String?>(
+                        initialValue: groupId,
+                        dropdownColor: colors.surface,
+                        decoration: const InputDecoration(labelText: 'Equipo (opcional)'),
+                        items: [
+                          const DropdownMenuItem<String?>(value: null, child: Text('Sin equipo')),
+                          for (final group in catalog.groups)
+                            DropdownMenuItem<String?>(value: group.id, child: Text(group.name)),
+                        ],
+                        onChanged: (v) => setState(() => groupId = v),
+                      ),
                   ],
                 ),
               ),
@@ -1074,6 +1356,11 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                     ? null
                     : () async {
                         if (!formKey.currentState!.validate()) return;
+                        if (role == AppRoles.adminEquipo && managedGroupIds.isEmpty) {
+                          SnackbarUtils.showError(
+                              dialogContext, 'Selecciona al menos un equipo para el administrador');
+                          return;
+                        }
                         setState(() => isSaving = true);
                         try {
                           await authService.createUser(
@@ -1082,6 +1369,8 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                             name: nameController.text.trim(),
                             role: role,
                             groupId: groupId,
+                            managedGroupIds: managedGroupIds,
+                            permissions: permissions,
                           );
                           if (dialogContext.mounted) {
                             Navigator.of(dialogContext).pop();

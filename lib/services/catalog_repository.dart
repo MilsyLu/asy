@@ -33,8 +33,13 @@ class CatalogRepository {
     });
   }
 
-  Future<void> updateGroup(String id, String name, String description) {
-    return _groups.doc(id).update({'name': name, 'description': description});
+  Future<void> updateGroup(String id, String name, String description,
+      {String? timeSelectionMode}) {
+    return _groups.doc(id).update({
+      'name': name,
+      'description': description,
+      'timeSelectionMode': ?timeSelectionMode,
+    });
   }
 
   Future<void> deleteGroup(String id) => _groups.doc(id).delete();
@@ -93,12 +98,16 @@ class CatalogRepository {
     return snap.docs.map((d) => StatusModel.fromDoc(d)).toList();
   }
 
-  Future<void> addStatus(String name, int order) {
-    return _statuses.add({'name': name, 'order': order});
+  Future<void> addStatus(String name, int order,
+      {List<String> groupIds = const []}) {
+    return _statuses.add({'name': name, 'order': order, 'groupIds': groupIds});
   }
 
-  Future<void> updateStatus(String id, String name, int order) {
-    return _statuses.doc(id).update({'name': name, 'order': order});
+  Future<void> updateStatus(String id, String name, int order,
+      {List<String> groupIds = const []}) {
+    return _statuses
+        .doc(id)
+        .update({'name': name, 'order': order, 'groupIds': groupIds});
   }
 
   Future<void> deleteStatus(String id) => _statuses.doc(id).delete();
@@ -119,12 +128,14 @@ class CatalogRepository {
     return snap.docs.map((d) => AvailableHourModel.fromDoc(d)).toList();
   }
 
-  Future<void> addAvailableHour(String hour) {
-    return _availableHours.add({'hour': hour});
+  Future<void> addAvailableHour(String hour,
+      {List<String> groupIds = const []}) {
+    return _availableHours.add({'hour': hour, 'groupIds': groupIds});
   }
 
-  Future<void> updateAvailableHour(String id, String hour) {
-    return _availableHours.doc(id).update({'hour': hour});
+  Future<void> updateAvailableHour(String id, String hour,
+      {List<String> groupIds = const []}) {
+    return _availableHours.doc(id).update({'hour': hour, 'groupIds': groupIds});
   }
 
   Future<void> deleteAvailableHour(String id) =>

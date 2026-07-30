@@ -35,7 +35,7 @@ class AuthService {
     );
     final uid = credential.user?.uid;
     if (uid != null) {
-      await _updateLoginAndStreak(uid);
+      await refreshLoginAndStreak(uid);
     }
     return credential;
   }
@@ -58,6 +58,8 @@ class AuthService {
     required String name,
     required String role,
     String? groupId,
+    List<String> managedGroupIds = const [],
+    Map<String, bool> permissions = const {},
   }) async {
     FirebaseApp secondaryApp;
     try {
@@ -80,6 +82,8 @@ class AuthService {
         'name': name.trim(),
         'role': role,
         'groupId': groupId,
+        'managedGroupIds': managedGroupIds,
+        'permissions': permissions,
         'fcmTokens': <String>[],
         'lastLogin': null,
         'streakDays': 0,
@@ -110,7 +114,13 @@ class AuthService {
   /// Streak only increases if the user logs in on a *different calendar
   /// day* than their last login (time of day is irrelevant). If a full
   /// day or more was skipped, the streak resets to 1.
-  Future<void> _updateLoginAndStreak(String uid) async {
+  ///
+  /// Called from [signIn] on every fresh login, and also by
+  /// [AuthProvider]'s day-rollover check — a session left open overnight
+  /// never calls [signIn] again (Firebase Auth just keeps the same token
+  /// alive), so without that second call site the streak would silently
+  /// stop advancing for anyone who doesn't close the tab daily.
+  Future<void> refreshLoginAndStreak(String uid) async {
     final docRef = _firestore.collection(FirestoreCollections.users).doc(uid);
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(docRef);
@@ -153,7 +163,9 @@ class AuthService {
   static String roleLabel(String role) {
     switch (role) {
       case AppRoles.superAdmin:
-        return 'Administrador';
+        return 'Super usuario';
+      case AppRoles.adminEquipo:
+        return 'Administrador de equipo';
       case AppRoles.trabajadorNormal:
         return 'Trabajador';
       default:

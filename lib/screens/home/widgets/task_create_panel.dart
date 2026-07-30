@@ -13,7 +13,6 @@ import '../../../models/task_model.dart';
 import '../../../models/task_type_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/catalog_provider.dart';
-import '../../../providers/system_config_provider.dart';
 import '../../../services/task_repository.dart';
 import '../../../services/task_scheduling_service.dart';
 import '../../../widgets/confirm_dialog.dart';
@@ -102,11 +101,18 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
 
   /// Active users eligible for "Encargado" — same rule as AddEditTaskPage.
   List<AppUser> _assignableUsers(CatalogProvider catalog, AppUser current) {
-    final pool = current.groupId != null
-        ? (catalog.usersInGroup(current.groupId).isNotEmpty
-            ? catalog.usersInGroup(current.groupId)
-            : catalog.users)
-        : catalog.users;
+    final List<AppUser> pool;
+    if (current.isScopedAdmin) {
+      pool = catalog.users
+          .where((u) => current.managedGroupIds.contains(u.groupId))
+          .toList();
+    } else if (current.groupId != null) {
+      pool = catalog.usersInGroup(current.groupId).isNotEmpty
+          ? catalog.usersInGroup(current.groupId)
+          : catalog.users;
+    } else {
+      pool = catalog.users;
+    }
     final active = pool.where((u) => u.isActive).toList();
     if (_assignedUserId != null && !active.any((u) => u.id == _assignedUserId)) {
       final assignedUser = catalog.userById(_assignedUserId);
@@ -244,20 +250,21 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
     final auth = context.watch<AuthProvider>();
-    final sysConfig = context.watch<SystemConfigProvider>();
     final currentUser = auth.appUser!;
-    final isAdmin = auth.isSuperAdmin;
+    final isAdmin = auth.isAdminOfAnyKind;
     final colors = context.colors;
-    final useFreePicker = TaskSchedulingService.useFreePicker(sysConfig);
 
     if (!isAdmin) {
       _assignedUserId ??= currentUser.id;
     }
     _statusId ??= catalog.pendingStatusId;
+    _groupId ??= catalog.userById(_assignedUserId)?.groupId ?? currentUser.groupId;
+    // Time-selection mode now lives per-team (GroupModel.timeSelectionMode)
+    // instead of the old single global systemConfig toggle.
+    final useFreePicker = catalog.groupById(_groupId)?.useFreePicker ?? false;
     if (_selectedHour == null && !useFreePicker && catalog.availableHours.isNotEmpty) {
       _selectedHour = catalog.availableHours.first.hour;
     }
-    _groupId ??= catalog.userById(_assignedUserId)?.groupId ?? currentUser.groupId;
 
     // Tipo de tarea is optional — no default auto-selection, so leaving it
     // unset (or explicitly picking "Sin tipo") is a real, reachable state.
@@ -267,11 +274,15 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
 
     final assignableUsers = _assignableUsers(catalog, currentUser);
     final isGroupLocked = !isAdmin && currentUser.groupId != null;
-    final groupOptions = isGroupLocked
+    final groupOptions = currentUser.isScopedAdmin
         ? catalog.groups
-            .where((g) => g.id == currentUser.groupId || g.id == _groupId)
+            .where((g) => currentUser.managesGroup(g.id) || g.id == _groupId)
             .toList()
-        : catalog.groups;
+        : (isGroupLocked
+            ? catalog.groups
+                .where((g) => g.id == currentUser.groupId || g.id == _groupId)
+                .toList()
+            : catalog.groups);
 
     return Form(
       key: _formKey,

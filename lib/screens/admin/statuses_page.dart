@@ -2,18 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/responsive/app_spacing.dart';
 import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/snackbar_utils.dart';
+import '../../models/group_model.dart';
 import '../../models/status_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/catalog_repository.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/side_panel_shell.dart';
 
-/// Admin: CRUD for `statuses` (name, order).
+/// Admin: CRUD for `statuses` (name, order, groupIds).
 class StatusesPage extends StatefulWidget {
   const StatusesPage({super.key, this.showAppBar = true});
 
@@ -29,7 +32,17 @@ class _StatusesPageState extends State<StatusesPage> {
   @override
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
-    final statuses = catalog.statuses;
+    final auth = context.watch<AuthProvider>();
+    final isSuperAdmin = auth.isSuperAdmin;
+    final canEditCatalogs = auth.hasPermission(AppPermissions.manageCatalogs);
+    // A scoped admin_equipo sees universal statuses (apply everywhere) plus
+    // any scoped to one of their own teams — never one scoped only to a
+    // team they don't manage.
+    final statuses = isSuperAdmin
+        ? catalog.statuses
+        : catalog.statuses
+            .where((s) => s.groupIds.isEmpty || s.groupIds.any(auth.managesGroup))
+            .toList();
     final colors = context.colors;
     final isMobile = context.isMobile;
 
@@ -72,11 +85,15 @@ class _StatusesPageState extends State<StatusesPage> {
         separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           final status = statuses[index];
+          // A scoped admin without manageCatalogs, or looking at a
+          // universal (unscoped) entry, gets a read-only row either way.
+          final canEditThis = isSuperAdmin ||
+              (canEditCatalogs && status.groupIds.isNotEmpty && status.groupIds.every(auth.managesGroup));
           // Tablet/desktop: name/order editable right on the row.
           // Mobile keeps the "Editar" dialog and the FAB.
           return isMobile
-              ? _StatusCardMobile(status: status)
-              : _StatusRowEditable(status: status);
+              ? _StatusCardMobile(status: status, canEdit: canEditThis, groups: catalog.groups)
+              : _StatusRowEditable(status: status, canEdit: canEditThis, groups: catalog.groups);
         },
       );
     }
@@ -84,6 +101,16 @@ class _StatusesPageState extends State<StatusesPage> {
     Widget body;
     if (isMobile) {
       body = Column(children: [infoBanner, Expanded(child: buildList(shrink: false))]);
+    } else if (!isSuperAdmin && !canEditCatalogs) {
+      // No create panel to show if this admin can't create anything.
+      body = Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: AppLayout.contentMaxWidthWide),
+          child: Column(
+            children: [infoBanner, Expanded(child: buildList(shrink: false))],
+          ),
+        ),
+      );
     } else {
       // Same width-aware rule as Equipos/Usuarios: below ~900px of actual
       // available width, stack the "Nuevo estado" panel under the list
@@ -91,7 +118,11 @@ class _StatusesPageState extends State<StatusesPage> {
       body = LayoutBuilder(
         builder: (context, constraints) {
           final sideBySide = constraints.maxWidth >= 900;
-          const panel = _CreateStatusPanel(key: ValueKey('create-status'));
+          final panel = _CreateStatusPanel(
+            key: const ValueKey('create-status'),
+            groups: catalog.groups,
+            managedGroupIds: isSuperAdmin ? null : (auth.appUser?.managedGroupIds ?? const []),
+          );
 
           if (sideBySide) {
             return Row(
@@ -125,8 +156,8 @@ class _StatusesPageState extends State<StatusesPage> {
                 const SizedBox(height: 12),
                 buildList(shrink: true),
                 const SizedBox(height: 16),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: panel,
                 ),
               ],
@@ -137,9 +168,13 @@ class _StatusesPageState extends State<StatusesPage> {
     }
 
     // Tablet/desktop: the panel replaces the FAB for creating a status.
-    final fab = isMobile
+    final fab = isMobile && (isSuperAdmin || canEditCatalogs)
         ? FloatingActionButton(
-            onPressed: () => _showStatusFormDialog(context),
+            onPressed: () => _showStatusFormDialog(
+              context,
+              groups: catalog.groups,
+              managedGroupIds: isSuperAdmin ? null : (auth.appUser?.managedGroupIds ?? const []),
+            ),
             child: const Icon(LucideIcons.plus),
           )
         : null;
@@ -152,11 +187,105 @@ class _StatusesPageState extends State<StatusesPage> {
   }
 }
 
+/// Read-only chip summary of a catalog entry's team scope — empty means
+/// universal (applies to every team).
+class _GroupScopeSummary extends StatelessWidget {
+  const _GroupScopeSummary({required this.groupIds, required this.groups});
+
+  final List<String> groupIds;
+  final List<GroupModel> groups;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    if (groupIds.isEmpty) {
+      return Text('Todos los equipos', style: TextStyle(color: colors.textSecondary, fontSize: 11));
+    }
+    final namesById = {for (final g in groups) g.id: g.name};
+    final names = groupIds.map((id) => namesById[id]).whereType<String>().join(', ');
+    return Text(names, style: TextStyle(color: colors.textSecondary, fontSize: 11));
+  }
+}
+
+/// Multi-select dialog for a catalog entry's team scope. Unlike the
+/// admin_equipo "Equipos asignados" picker, empty here is valid and means
+/// "universal" — but a scoped admin (canOnly != null) may never leave it
+/// empty or pick a team outside their own reach, since firestore.rules
+/// requires their entries to always be explicitly scoped to teams they
+/// manage.
+Future<Set<String>?> _pickCatalogGroups(
+  BuildContext context, {
+  required Set<String> current,
+  required List<GroupModel> groups,
+  List<String>? managedGroupIds,
+}) {
+  final selectable =
+      managedGroupIds == null ? groups : groups.where((g) => managedGroupIds.contains(g.id)).toList();
+  final selected = {...current}..removeWhere((id) => !selectable.any((g) => g.id == id));
+  final colors = context.colors;
+  return showDialog<Set<String>>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setState) => AlertDialog(
+        title: const Text('Equipos'),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                managedGroupIds == null
+                    ? 'Ninguno seleccionado = todos los equipos'
+                    : 'Selecciona al menos uno de tus equipos.',
+                style: TextStyle(color: colors.textSecondary, fontSize: 12),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final group in selectable)
+                    FilterChip(
+                      label: Text(group.name),
+                      selected: selected.contains(group.id),
+                      onSelected: (v) => setState(() {
+                        if (v) {
+                          selected.add(group.id);
+                        } else {
+                          selected.remove(group.id);
+                        }
+                      }),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: (managedGroupIds != null && selected.isEmpty)
+                ? null
+                : () => Navigator.of(dialogContext).pop(selected),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 /// Mobile row — unchanged behavior (tap pencil/trash to open a dialog).
 class _StatusCardMobile extends StatelessWidget {
-  const _StatusCardMobile({required this.status});
+  const _StatusCardMobile({required this.status, required this.canEdit, required this.groups});
 
   final StatusModel status;
+  final bool canEdit;
+  final List<GroupModel> groups;
 
   @override
   Widget build(BuildContext context) {
@@ -170,23 +299,33 @@ class _StatusCardMobile extends StatelessWidget {
       child: ListTile(
         leading: Icon(LucideIcons.listChecks, color: colors.primary),
         title: Text(status.name, style: TextStyle(color: colors.textPrimary)),
-        subtitle: Text(
-          'Orden: ${status.order}',
-          style: TextStyle(color: colors.textSecondary, fontSize: 12),
-        ),
-        trailing: Row(
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: Icon(LucideIcons.pencil, color: colors.primary, size: 18),
-              onPressed: () => _showStatusFormDialog(context, existing: status),
+            Text(
+              'Orden: ${status.order}',
+              style: TextStyle(color: colors.textSecondary, fontSize: 12),
             ),
-            IconButton(
-              icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
-              onPressed: () => _deleteStatus(context, status),
-            ),
+            _GroupScopeSummary(groupIds: status.groupIds, groups: groups),
           ],
         ),
+        trailing: canEdit
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: Icon(LucideIcons.pencil, color: colors.primary, size: 18),
+                    onPressed: () =>
+                        _showStatusFormDialog(context, existing: status, groups: groups),
+                  ),
+                  IconButton(
+                    icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
+                    onPressed: () => _deleteStatus(context, status),
+                  ),
+                ],
+              )
+            : null,
       ),
     );
   }
@@ -194,9 +333,11 @@ class _StatusCardMobile extends StatelessWidget {
 
 /// Tablet/desktop row: Nombre and Orden are real fields that save on blur.
 class _StatusRowEditable extends StatefulWidget {
-  const _StatusRowEditable({required this.status});
+  const _StatusRowEditable({required this.status, required this.canEdit, required this.groups});
 
   final StatusModel status;
+  final bool canEdit;
+  final List<GroupModel> groups;
 
   @override
   State<_StatusRowEditable> createState() => _StatusRowEditableState();
@@ -264,12 +405,31 @@ class _StatusRowEditableState extends State<_StatusRowEditable> {
         widget.status.id,
         name ?? widget.status.name,
         order ?? widget.status.order,
+        groupIds: widget.status.groupIds,
       );
       if (mounted) SnackbarUtils.showSuccess(context, 'Estado actualizado');
     } catch (e) {
       if (mounted) {
         SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
       }
+    }
+  }
+
+  Future<void> _pickGroups() async {
+    final repo = context.read<CatalogRepository>();
+    final result = await _pickCatalogGroups(
+      context,
+      current: widget.status.groupIds.toSet(),
+      groups: widget.groups,
+    );
+    if (result == null) return;
+    if (!mounted) return;
+    try {
+      await repo.updateStatus(widget.status.id, widget.status.name, widget.status.order,
+          groupIds: result.toList());
+      if (mounted) SnackbarUtils.showSuccess(context, 'Estado actualizado');
+    } catch (e) {
+      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
     }
   }
 
@@ -289,11 +449,13 @@ class _StatusRowEditableState extends State<_StatusRowEditable> {
           Icon(LucideIcons.listChecks, color: colors.primary, size: 20),
           const SizedBox(width: 12),
           Expanded(
+            flex: 2,
             child: _RowField(
               label: 'Nombre',
               child: TextField(
                 controller: _nameController,
                 focusNode: _nameFocus,
+                enabled: widget.canEdit,
                 style: TextStyle(
                   color: colors.textPrimary,
                   fontWeight: FontWeight.w600,
@@ -306,12 +468,13 @@ class _StatusRowEditableState extends State<_StatusRowEditable> {
           ),
           const SizedBox(width: 16),
           SizedBox(
-            width: 84,
+            width: 70,
             child: _RowField(
               label: 'Orden',
               child: TextField(
                 controller: _orderController,
                 focusNode: _orderFocus,
+                enabled: widget.canEdit,
                 keyboardType: TextInputType.number,
                 style: TextStyle(color: colors.textPrimary, fontSize: 14),
                 decoration: const InputDecoration(isDense: true),
@@ -319,14 +482,27 @@ class _StatusRowEditableState extends State<_StatusRowEditable> {
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          Padding(
-            padding: const EdgeInsets.only(top: 18),
-            child: IconButton(
-              icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
-              onPressed: () => _deleteStatus(context, widget.status),
+          const SizedBox(width: 16),
+          Expanded(
+            flex: 2,
+            child: _RowField(
+              label: 'Equipos',
+              child: InkWell(
+                onTap: widget.canEdit ? _pickGroups : null,
+                child: _GroupScopeSummary(groupIds: widget.status.groupIds, groups: widget.groups),
+              ),
             ),
           ),
+          if (widget.canEdit) ...[
+            const SizedBox(width: 8),
+            Padding(
+              padding: const EdgeInsets.only(top: 18),
+              child: IconButton(
+                icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
+                onPressed: () => _deleteStatus(context, widget.status),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -366,7 +542,14 @@ class _RowField extends StatelessWidget {
 /// Tablet/desktop always-visible right panel for creating a status — stays
 /// in place (fields just clear) after a successful save.
 class _CreateStatusPanel extends StatefulWidget {
-  const _CreateStatusPanel({super.key});
+  const _CreateStatusPanel({super.key, required this.groups, required this.managedGroupIds});
+
+  final List<GroupModel> groups;
+
+  /// Null for super_admin (unrestricted); a scoped admin_equipo's own
+  /// managed teams otherwise — new entries are forced into a non-empty
+  /// subset of these.
+  final List<String>? managedGroupIds;
 
   @override
   State<_CreateStatusPanel> createState() => _CreateStatusPanelState();
@@ -385,6 +568,7 @@ class _CreateStatusPanelState extends State<_CreateStatusPanel> {
   late final _orderController =
       TextEditingController(text: '${_nextStatusOrder(context.read<CatalogProvider>())}');
   final _formKey = GlobalKey<FormState>();
+  Set<String> _groupIds = {};
   bool _isSaving = false;
 
   @override
@@ -396,14 +580,19 @@ class _CreateStatusPanelState extends State<_CreateStatusPanel> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (widget.managedGroupIds != null && _groupIds.isEmpty) {
+      SnackbarUtils.showError(context, 'Selecciona al menos uno de tus equipos');
+      return;
+    }
     setState(() => _isSaving = true);
     final repo = context.read<CatalogRepository>();
     final order = int.parse(_orderController.text.trim());
     try {
-      await repo.addStatus(_nameController.text.trim(), order);
+      await repo.addStatus(_nameController.text.trim(), order, groupIds: _groupIds.toList());
       if (mounted) {
         _nameController.clear();
         _orderController.text = '${order + 1}';
+        setState(() => _groupIds = {});
         SnackbarUtils.showSuccess(context, 'Estado creado');
       }
     } catch (e) {
@@ -440,6 +629,23 @@ class _CreateStatusPanelState extends State<_CreateStatusPanel> {
               decoration: const InputDecoration(labelText: 'Orden'),
               validator: (v) => int.tryParse(v ?? '') == null ? 'Ingresa un número' : null,
             ),
+            const SizedBox(height: 12),
+            _RowField(
+              label: 'Equipos',
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  final result = await _pickCatalogGroups(
+                    context,
+                    current: _groupIds,
+                    groups: widget.groups,
+                    managedGroupIds: widget.managedGroupIds,
+                  );
+                  if (result != null) setState(() => _groupIds = result);
+                },
+                icon: const Icon(LucideIcons.users, size: 16),
+                label: Text(_groupIds.isEmpty ? 'Todos los equipos' : '${_groupIds.length} elegidos'),
+              ),
+            ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _isSaving ? null : _save,
@@ -458,7 +664,12 @@ class _CreateStatusPanelState extends State<_CreateStatusPanel> {
   }
 }
 
-Future<void> _showStatusFormDialog(BuildContext context, {StatusModel? existing}) async {
+Future<void> _showStatusFormDialog(
+  BuildContext context, {
+  StatusModel? existing,
+  required List<GroupModel> groups,
+  List<String>? managedGroupIds,
+}) async {
   final colors = context.colors;
   final repo = context.read<CatalogRepository>();
   final catalog = context.read<CatalogProvider>();
@@ -467,6 +678,7 @@ Future<void> _showStatusFormDialog(BuildContext context, {StatusModel? existing}
     text: '${existing?.order ?? (catalog.statuses.length)}',
   );
   final formKey = GlobalKey<FormState>();
+  Set<String> groupIds = {...(existing?.groupIds ?? const [])};
   bool isSaving = false;
 
   await showDialog<void>(
@@ -498,6 +710,23 @@ Future<void> _showStatusFormDialog(BuildContext context, {StatusModel? existing}
                     validator: (v) =>
                         int.tryParse(v ?? '') == null ? 'Ingresa un número' : null,
                   ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final result = await _pickCatalogGroups(
+                          dialogContext,
+                          current: groupIds,
+                          groups: groups,
+                          managedGroupIds: managedGroupIds,
+                        );
+                        if (result != null) setState(() => groupIds = result);
+                      },
+                      icon: const Icon(LucideIcons.users, size: 16),
+                      label: Text(groupIds.isEmpty ? 'Todos los equipos' : '${groupIds.length} equipos'),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -511,13 +740,21 @@ Future<void> _showStatusFormDialog(BuildContext context, {StatusModel? existing}
                     ? null
                     : () async {
                         if (!formKey.currentState!.validate()) return;
+                        if (managedGroupIds != null && groupIds.isEmpty) {
+                          SnackbarUtils.showError(
+                              dialogContext, 'Selecciona al menos uno de tus equipos');
+                          return;
+                        }
                         setState(() => isSaving = true);
                         final order = int.parse(orderController.text);
                         try {
                           if (existing == null) {
-                            await repo.addStatus(nameController.text.trim(), order);
+                            await repo.addStatus(nameController.text.trim(), order,
+                                groupIds: groupIds.toList());
                           } else {
-                            await repo.updateStatus(existing.id, nameController.text.trim(), order);
+                            await repo.updateStatus(
+                                existing.id, nameController.text.trim(), order,
+                                groupIds: groupIds.toList());
                           }
                           if (dialogContext.mounted) Navigator.of(dialogContext).pop();
                         } catch (e) {

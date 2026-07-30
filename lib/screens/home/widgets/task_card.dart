@@ -44,7 +44,9 @@ class TaskCard extends StatelessWidget {
 
     final isPending = task.statusId == catalog.pendingStatusId;
     final isCompleted = task.statusId == catalog.completedStatusId;
-    final canEdit = auth.isSuperAdmin || isPending;
+    final canEdit = (auth.managesGroup(task.groupId) &&
+            auth.hasPermission(AppPermissions.manageTasks)) ||
+        isPending;
     final canComplete = !isCompleted;
     final canReschedule = !isCompleted;
 
@@ -309,7 +311,9 @@ Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
 
   final isPending = task.statusId == catalog.pendingStatusId;
   final isCompleted = task.statusId == catalog.completedStatusId;
-  final canEdit = auth.isSuperAdmin || isPending;
+  final canEdit = (auth.managesGroup(task.groupId) &&
+          auth.hasPermission(AppPermissions.manageTasks)) ||
+      isPending;
   final canComplete = !isCompleted;
   final canReschedule = !isCompleted;
 

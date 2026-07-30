@@ -8,6 +8,18 @@ class AppUser {
   final String name;
   final String role;
   final String? groupId;
+
+  /// Teams this user manages, only meaningful when [role] is
+  /// [AppRoles.adminEquipo] — an `admin_equipo` may be assigned more than
+  /// one. Empty for every other role. Defaults to `[]` so documents written
+  /// before this field existed deserialize safely.
+  final List<String> managedGroupIds;
+
+  /// Granular permission flags, only meaningful when [role] is
+  /// [AppRoles.adminEquipo] — see [AppPermissions] for the recognized keys.
+  /// Defaults to `{}` (no permissions) so documents written before this
+  /// field existed deserialize safely.
+  final Map<String, bool> permissions;
   final List<String> fcmTokens;
   final DateTime? lastLogin;
   final int streakDays;
@@ -46,6 +58,8 @@ class AppUser {
     required this.name,
     required this.role,
     this.groupId,
+    this.managedGroupIds = const [],
+    this.permissions = const {},
     this.fcmTokens = const [],
     this.lastLogin,
     this.streakDays = 0,
@@ -60,6 +74,26 @@ class AppUser {
 
   bool get isSuperAdmin => role == AppRoles.superAdmin;
 
+  bool get isScopedAdmin => role == AppRoles.adminEquipo;
+
+  /// True for any kind of administrator (super_admin or admin_equipo).
+  bool get isAdminOfAnyKind => isSuperAdmin || isScopedAdmin;
+
+  /// True if this user has [key] (one of [AppPermissions]'s constants).
+  /// A `super_admin` implicitly has every permission; only an `admin_equipo`
+  /// reads from [permissions] at all.
+  bool hasPermission(String key) =>
+      isSuperAdmin || (isScopedAdmin && permissions[key] == true);
+
+  /// True if this user may manage/see data scoped to [groupId]. A
+  /// `super_admin` manages every group; an `admin_equipo` only the ones in
+  /// [managedGroupIds]. `null` groupId is never "managed" by an
+  /// `admin_equipo` (matches [AppRoles.trabajadorNormal] visibility, which
+  /// requires an explicit group match).
+  bool managesGroup(String? groupId) =>
+      isSuperAdmin ||
+      (isScopedAdmin && groupId != null && managedGroupIds.contains(groupId));
+
   factory AppUser.fromMap(String id, Map<String, dynamic> map) {
     return AppUser(
       id: id,
@@ -67,6 +101,14 @@ class AppUser {
       name: map['name'] as String? ?? '',
       role: map['role'] as String? ?? AppRoles.trabajadorNormal,
       groupId: map['groupId'] as String?,
+      managedGroupIds: (map['managedGroupIds'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      permissions: (map['permissions'] as Map<dynamic, dynamic>?)?.map(
+            (key, value) => MapEntry(key.toString(), value as bool? ?? false),
+          ) ??
+          const {},
       fcmTokens: (map['fcmTokens'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
@@ -118,6 +160,8 @@ class AppUser {
       'name': name,
       'role': role,
       'groupId': groupId,
+      'managedGroupIds': managedGroupIds,
+      'permissions': permissions,
       'fcmTokens': fcmTokens,
       'lastLogin': lastLogin != null ? Timestamp.fromDate(lastLogin!) : null,
       'streakDays': streakDays,
@@ -136,6 +180,8 @@ class AppUser {
     String? name,
     String? role,
     String? groupId,
+    List<String>? managedGroupIds,
+    Map<String, bool>? permissions,
     List<String>? fcmTokens,
     DateTime? lastLogin,
     int? streakDays,
@@ -152,6 +198,8 @@ class AppUser {
       name: name ?? this.name,
       role: role ?? this.role,
       groupId: groupId ?? this.groupId,
+      managedGroupIds: managedGroupIds ?? this.managedGroupIds,
+      permissions: permissions ?? this.permissions,
       fcmTokens: fcmTokens ?? this.fcmTokens,
       lastLogin: lastLogin ?? this.lastLogin,
       streakDays: streakDays ?? this.streakDays,

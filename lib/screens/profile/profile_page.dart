@@ -660,12 +660,14 @@ class _HeroInfoGrid extends StatelessWidget {
         : 'Sin información';
     final tenure = _tenureLabel(user.createdAt);
 
-    // Role gets its own accent (gold for super_admin, primary for regular
-    // workers) instead of the uniform icon color the other three blocks
-    // use — a quick visual cue for "who am I looking at" without reading
-    // the text.
+    // Role gets its own accent (gold for super_admin, primary for everyone
+    // else) instead of the uniform icon color the other three blocks use —
+    // a quick visual cue for "who am I looking at" without reading the text.
     final roleColor =
         user.isSuperAdmin ? const Color(0xFFD4AF37) : colors.primary;
+    final roleSubtitle = user.isSuperAdmin
+        ? 'Administrador del sistema'
+        : (user.isScopedAdmin ? 'Administrador de equipo' : 'Colaborador');
 
     final rows = <Widget>[
       Row(
@@ -677,8 +679,7 @@ class _HeroInfoGrid extends StatelessWidget {
               iconColor: roleColor,
               title: 'Rol',
               value: AuthService.roleLabel(user.role),
-              subtitle:
-                  user.isSuperAdmin ? 'Administrador del sistema' : 'Colaborador',
+              subtitle: roleSubtitle,
             ),
           ),
           const SizedBox(width: AppSpacing.lg),
@@ -1364,7 +1365,9 @@ class _ProfileAccountCard extends StatelessWidget {
         icon: LucideIcons.shieldCheck,
         title: 'Rol',
         value: AuthService.roleLabel(user.role),
-        subtitle: user.isSuperAdmin ? 'Administrador del sistema' : 'Colaborador',
+        subtitle: user.isSuperAdmin
+            ? 'Administrador del sistema'
+            : (user.isScopedAdmin ? 'Administrador de equipo' : 'Colaborador'),
       ),
       _AccountInfoBlock(
         icon: LucideIcons.users,

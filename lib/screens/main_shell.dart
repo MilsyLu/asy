@@ -285,10 +285,24 @@ class _MainShellState extends State<MainShell> {
 
   /// Switches the shell to index [i]:
   ///   1. Pops any pushed pages back to the IndexedStack base route.
-  ///   2. Tells [_ContentBase] to show child [i].
+  ///   2. Re-syncs [_ContentBase]'s children to the *current* permission-
+  ///      derived nav list, then tells it to show child [i].
   ///   3. Rebuilds the outer scaffold to update the AppBar title.
+  ///
+  /// Step 2 matters because the content Navigator's initial route (and thus
+  /// its [_ContentBase] children list) is only built once, at first mount
+  /// (see the Navigator below) — but an admin_equipo's permissions can
+  /// change live while their session is already open (the super usuario
+  /// toggling a permission in another tab), which changes how many/which
+  /// entries `_buildSectionEntries` returns. Without this resync, a stale
+  /// children list and a freshly-computed sidebar index fall out of sync:
+  /// clicking a nav item can show the wrong page, or nothing at all.
   void _navigateToIndex(int i) {
     _contentNavKey.currentState?.popUntil((route) => route.isFirst);
+    final auth = context.read<AuthProvider>();
+    final isAdmin = auth.isAdminOfAnyKind;
+    final all = [..._buildTabEntries(isAdmin, auth), ..._buildSectionEntries(isAdmin, auth)];
+    _contentBaseKey.currentState?.setChildren(all.map((e) => e.page).toList());
     _contentBaseKey.currentState?.setIndex(i);
     setState(() => _index = i);
   }
@@ -305,8 +319,8 @@ class _MainShellState extends State<MainShell> {
   // ── Single source of truth: primary tabs (sidebar section 1) ────────────
   // [0] Dashboard / Inicio
   // [1] Calendario  (_CalendarSection wraps CalendarPage + WeekPage toggle)
-  // [2] Reportes    (admin only)
-  List<_ShellEntry> _buildTabEntries(bool isAdmin) => [
+  // [2] Reportes    (viewReports permission — super_admin always has it)
+  List<_ShellEntry> _buildTabEntries(bool isAdmin, AuthProvider auth) => [
         _ShellEntry(
           icon: isAdmin ? LucideIcons.gauge : LucideIcons.home,
           label: isAdmin ? 'Dashboard' : 'Inicio',
@@ -317,7 +331,7 @@ class _MainShellState extends State<MainShell> {
           label: 'Calendario',
           page: _CalendarSection(),
         ),
-        if (isAdmin)
+        if (auth.hasPermission(AppPermissions.viewReports))
           const _ShellEntry(
             icon: LucideIcons.barChart3,
             label: 'Reportes',
@@ -327,11 +341,11 @@ class _MainShellState extends State<MainShell> {
 
   // ── Single source of truth: secondary sections (sidebar section 2) ──────
   // [0] Perfil                    — user-card tap only, not a nav item
-  // [1] Agenda diaria             (admin only)
-  // [2] Panel de administración   (admin only)
-  // [3] Papelera                  (admin only)
+  // [1] Agenda diaria             (any admin)
+  // [2] Panel de administración   (any admin — modules self-filter inside)
+  // [3] Papelera                  (manageTasks permission)
   // [4 / 1] Configuración
-  List<_ShellEntry> _buildSectionEntries(bool isAdmin) => [
+  List<_ShellEntry> _buildSectionEntries(bool isAdmin, AuthProvider auth) => [
         const _ShellEntry(
           icon: LucideIcons.user,
           label: 'Perfil',
@@ -343,16 +357,24 @@ class _MainShellState extends State<MainShell> {
             label: 'Agenda diaria',
             page: HomePage(),
           ),
-          const _ShellEntry(
-            icon: LucideIcons.layoutDashboard,
-            label: 'Panel de administración',
-            page: _AdminSection(),
-          ),
-          const _ShellEntry(
-            icon: LucideIcons.trash2,
-            label: 'Papelera',
-            page: TrashPage(showAppBar: false),
-          ),
+          // Only shown if at least one of AdminPanelPage's own modules would
+          // actually render for this admin (manageUsers/manageTeams/
+          // manageCatalogs) — otherwise a scoped admin_equipo with none of
+          // those would land on an empty panel with nothing to click.
+          if (auth.hasPermission(AppPermissions.manageUsers) ||
+              auth.hasPermission(AppPermissions.manageTeams) ||
+              auth.hasPermission(AppPermissions.manageCatalogs))
+            const _ShellEntry(
+              icon: LucideIcons.layoutDashboard,
+              label: 'Panel de administración',
+              page: _AdminSection(),
+            ),
+          if (auth.hasPermission(AppPermissions.manageTasks))
+            const _ShellEntry(
+              icon: LucideIcons.trash2,
+              label: 'Papelera',
+              page: TrashPage(showAppBar: false),
+            ),
         ],
         const _ShellEntry(
           icon: LucideIcons.settings,
@@ -363,19 +385,26 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = context.watch<AuthProvider>().isSuperAdmin;
+    final auth = context.watch<AuthProvider>();
+    // Any kind of administrator (super_admin or admin_equipo) reaches the
+    // admin section/Dashboard — which specific modules/tabs show inside is
+    // gated per-permission (see _buildTabEntries/_buildSectionEntries).
+    final isAdmin = auth.isAdminOfAnyKind;
 
     // ── Tablet + Desktop: permanent sidebar layout ───────────────────────
     if (!context.isMobile) {
-      return _buildSidebarLayout(context, isAdmin);
+      return _buildSidebarLayout(context, isAdmin, auth);
     }
 
-    // ── Mobile: UNCHANGED ────────────────────────────────────────────────
+    // ── Mobile: UNCHANGED structurally — only the Reportes tab's gate
+    // changed, from blanket isAdmin to the viewReports permission (super_
+    // admin still always has it; a scoped admin only if granted).
+    final canViewReports = auth.hasPermission(AppPermissions.viewReports);
     final pages = <Widget>[
       isAdmin ? const DashboardPage() : const HomePage(),
       const CalendarPage(),
       const WeekPage(),
-      if (isAdmin) const ReportsPage(),
+      if (canViewReports) const ReportsPage(),
       const ProfilePage(),
     ];
 
@@ -389,7 +418,7 @@ class _MainShellState extends State<MainShell> {
           icon: Icon(LucideIcons.calendar), label: 'Calendario'),
       const BottomNavigationBarItem(
           icon: Icon(LucideIcons.calendarDays), label: 'Semana'),
-      if (isAdmin)
+      if (canViewReports)
         const BottomNavigationBarItem(
             icon: Icon(LucideIcons.barChart3), label: 'Reportes'),
       const BottomNavigationBarItem(
@@ -398,7 +427,7 @@ class _MainShellState extends State<MainShell> {
 
     if (_index >= pages.length) _index = 0;
 
-    final titleIndexOffset = isAdmin ? 0 : (_index >= 3 ? 1 : 0);
+    final titleIndexOffset = canViewReports ? 0 : (_index >= 3 ? 1 : 0);
     final title = _index == 0
         ? AppConstants.appName
         : _mobileTitles[_index + titleIndexOffset];
@@ -422,9 +451,9 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  Widget _buildSidebarLayout(BuildContext context, bool isAdmin) {
-    final tabs = _buildTabEntries(isAdmin);
-    final sections = _buildSectionEntries(isAdmin);
+  Widget _buildSidebarLayout(BuildContext context, bool isAdmin, AuthProvider auth) {
+    final tabs = _buildTabEntries(isAdmin, auth);
+    final sections = _buildSectionEntries(isAdmin, auth);
     final all = [...tabs, ...sections];
 
     if (_index >= all.length) _index = 0;
@@ -991,12 +1020,21 @@ class _ContentBase extends StatefulWidget {
 
 class _ContentBaseState extends State<_ContentBase> {
   late int _currentIndex = widget.index;
+  late List<Widget> _children = widget.children;
 
   void setIndex(int i) => setState(() => _currentIndex = i);
 
+  /// Refreshes the page list — see [_MainShellState._navigateToIndex] for
+  /// why this can't just come from `widget.children` (the Navigator route
+  /// that owns this widget is only built once, at first mount).
+  void setChildren(List<Widget> children) => setState(() => _children = children);
+
   @override
   Widget build(BuildContext context) {
-    return IndexedStack(index: _currentIndex, children: widget.children);
+    // Defensive: a permission change landing between renders could
+    // transiently leave _currentIndex pointing past a now-shorter list.
+    final safeIndex = _currentIndex < _children.length ? _currentIndex : 0;
+    return IndexedStack(index: safeIndex, children: _children);
   }
 }
 

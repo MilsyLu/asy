@@ -4,6 +4,7 @@ const {
   sendNotificationToUser,
   sendNotificationToUsers,
   notifyAdminsOfTaskCreated,
+  getAdminIdsForTask,
 } = require("./notifications");
 
 /**
@@ -103,16 +104,11 @@ const onTaskUpdate = onDocumentUpdated("tasks/{taskId}", async (event) => {
     );
   }
 
-  // --- Administradores: visibilidad global ---
+  // --- Administradores: visibilidad global (+ admin_equipo de este equipo) ---
   pending.push(
     (async () => {
       try {
-        const adminsSnap = await db
-          .collection("users")
-          .where("role", "==", "super_admin")
-          .get();
-
-        const adminIds = adminsSnap.docs.map((doc) => doc.id);
+        const adminIds = await getAdminIdsForTask(db, groupId);
         if (adminIds.length === 0) return;
 
         const body = groupId

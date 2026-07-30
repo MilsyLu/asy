@@ -60,6 +60,21 @@ class UserRepository {
     return _collection.doc(uid).update({'groupId': groupId});
   }
 
+  /// Sets the teams an `admin_equipo` user manages. Only meaningful for that
+  /// role — see [AppUser.managedGroupIds].
+  Future<void> updateManagedGroupIds(String uid, List<String> groupIds) {
+    return _collection.doc(uid).update({'managedGroupIds': groupIds});
+  }
+
+  /// Sets the granular permission flags for an `admin_equipo` user — see
+  /// [AppPermissions]/[AppUser.permissions]. Uses `merge: true` so legacy
+  /// documents without the field are upgraded in place.
+  Future<void> updatePermissions(String uid, Map<String, bool> permissions) {
+    return _collection
+        .doc(uid)
+        .set({'permissions': permissions}, SetOptions(merge: true));
+  }
+
   Future<void> updateName(String uid, String name) {
     return _collection.doc(uid).update({'name': name});
   }

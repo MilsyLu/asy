@@ -15,7 +15,6 @@ import '../../models/task_model.dart';
 import '../../models/task_type_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
-import '../../providers/system_config_provider.dart';
 import '../../services/task_repository.dart';
 import '../../services/task_scheduling_service.dart';
 import '../../widgets/confirm_dialog.dart';
@@ -128,11 +127,22 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
   /// previously assigned to a since-deactivated worker would silently blank
   /// out the field.
   List<AppUser> _assignableUsers(CatalogProvider catalog, AppUser current) {
-    final pool = current.groupId != null
-        ? (catalog.usersInGroup(current.groupId).isNotEmpty
-            ? catalog.usersInGroup(current.groupId)
-            : catalog.users)
-        : catalog.users;
+    // A scoped admin_equipo only assigns within the teams they manage
+    // (never the whole catalog, even though their own groupId is usually
+    // null); everyone else keeps the original single-group/full-catalog
+    // logic.
+    final List<AppUser> pool;
+    if (current.isScopedAdmin) {
+      pool = catalog.users
+          .where((u) => current.managedGroupIds.contains(u.groupId))
+          .toList();
+    } else if (current.groupId != null) {
+      pool = catalog.usersInGroup(current.groupId).isNotEmpty
+          ? catalog.usersInGroup(current.groupId)
+          : catalog.users;
+    } else {
+      pool = catalog.users;
+    }
     final active = pool.where((u) => u.isActive).toList();
     if (_assignedUserId != null && !active.any((u) => u.id == _assignedUserId)) {
       final assignedUser = catalog.userById(_assignedUserId);
@@ -313,11 +323,14 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
     final auth = context.watch<AuthProvider>();
-    final sysConfig = context.watch<SystemConfigProvider>();
     final currentUser = auth.appUser!;
-    final isAdmin = auth.isSuperAdmin;
+    // Broad "has elevated reach" flag — true for super_admin AND
+    // admin_equipo — used for the form's own visibility/breadth (Estado
+    // field, assignee pool, group selector). Reminder-edit rights below are
+    // intentionally NOT gated by this: that stays super_admin-only, mirroring
+    // firestore.rules' canEditReminder(), which wasn't extended.
+    final isAdmin = auth.isAdminOfAnyKind;
     final colors = context.colors;
-    final useFreePicker = TaskSchedulingService.useFreePicker(sysConfig);
 
     // Sprint 7.4.6 Bug 2: only self-default "Encargado" for regular workers
     // (who usually create tasks for themselves) — defaulting an admin to
@@ -330,21 +343,26 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
       _assignedUserId ??= currentUser.id;
     }
     // Sprint 7.4.9B Objetivo D/E: same rule as in _save() — only the
-    // encargado or an admin may edit an EXISTING task's reminder; the
-    // creator of a brand-new task may always set the initial one.
-    final canEditReminder =
-        !_isEditing || isAdmin || _assignedUserId == currentUser.id;
+    // encargado or a super_admin may edit an EXISTING task's reminder (not
+    // extended to admin_equipo); the creator of a brand-new task may always
+    // set the initial one.
+    final canEditReminder = !_isEditing ||
+        auth.isSuperAdmin ||
+        _assignedUserId == currentUser.id;
     if (_statusId == null && !_isEditing) {
       _statusId = catalog.pendingStatusId;
-    }
-    if (_selectedHour == null && !useFreePicker && catalog.availableHours.isNotEmpty) {
-      _selectedHour = catalog.availableHours.first.hour;
     }
     // Default to the assigned worker's group (covers both brand-new tasks
     // and legacy tasks being edited for the first time after this
     // feature shipped, which have groupId == null).
     _groupId ??=
         catalog.userById(_assignedUserId)?.groupId ?? currentUser.groupId;
+    // Time-selection mode now lives per-team (GroupModel.timeSelectionMode)
+    // instead of the old single global systemConfig toggle.
+    final useFreePicker = catalog.groupById(_groupId)?.useFreePicker ?? false;
+    if (_selectedHour == null && !useFreePicker && catalog.availableHours.isNotEmpty) {
+      _selectedHour = catalog.availableHours.first.hour;
+    }
 
     // Sprint 5.4: only task types associated with the selected group are
     // offered (types with no groups assigned are universal, see
@@ -359,16 +377,21 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
 
     final assignableUsers = _assignableUsers(catalog, currentUser);
     // Non-admins can only create/edit tasks for their own group, so the
-    // selector is fully locked (Sprint 5.4); admins may pick any group
-    // (e.g. to share a task across groups). The task's current _groupId is
-    // always included in the options so editing a legacy/shared task
-    // doesn't show an empty field while locked.
+    // selector is fully locked (Sprint 5.4); a super_admin may pick any
+    // group (e.g. to share a task across groups); a scoped admin_equipo
+    // stays enabled but restricted to the teams they manage. The task's
+    // current _groupId is always included in the options so editing a
+    // legacy/shared task doesn't show an empty field while locked/restricted.
     final isGroupLocked = !isAdmin && currentUser.groupId != null;
-    final groupOptions = isGroupLocked
+    final groupOptions = currentUser.isScopedAdmin
         ? catalog.groups
-            .where((g) => g.id == currentUser.groupId || g.id == _groupId)
+            .where((g) => currentUser.managesGroup(g.id) || g.id == _groupId)
             .toList()
-        : catalog.groups;
+        : (isGroupLocked
+            ? catalog.groups
+                .where((g) => g.id == currentUser.groupId || g.id == _groupId)
+                .toList()
+            : catalog.groups);
 
     final title = _isEditing ? 'Editar tarea' : 'Nueva tarea';
 

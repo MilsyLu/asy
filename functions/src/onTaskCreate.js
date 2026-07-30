@@ -4,6 +4,7 @@ const {
   sendNotificationToUser,
   sendNotificationToUsers,
   notifyAdminsOfTaskCreated,
+  getAdminIdsForTask,
 } = require("./notifications");
 
 /**
@@ -113,21 +114,17 @@ const onTaskCreate = onDocumentCreated("tasks/{taskId}", async (event) => {
   }
 
   // --- Administradores: visibilidad global (Sprint 7.4.7 Objetivo D) ---
-  // Every super_admin except the creator — independent of whether they're
-  // also the assignedUserId or a group member, since this notification
-  // serves a different purpose (org-wide oversight) than the operational
-  // "Encargado"/"Grupo" ones above.
+  // Every super_admin, plus every admin_equipo who manages this task's
+  // team (permissions system) — except the creator, independent of whether
+  // they're also the assignedUserId or a group member, since this
+  // notification serves a different purpose (oversight) than the
+  // operational "Encargado"/"Grupo" ones above.
   pending.push(
     (async () => {
       try {
-        const adminsSnap = await db
-          .collection("users")
-          .where("role", "==", "super_admin")
-          .get();
-
-        const adminIds = adminsSnap.docs
-          .map((doc) => doc.id)
-          .filter((id) => id !== createdBy);
+        const adminIds = (await getAdminIdsForTask(db, groupId)).filter(
+          (id) => id !== createdBy
+        );
 
         if (adminIds.length === 0) return;
 

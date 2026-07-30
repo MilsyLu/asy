@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../models/available_hour_model.dart';
+import '../../models/group_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/catalog_repository.dart';
 import '../../widgets/confirm_dialog.dart';
@@ -36,7 +39,17 @@ class AvailableHoursPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
-    final hours = List<AvailableHourModel>.from(catalog.availableHours)
+    final auth = context.watch<AuthProvider>();
+    final isSuperAdmin = auth.isSuperAdmin;
+    final canEditCatalogs = auth.hasPermission(AppPermissions.manageCatalogs);
+    final managedGroupIds = isSuperAdmin ? null : (auth.appUser?.managedGroupIds ?? const <String>[]);
+    // Same visibility rule as Estados: universal slots plus anything scoped
+    // to one of this admin's own teams.
+    final hours = (isSuperAdmin
+        ? catalog.availableHours
+        : catalog.availableHours
+            .where((h) => h.groupIds.isEmpty || h.groupIds.any(auth.managesGroup))
+            .toList())
       ..sort((a, b) => a.hour.compareTo(b.hour));
     final colors = context.colors;
 
@@ -51,6 +64,8 @@ class AvailableHoursPage extends StatelessWidget {
             separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
               final item = hours[index];
+              final canEditThis = isSuperAdmin ||
+                  (canEditCatalogs && item.groupIds.isNotEmpty && item.groupIds.every(auth.managesGroup));
               return Container(
                 decoration: BoxDecoration(
                   color: colors.surface,
@@ -66,27 +81,34 @@ class AvailableHoursPage extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: Icon(LucideIcons.pencil, color: colors.primary, size: 18),
-                        onPressed: () => _editHour(context, item),
-                      ),
-                      IconButton(
-                        icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
-                        onPressed: () => _deleteHour(context, item),
-                      ),
-                    ],
-                  ),
+                  subtitle: _GroupScopeSummary(groupIds: item.groupIds, groups: catalog.groups),
+                  trailing: canEditThis
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: Icon(LucideIcons.pencil, color: colors.primary, size: 18),
+                              onPressed: () => _editHour(context, item,
+                                  groups: catalog.groups, managedGroupIds: managedGroupIds),
+                            ),
+                            IconButton(
+                              icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
+                              onPressed: () => _deleteHour(context, item),
+                            ),
+                          ],
+                        )
+                      : null,
                 ),
               );
             },
           );
-    final fab = FloatingActionButton(
-      onPressed: () => _addHour(context),
-      child: const Icon(LucideIcons.plus),
-    );
+    final fab = (isSuperAdmin || canEditCatalogs)
+        ? FloatingActionButton(
+            onPressed: () =>
+                _addHour(context, groups: catalog.groups, managedGroupIds: managedGroupIds),
+            child: const Icon(LucideIcons.plus),
+          )
+        : null;
     if (!showAppBar) return Scaffold(body: body, floatingActionButton: fab);
     return Scaffold(
       appBar: AppBar(title: const Text('Horarios disponibles')),
@@ -96,7 +118,101 @@ class AvailableHoursPage extends StatelessWidget {
   }
 }
 
-Future<void> _addHour(BuildContext context) async {
+/// Read-only chip summary of a catalog entry's team scope — empty means
+/// universal (applies to every team). Mirrors statuses_page.dart's.
+class _GroupScopeSummary extends StatelessWidget {
+  const _GroupScopeSummary({required this.groupIds, required this.groups});
+
+  final List<String> groupIds;
+  final List<GroupModel> groups;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    if (groupIds.isEmpty) {
+      return Text('Todos los equipos', style: TextStyle(color: colors.textSecondary, fontSize: 12));
+    }
+    final namesById = {for (final g in groups) g.id: g.name};
+    final names = groupIds.map((id) => namesById[id]).whereType<String>().join(', ');
+    return Text(names, style: TextStyle(color: colors.textSecondary, fontSize: 12));
+  }
+}
+
+/// Multi-select dialog for a catalog entry's team scope — mirrors
+/// statuses_page.dart's `_pickCatalogGroups`. Empty is valid ("universal")
+/// unless [managedGroupIds] is non-null, in which case a scoped admin must
+/// pick at least one of their own teams.
+Future<Set<String>?> _pickCatalogGroups(
+  BuildContext context, {
+  required Set<String> current,
+  required List<GroupModel> groups,
+  List<String>? managedGroupIds,
+}) {
+  final selectable =
+      managedGroupIds == null ? groups : groups.where((g) => managedGroupIds.contains(g.id)).toList();
+  final selected = {...current}..removeWhere((id) => !selectable.any((g) => g.id == id));
+  final colors = context.colors;
+  return showDialog<Set<String>>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setState) => AlertDialog(
+        title: const Text('Equipos'),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                managedGroupIds == null
+                    ? 'Ninguno seleccionado = todos los equipos'
+                    : 'Selecciona al menos uno de tus equipos.',
+                style: TextStyle(color: colors.textSecondary, fontSize: 12),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final group in selectable)
+                    FilterChip(
+                      label: Text(group.name),
+                      selected: selected.contains(group.id),
+                      onSelected: (v) => setState(() {
+                        if (v) {
+                          selected.add(group.id);
+                        } else {
+                          selected.remove(group.id);
+                        }
+                      }),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: (managedGroupIds != null && selected.isEmpty)
+                ? null
+                : () => Navigator.of(dialogContext).pop(selected),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Future<void> _addHour(
+  BuildContext context, {
+  required List<GroupModel> groups,
+  List<String>? managedGroupIds,
+}) async {
   final repo = context.read<CatalogRepository>();
   final picked = await showTimePicker(
     context: context,
@@ -104,6 +220,11 @@ Future<void> _addHour(BuildContext context) async {
   );
   if (picked == null) return;
   if (!context.mounted) return;
+
+  final result = await _pickCatalogGroups(context,
+      current: const {}, groups: groups, managedGroupIds: managedGroupIds);
+  if (result == null || !context.mounted) return;
+  final groupIds = result;
 
   final hour = _formatTimeOfDay(picked);
   final exists = repo.getAvailableHours().then((list) => list.any((h) => h.hour == hour));
@@ -114,7 +235,7 @@ Future<void> _addHour(BuildContext context) async {
       }
       return;
     }
-    await repo.addAvailableHour(hour);
+    await repo.addAvailableHour(hour, groupIds: groupIds.toList());
     if (context.mounted) {
       SnackbarUtils.showSuccess(context, 'Horario agregado');
     }
@@ -125,7 +246,12 @@ Future<void> _addHour(BuildContext context) async {
   }
 }
 
-Future<void> _editHour(BuildContext context, AvailableHourModel item) async {
+Future<void> _editHour(
+  BuildContext context,
+  AvailableHourModel item, {
+  required List<GroupModel> groups,
+  List<String>? managedGroupIds,
+}) async {
   final repo = context.read<CatalogRepository>();
   final picked = await showTimePicker(
     context: context,
@@ -134,9 +260,14 @@ Future<void> _editHour(BuildContext context, AvailableHourModel item) async {
   if (picked == null) return;
   if (!context.mounted) return;
 
+  final result = await _pickCatalogGroups(context,
+      current: item.groupIds.toSet(), groups: groups, managedGroupIds: managedGroupIds);
+  if (result == null) return;
+  if (!context.mounted) return;
+
   final hour = _formatTimeOfDay(picked);
   try {
-    await repo.updateAvailableHour(item.id, hour);
+    await repo.updateAvailableHour(item.id, hour, groupIds: result.toList());
     if (context.mounted) {
       SnackbarUtils.showSuccess(context, 'Horario actualizado');
     }

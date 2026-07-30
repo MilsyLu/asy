@@ -57,10 +57,10 @@ class _HomePageState extends State<HomePage> {
   /// instead of issuing a new query, mirroring the range Reports uses.
   static const _lookbackDays = 30;
 
-  final DateTime _today = DateTime.now();
+  late DateTime _today;
   final _clientController = TextEditingController();
 
-  late final Stream<List<TaskModel>> _tasksStream;
+  late Stream<List<TaskModel>> _tasksStream;
   late final Stopwatch _loadStopwatch;
   bool _loadLogged = false;
 
@@ -73,10 +73,15 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    final repo = context.read<TaskRepository>();
-    final rangeStart = _today.subtract(const Duration(days: _lookbackDays));
+    _today = context.read<AuthProvider>().today;
     _loadStopwatch = Stopwatch()..start();
-    _tasksStream = repo.watchTasksInRange(rangeStart, _today);
+    _tasksStream = _watchTasksFor(_today);
+  }
+
+  Stream<List<TaskModel>> _watchTasksFor(DateTime today) {
+    final repo = context.read<TaskRepository>();
+    final rangeStart = today.subtract(const Duration(days: _lookbackDays));
+    return repo.watchTasksInRange(rangeStart, today);
   }
 
   @override
@@ -90,6 +95,18 @@ class _HomePageState extends State<HomePage> {
     final catalog = context.watch<CatalogProvider>();
     final auth = context.watch<AuthProvider>();
     final currentUser = auth.appUser;
+
+    // AuthProvider.today rolls over live (a minute-by-minute check, see its
+    // doc comment) — a session left open across midnight would otherwise
+    // keep showing yesterday's date/agenda range forever, since _today was
+    // previously captured once via DateTime.now() at initState. Mutating
+    // fields directly here (not via setState) is safe: this build() call
+    // was itself triggered by AuthProvider.notifyListeners(), and both
+    // fields are read further down within this same build.
+    if (_today != auth.today) {
+      _today = auth.today;
+      _tasksStream = _watchTasksFor(_today);
+    }
 
     return Scaffold(
       body: currentUser == null || catalog.statuses.isEmpty
@@ -593,7 +610,7 @@ class _HomeHeader extends StatelessWidget {
     final myCount = todayTasks.where((t) => t.assignedUserId == user.id).length;
     final overdueCount = agenda.overdue.length;
     final groupName = user.groupId != null ? catalog.groupName(user.groupId) : null;
-    final showOwnLine = groupName != null || user.isSuperAdmin;
+    final showOwnLine = groupName != null || user.isAdminOfAnyKind;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -615,7 +632,7 @@ class _HomeHeader extends StatelessWidget {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                _summaryText(groupName, user.isSuperAdmin, todayCount),
+                _summaryText(groupName, user.isAdminOfAnyKind, todayCount),
                 style: TextStyle(
                   color: colors.textPrimary,
                   fontSize: 13,
@@ -671,14 +688,14 @@ class _HomeHeader extends StatelessWidget {
     return 'Buenas noches';
   }
 
-  static String _summaryText(String? groupName, bool isSuperAdmin, int count) {
+  static String _summaryText(String? groupName, bool isAdminOfAnyKind, int count) {
     final noun = count == 1 ? 'tarea' : 'tareas';
     if (groupName != null) {
       return count == 0
           ? '$groupName no tiene tareas para hoy'
           : '$groupName tiene $count $noun para hoy';
     }
-    if (isSuperAdmin) {
+    if (isAdminOfAnyKind) {
       return count == 0
           ? 'No hay tareas programadas para hoy'
           : 'Hay $count $noun programadas para hoy';
@@ -1954,7 +1971,9 @@ class _DesktopAgendaRowState extends State<_DesktopAgendaRow> {
     final isCompleted = task.statusId == catalog.completedStatusId;
     final isPending = task.statusId == catalog.pendingStatusId;
     final typeColor = catalog.taskTypeById(task.taskTypeId)?.parsedColor ?? colors.primary;
-    final canEdit = auth.isSuperAdmin || isPending;
+    final canEdit = (auth.managesGroup(task.groupId) &&
+            auth.hasPermission(AppPermissions.manageTasks)) ||
+        isPending;
     final formattedPhone = Validators.formatPhone(task.clientPhone);
 
     return MouseRegion(

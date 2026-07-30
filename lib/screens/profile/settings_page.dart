@@ -9,9 +9,7 @@ import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/theme/theme_manager.dart';
 import '../../models/app_user.dart';
-import '../../models/system_config_model.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/system_config_provider.dart';
 import '../../services/user_repository.dart';
 
 /// "Configuración" screen (Sprint 19 UX redesign): modern two-column
@@ -157,10 +155,6 @@ class _MainPrefsColumn extends StatelessWidget {
           _NotificationsSection(user: user!),
           const SizedBox(height: AppSpacing.md),
         ],
-        if (user != null && user!.isSuperAdmin) ...[
-          const _AgendaSection(),
-          const SizedBox(height: AppSpacing.md),
-        ],
         _AppearanceSection(themeManager: themeManager),
         if (showAccentSection) ...[
           const SizedBox(height: AppSpacing.md),
@@ -258,7 +252,7 @@ class _NotificationsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = user.isSuperAdmin;
+    final isAdmin = user.isAdminOfAnyKind;
     final current = user.pushNotificationMode;
 
     void pick(String mode) =>
@@ -401,56 +395,6 @@ class _NotifRow extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ── Agenda section (super_admin only) ────────────────────────────────────────
-
-class _AgendaSection extends StatelessWidget {
-  const _AgendaSection();
-
-  @override
-  Widget build(BuildContext context) {
-    final config = context.watch<SystemConfigProvider>();
-    final current = config.config.timeSelectionMode;
-
-    return _PrefCard(
-      icon: LucideIcons.clock,
-      title: 'Agenda',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Modo de selección de hora',
-            style: TextStyle(
-              color: context.colors.textSecondary,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          _NotifRow(
-            icon: LucideIcons.listChecks,
-            label: 'Usar horarios configurados',
-            description: 'Solo las horas del catálogo de administración.',
-            selected: current == SystemConfigModel.modeCatalog,
-            onTap: () => config.setTimeSelectionMode(SystemConfigModel.modeCatalog),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          _NotifRow(
-            icon: LucideIcons.clock,
-            label: 'Permitir cualquier hora',
-            description: 'El usuario elige la hora libremente con un selector.',
-            selected: current == SystemConfigModel.modeFree,
-            onTap: () => config.setTimeSelectionMode(SystemConfigModel.modeFree),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'Este ajuste aplica a toda la aplicación en todos los dispositivos.',
-            style: TextStyle(color: context.colors.textSecondary, fontSize: 11),
-          ),
-        ],
       ),
     );
   }

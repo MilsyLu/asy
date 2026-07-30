@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:provider/provider.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/responsive/app_spacing.dart';
 import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
+import '../../providers/auth_provider.dart';
 import 'available_hours_page.dart';
 import 'groups_page.dart';
 import 'statuses_page.dart';
 import 'task_types_page.dart';
 import 'users_page.dart';
 
-/// Hub for super_admin-only management screens.
+/// Hub for admin management screens — every module is visible to
+/// super_admin; a scoped admin_equipo only sees the ones matching their own
+/// [AppPermissions] (Equipos→manageTeams, Tipos de tarea/Estados/Horarios→
+/// manageCatalogs, Usuarios→manageUsers).
 class AdminPanelPage extends StatelessWidget {
   const AdminPanelPage({super.key, this.showAppBar = true, this.onModuleSelected});
 
@@ -27,6 +33,7 @@ class AdminPanelPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDesktop = context.isDesktop;
     final isTablet = context.isTablet;
+    final auth = context.watch<AuthProvider>();
     final hPad = isDesktop
         ? AppSpacing.pagePaddingDesktop
         : isTablet
@@ -42,6 +49,7 @@ class AdminPanelPage extends StatelessWidget {
         moduleKey: 'grupos',
         accentColor: const Color(0xFF43C97A),
         builder: (_) => const GroupsPage(),
+        requiredPermission: AppPermissions.manageTeams,
       ),
       _AdminModuleData(
         icon: LucideIcons.tag,
@@ -50,6 +58,7 @@ class AdminPanelPage extends StatelessWidget {
         moduleKey: 'tiposTarea',
         accentColor: const Color(0xFF4FA3F7),
         builder: (_) => const TaskTypesPage(),
+        requiredPermission: AppPermissions.manageCatalogs,
       ),
       _AdminModuleData(
         icon: LucideIcons.listChecks,
@@ -58,6 +67,7 @@ class AdminPanelPage extends StatelessWidget {
         moduleKey: 'estados',
         accentColor: const Color(0xFFB388F5),
         builder: (_) => const StatusesPage(),
+        requiredPermission: AppPermissions.manageCatalogs,
       ),
       _AdminModuleData(
         icon: LucideIcons.clock,
@@ -66,6 +76,7 @@ class AdminPanelPage extends StatelessWidget {
         moduleKey: 'horarios',
         accentColor: const Color(0xFFD4AF37),
         builder: (_) => const AvailableHoursPage(),
+        requiredPermission: AppPermissions.manageCatalogs,
       ),
       _AdminModuleData(
         icon: LucideIcons.settings,
@@ -74,8 +85,9 @@ class AdminPanelPage extends StatelessWidget {
         moduleKey: 'usuarios',
         accentColor: const Color(0xFF26C6DA),
         builder: (_) => const UsersPage(),
+        requiredPermission: AppPermissions.manageUsers,
       ),
-    ];
+    ].where((m) => auth.hasPermission(m.requiredPermission)).toList();
 
     final body = SingleChildScrollView(
       child: Padding(
@@ -280,6 +292,7 @@ class _AdminModuleData {
     required this.moduleKey,
     required this.accentColor,
     required this.builder,
+    required this.requiredPermission,
   });
 
   final IconData icon;
@@ -288,4 +301,8 @@ class _AdminModuleData {
   final String moduleKey;
   final Color accentColor;
   final WidgetBuilder builder;
+
+  /// One of [AppPermissions] — a super_admin always has every permission;
+  /// a scoped admin_equipo only sees this module if it's on for them.
+  final String requiredPermission;
 }

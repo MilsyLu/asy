@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/responsive/app_spacing.dart';
 import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../models/app_user.dart';
 import '../../models/group_model.dart';
+import '../../models/system_config_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/catalog_repository.dart';
 import '../../services/user_repository.dart';
@@ -46,11 +49,17 @@ class _GroupsPageState extends State<GroupsPage> {
   @override
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
+    final auth = context.watch<AuthProvider>();
     final isMobile = context.isMobile;
+    final isSuperAdmin = auth.isSuperAdmin;
+    final canEditTeams = auth.hasPermission(AppPermissions.manageTeams);
     final query = _query.trim().toLowerCase();
+    // A scoped admin_equipo only ever sees the teams they manage.
+    final visibleGroups =
+        isSuperAdmin ? catalog.groups : catalog.groups.where((g) => auth.managesGroup(g.id)).toList();
     final groups = query.isEmpty
-        ? catalog.groups
-        : catalog.groups.where((g) => g.name.toLowerCase().contains(query)).toList();
+        ? visibleGroups
+        : visibleGroups.where((g) => g.name.toLowerCase().contains(query)).toList();
 
     // If the team currently open in the members panel got deleted (or
     // filtered out isn't relevant here — only real deletion matters) from
@@ -105,12 +114,23 @@ class _GroupsPageState extends State<GroupsPage> {
           // Tablet/desktop: name/description editable right on the card,
           // Miembros swaps the right panel instead of opening a dialog.
           // Mobile keeps the "Editar"/"Miembros" dialogs and the FAB.
+          // A scoped admin_equipo (even with manageTeams) never manages
+          // team membership here — that's Usuarios' job, scoped correctly
+          // per-worker there; this page only lets them edit name/
+          // description/timeSelectionMode for their own teams.
           return isMobile
-              ? _GroupCard(group: group, members: members)
+              ? _GroupCard(
+                  group: group,
+                  members: members,
+                  canEdit: isSuperAdmin || canEditTeams,
+                  canManageMembers: isSuperAdmin,
+                )
               : _TeamCardEditable(
                   group: group,
                   members: members,
-                  onEditMembers: () => setState(() => _membersTarget = group),
+                  canEdit: isSuperAdmin || canEditTeams,
+                  onEditMembers:
+                      isSuperAdmin ? () => setState(() => _membersTarget = group) : null,
                 );
         },
       );
@@ -119,6 +139,18 @@ class _GroupsPageState extends State<GroupsPage> {
     Widget body;
     if (isMobile) {
       body = Column(children: [searchField, Expanded(child: buildList(shrink: false))]);
+    } else if (!isSuperAdmin) {
+      // Scoped admins never create/delete teams or manage membership from
+      // here, so there's no right panel to show — just the (already
+      // filtered-to-their-teams) list.
+      body = Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: AppLayout.contentMaxWidthWide),
+          child: Column(
+            children: [searchField, Expanded(child: buildList(shrink: false))],
+          ),
+        ),
+      );
     } else {
       // The right panel needs real width to stay legible (it's a form/a
       // member checklist, not a sidebar label) — below ~900px of actual
@@ -182,7 +214,8 @@ class _GroupsPageState extends State<GroupsPage> {
 
     // Tablet/desktop: the panel replaces the FAB for creating a team, so no
     // FAB there. Mobile keeps it (no persistent panel to hold the form).
-    final fab = isMobile
+    // Team creation is always super_admin-only, on every platform.
+    final fab = isMobile && isSuperAdmin
         ? FloatingActionButton(
             onPressed: () => _showGroupFormDialog(context),
             child: const Icon(LucideIcons.plus),
@@ -435,12 +468,21 @@ class _TeamCardEditable extends StatefulWidget {
   const _TeamCardEditable({
     required this.group,
     required this.members,
+    required this.canEdit,
     required this.onEditMembers,
   });
 
   final GroupModel group;
   final List<AppUser> members;
-  final VoidCallback onEditMembers;
+
+  /// Whether name/description/timeSelectionMode may be edited — true for
+  /// super_admin, or a scoped admin_equipo with manageTeams on this team.
+  final bool canEdit;
+
+  /// Null hides the Miembros edit action entirely — membership is only
+  /// manageable by super_admin from this page (a scoped admin manages
+  /// membership per-worker from Usuarios instead).
+  final VoidCallback? onEditMembers;
 
   @override
   State<_TeamCardEditable> createState() => _TeamCardEditableState();
@@ -501,10 +543,11 @@ class _TeamCardEditableState extends State<_TeamCardEditable> {
     _save(_nameController.text.trim(), newDesc);
   }
 
-  Future<void> _save(String name, String description) async {
+  Future<void> _save(String name, String description, {String? timeSelectionMode}) async {
     final repo = context.read<CatalogRepository>();
     try {
-      await repo.updateGroup(widget.group.id, name, description);
+      await repo.updateGroup(widget.group.id, name, description,
+          timeSelectionMode: timeSelectionMode);
       if (mounted) SnackbarUtils.showSuccess(context, 'Equipo actualizado');
     } catch (e) {
       if (mounted) {
@@ -512,6 +555,12 @@ class _TeamCardEditableState extends State<_TeamCardEditable> {
       }
     }
   }
+
+  Future<void> _saveTimeSelectionMode(String mode) => _save(
+        _nameController.text.trim(),
+        _descController.text.trim(),
+        timeSelectionMode: mode,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -524,83 +573,137 @@ class _TeamCardEditableState extends State<_TeamCardEditable> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            flex: 2,
-            child: _FieldColumn(
-              label: 'Nombre',
-              child: TextField(
-                controller: _nameController,
-                focusNode: _nameFocus,
-                style: TextStyle(
-                  color: colors.textPrimary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 2,
+                child: _FieldColumn(
+                  label: 'Nombre',
+                  child: TextField(
+                    controller: _nameController,
+                    focusNode: _nameFocus,
+                    enabled: widget.canEdit,
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                    decoration: const InputDecoration(isDense: true),
+                    onSubmitted: (_) => _nameFocus.unfocus(),
+                  ),
                 ),
-                decoration: const InputDecoration(isDense: true),
-                onSubmitted: (_) => _nameFocus.unfocus(),
               ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            flex: 3,
-            child: _FieldColumn(
-              label: 'Descripción',
-              child: TextField(
-                controller: _descController,
-                focusNode: _descFocus,
-                minLines: 1,
-                maxLines: 2,
-                style: TextStyle(color: colors.textPrimary, fontSize: 14),
-                decoration: const InputDecoration(
-                  isDense: true,
-                  hintText: 'Opcional',
+              const SizedBox(width: 16),
+              Expanded(
+                flex: 3,
+                child: _FieldColumn(
+                  label: 'Descripción',
+                  child: TextField(
+                    controller: _descController,
+                    focusNode: _descFocus,
+                    enabled: widget.canEdit,
+                    minLines: 1,
+                    maxLines: 2,
+                    style: TextStyle(color: colors.textPrimary, fontSize: 14),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      hintText: 'Opcional',
+                    ),
+                    onSubmitted: (_) => _descFocus.unfocus(),
+                  ),
                 ),
-                onSubmitted: (_) => _descFocus.unfocus(),
               ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          _FieldColumn(
-            label: memberCount == 1 ? 'Miembros (1)' : 'Miembros ($memberCount)',
-            child: InkWell(
-              borderRadius: BorderRadius.circular(6),
-              onTap: widget.onEditMembers,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(LucideIcons.pencil, size: 14, color: colors.success),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Editar',
-                      style: TextStyle(
-                        color: colors.success,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
+              if (widget.onEditMembers != null) ...[
+                const SizedBox(width: 16),
+                _FieldColumn(
+                  label: memberCount == 1 ? 'Miembros (1)' : 'Miembros ($memberCount)',
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: widget.onEditMembers,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(LucideIcons.pencil, size: 14, color: colors.success),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Editar',
+                            style: TextStyle(
+                              color: colors.success,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
+              ],
+              if (widget.onEditMembers != null) ...[
+                const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.only(top: 18),
+                  child: TextButton.icon(
+                    onPressed: () => _deleteGroup(context, widget.group),
+                    style: TextButton.styleFrom(foregroundColor: colors.error),
+                    icon: const Icon(LucideIcons.trash2, size: 16),
+                    label: const Text('Eliminar'),
+                  ),
+                ),
+              ],
+            ],
           ),
-          const SizedBox(width: 8),
-          Padding(
-            padding: const EdgeInsets.only(top: 18),
-            child: TextButton.icon(
-              onPressed: () => _deleteGroup(context, widget.group),
-              style: TextButton.styleFrom(foregroundColor: colors.error),
-              icon: const Icon(LucideIcons.trash2, size: 16),
-              label: const Text('Eliminar'),
+          const SizedBox(height: 12),
+          _FieldColumn(
+            label: 'Selección de hora',
+            child: _TimeSelectionModeToggle(
+              mode: widget.group.timeSelectionMode,
+              enabled: widget.canEdit,
+              onChanged: _saveTimeSelectionMode,
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Compact "Libre" / "Según horarios configurados" toggle — replaces the old
+/// single global systemConfig setting, now one per team.
+class _TimeSelectionModeToggle extends StatelessWidget {
+  const _TimeSelectionModeToggle({
+    required this.mode,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final String mode;
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: [
+        ChoiceChip(
+          label: const Text('Según horarios configurados'),
+          selected: mode == SystemConfigModel.modeCatalog,
+          onSelected: enabled ? (_) => onChanged(SystemConfigModel.modeCatalog) : null,
+        ),
+        ChoiceChip(
+          label: const Text('Libre'),
+          selected: mode == SystemConfigModel.modeFree,
+          onSelected: enabled ? (_) => onChanged(SystemConfigModel.modeFree) : null,
+        ),
+      ],
     );
   }
 }
@@ -638,10 +741,17 @@ class _FieldColumn extends StatelessWidget {
 }
 
 class _GroupCard extends StatelessWidget {
-  const _GroupCard({required this.group, required this.members});
+  const _GroupCard({
+    required this.group,
+    required this.members,
+    required this.canEdit,
+    required this.canManageMembers,
+  });
 
   final GroupModel group;
   final List<AppUser> members;
+  final bool canEdit;
+  final bool canManageMembers;
 
   @override
   Widget build(BuildContext context) {
@@ -692,28 +802,39 @@ class _GroupCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 10),
+          _TimeSelectionModeToggle(
+            mode: group.timeSelectionMode,
+            enabled: canEdit,
+            onChanged: (mode) => context
+                .read<CatalogRepository>()
+                .updateGroup(group.id, group.name, group.description, timeSelectionMode: mode),
+          ),
+          const SizedBox(height: 10),
           const Divider(height: 1),
           const SizedBox(height: 6),
           Wrap(
             alignment: WrapAlignment.end,
             spacing: 4,
             children: [
-              TextButton.icon(
-                onPressed: () => _showMembersDialog(context, group),
-                icon: const Icon(LucideIcons.userCheck, size: 16),
-                label: const Text('Miembros'),
-              ),
-              TextButton.icon(
-                onPressed: () => _showGroupFormDialog(context, existing: group),
-                icon: const Icon(LucideIcons.pencil, size: 16),
-                label: const Text('Editar'),
-              ),
-              TextButton.icon(
-                onPressed: () => _deleteGroup(context, group),
-                style: TextButton.styleFrom(foregroundColor: colors.error),
-                icon: const Icon(LucideIcons.trash2, size: 16),
-                label: const Text('Eliminar'),
-              ),
+              if (canManageMembers)
+                TextButton.icon(
+                  onPressed: () => _showMembersDialog(context, group),
+                  icon: const Icon(LucideIcons.userCheck, size: 16),
+                  label: const Text('Miembros'),
+                ),
+              if (canEdit)
+                TextButton.icon(
+                  onPressed: () => _showGroupFormDialog(context, existing: group),
+                  icon: const Icon(LucideIcons.pencil, size: 16),
+                  label: const Text('Editar'),
+                ),
+              if (canManageMembers)
+                TextButton.icon(
+                  onPressed: () => _deleteGroup(context, group),
+                  style: TextButton.styleFrom(foregroundColor: colors.error),
+                  icon: const Icon(LucideIcons.trash2, size: 16),
+                  label: const Text('Eliminar'),
+                ),
             ],
           ),
         ],

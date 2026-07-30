@@ -9,19 +9,24 @@ import '../../providers/catalog_provider.dart';
 /// logic server-side; if you change one, change the other.
 ///
 /// - `super_admin` sees every task, regardless of group.
+/// - `admin_equipo` sees every task belonging to one of their
+///   `managedGroupIds`, regardless of `manageTasks` — visibility comes from
+///   the team assignment itself, not the write permission.
 /// - A task with `visibleToAllGroups == true` is visible to any signed-in
 ///   user.
 /// - Otherwise a normal user sees the task only if `task.groupId` matches
 ///   their own `groupId`.
 /// - Compatibility: tasks created before this feature have `groupId ==
-///   null`. Those are only visible to `super_admin` until an admin assigns
-///   them a group.
+///   null`. Those are only visible to `super_admin`/managing admins until an
+///   admin assigns them a group.
 bool isTaskVisibleToUser({
   required TaskModel task,
   required AppUser user,
   required CatalogProvider catalog,
 }) {
   if (user.isSuperAdmin) return true;
+
+  if (user.managesGroup(task.groupId)) return true;
 
   if (task.groupId == null) return false;
 

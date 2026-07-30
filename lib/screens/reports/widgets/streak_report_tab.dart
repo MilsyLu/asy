@@ -5,18 +5,27 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../models/app_user.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/catalog_provider.dart';
 import '../../../widgets/loading_indicator.dart';
 
-/// Report 4: every user ranked by current login streak.
+/// Report 4: every user ranked by current login streak — scoped to the
+/// viewer's own managed teams for an admin_equipo, same as every other tab
+/// on this page (task-based tabs already inherit this via
+/// isTaskVisibleToUser; this one reads `users` directly so it needs its own
+/// filter).
 class StreakReportTab extends StatelessWidget {
   const StreakReportTab({super.key});
 
   @override
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
+    final auth = context.watch<AuthProvider>();
     final colors = context.colors;
-    final users = List<AppUser>.from(catalog.users)
+    final visibleUsers = auth.isSuperAdmin
+        ? catalog.users
+        : catalog.users.where((u) => auth.managesGroup(u.groupId)).toList();
+    final users = List<AppUser>.from(visibleUsers)
       ..sort((a, b) => b.streakDays.compareTo(a.streakDays));
 
     if (users.isEmpty) {

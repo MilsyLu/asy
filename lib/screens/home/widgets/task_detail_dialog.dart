@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../core/utils/snackbar_utils.dart';
@@ -62,7 +63,9 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
 
   final isPending = task.statusId == catalog.pendingStatusId;
   final isCompleted = task.statusId == catalog.completedStatusId;
-  final canEdit = auth.isSuperAdmin || isPending;
+  final canEdit = (auth.managesGroup(task.groupId) &&
+          auth.hasPermission(AppPermissions.manageTasks)) ||
+      isPending;
   final canComplete = !isCompleted;
   final canReschedule = !isCompleted;
 

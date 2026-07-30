@@ -19,6 +19,17 @@ class AuthProvider extends ChangeNotifier {
   })  : _authService = authService ?? AuthService(),
         _userRepository = userRepository ?? UserRepository() {
     _authSub = _authService.authStateChanges.listen(_onAuthChanged);
+    // A session left open across midnight never calls signIn() again (the
+    // Firebase Auth token just stays valid), so nothing would otherwise
+    // notice the calendar day changed — the streak would stop advancing
+    // and any screen showing "today" (Home's header/agenda) would stay
+    // stuck on the stale date until a full reload. Checked every minute
+    // rather than with a single midnight-timer so it also self-corrects
+    // after the device sleeps/wakes or the system clock changes.
+    _dayRolloverTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _checkDayRollover(),
+    );
   }
 
   final AuthService _authService;
@@ -26,10 +37,34 @@ class AuthProvider extends ChangeNotifier {
 
   StreamSubscription<User?>? _authSub;
   StreamSubscription<AppUser?>? _userSub;
+  Timer? _dayRolloverTimer;
 
   User? firebaseUser;
   AppUser? appUser;
   bool isLoading = true;
+
+  DateTime _today = _startOfDay(DateTime.now());
+
+  /// Today's date, normalized to midnight — the single source of truth for
+  /// any screen that needs "today" (e.g. Home's header/agenda range) so it
+  /// rolls over live instead of being captured once via `DateTime.now()`
+  /// in a long-lived widget's state.
+  DateTime get today => _today;
+
+  static DateTime _startOfDay(DateTime t) => DateTime(t.year, t.month, t.day);
+
+  void _checkDayRollover() {
+    final now = _startOfDay(DateTime.now());
+    if (now == _today) return;
+    _today = now;
+    final uid = appUser?.id;
+    if (uid != null) {
+      _authService.refreshLoginAndStreak(uid).catchError((e) {
+        debugPrint('[AuthProvider] Day-rollover streak refresh failed: $e');
+      });
+    }
+    notifyListeners();
+  }
 
   /// Set right before a forced sign-out caused by [AppUser.isActive] being
   /// `false`, so [LoginPage] can show why the session was closed. Cleared
@@ -38,6 +73,17 @@ class AuthProvider extends ChangeNotifier {
 
   bool get isAuthenticated => firebaseUser != null;
   bool get isSuperAdmin => appUser?.isSuperAdmin ?? false;
+  bool get isScopedAdmin => appUser?.isScopedAdmin ?? false;
+
+  /// True for any kind of administrator (super_admin or admin_equipo) —
+  /// use this where a screen/menu should be reachable by either, then gate
+  /// individual actions inside with [hasPermission]/[managesGroup].
+  bool get isAdminOfAnyKind => isSuperAdmin || isScopedAdmin;
+
+  bool hasPermission(String key) => appUser?.hasPermission(key) ?? false;
+
+  bool managesGroup(String? groupId) =>
+      appUser?.managesGroup(groupId) ?? false;
 
   void _onAuthChanged(User? user) {
     firebaseUser = user;
@@ -158,6 +204,7 @@ class AuthProvider extends ChangeNotifier {
   void dispose() {
     _authSub?.cancel();
     _userSub?.cancel();
+    _dayRolloverTimer?.cancel();
     super.dispose();
   }
 }

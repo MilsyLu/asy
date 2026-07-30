@@ -107,7 +107,7 @@ class AppDrawer extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            if (auth.isSuperAdmin) ...[
+            if (auth.isAdminOfAnyKind) ...[
               ListTile(
                 leading: Icon(LucideIcons.clipboardList, color: colors.primary),
                 title: const Text('Agenda diaria'),
@@ -127,26 +127,37 @@ class AppDrawer extends StatelessWidget {
                   );
                 },
               ),
-              ListTile(
-                leading: Icon(LucideIcons.layoutDashboard, color: colors.primary),
-                title: const Text('Panel de administración'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const AdminPanelPage()),
-                  );
-                },
-              ),
-              ListTile(
-                leading: Icon(LucideIcons.trash2, color: colors.primary),
-                title: const Text('Papelera'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const TrashPage()),
-                  );
-                },
-              ),
+              // Only shown if at least one of AdminPanelPage's own modules
+              // would actually render (mirrors main_shell.dart's sidebar) —
+              // otherwise a scoped admin_equipo with none of those permissions
+              // lands on an empty panel with nothing to tap.
+              if (auth.hasPermission(AppPermissions.manageUsers) ||
+                  auth.hasPermission(AppPermissions.manageTeams) ||
+                  auth.hasPermission(AppPermissions.manageCatalogs))
+                ListTile(
+                  leading: Icon(LucideIcons.layoutDashboard, color: colors.primary),
+                  title: const Text('Panel de administración'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const AdminPanelPage()),
+                    );
+                  },
+                ),
+              // Restoring/permanently deleting from Papelera needs the same
+              // manageTasks permission as any other task write, mirroring
+              // firestore.rules — an admin_equipo without it never sees it.
+              if (auth.hasPermission(AppPermissions.manageTasks))
+                ListTile(
+                  leading: Icon(LucideIcons.trash2, color: colors.primary),
+                  title: const Text('Papelera'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const TrashPage()),
+                    );
+                  },
+                ),
             ],
             ListTile(
               leading: Icon(LucideIcons.settings, color: colors.primary),

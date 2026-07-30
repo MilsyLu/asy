@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../providers/catalog_provider.dart';
-import '../providers/system_config_provider.dart';
 
 /// Centralizes time-selection logic for task creation and editing.
 ///
@@ -9,13 +8,13 @@ import '../providers/system_config_provider.dart';
 /// Next sprint: drives visual representation without changing this logic —
 /// only [catalogHours] / [formatTimeOfDay] / [parseHourString] need to be
 /// consumed by the new widgets, not duplicated in each one.
+///
+/// Time-selection *mode* (free vs. catalog) is no longer read here — it's
+/// per-team (`GroupModel.timeSelectionMode`/`useFreePicker`), read directly
+/// via `CatalogProvider.groupById(groupId)` at each call site, since the
+/// relevant group isn't known inside this stateless helper.
 class TaskSchedulingService {
   TaskSchedulingService._();
-
-  /// Whether the current global config uses the free TimePicker instead of
-  /// the catalog dropdown.
-  static bool useFreePicker(SystemConfigProvider config) =>
-      config.config.useFreePicker;
 
   /// Returns the hour strings from the catalog, used in catalog mode.
   static List<String> catalogHours(CatalogProvider catalog) =>
