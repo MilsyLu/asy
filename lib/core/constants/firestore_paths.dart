@@ -12,6 +12,7 @@ class FirestoreCollections {
   static const String notifications = 'notifications';
   static const String empresas = 'empresas';
   static const String platformOwners = 'platformOwners';
+  static const String printerConfigs = 'printerConfigs';
 
   // Global system configuration
   static const String systemConfig = 'systemConfig';

@@ -23,6 +23,7 @@ class AppPermissions {
   static const String manageCatalogs = 'manageCatalogs';
   static const String manageClients = 'manageClients';
   static const String viewReports = 'viewReports';
+  static const String managePrinterConfigs = 'managePrinterConfigs';
 
   static const List<String> all = [
     manageUsers,
@@ -31,6 +32,7 @@ class AppPermissions {
     manageCatalogs,
     manageClients,
     viewReports,
+    managePrinterConfigs,
   ];
 
   static const Map<String, String> labels = {
@@ -40,6 +42,7 @@ class AppPermissions {
     manageCatalogs: 'Gestionar catálogos (Tipos de tarea, Estados, Horarios)',
     manageClients: 'Gestionar clientes',
     viewReports: 'Ver reportes',
+    managePrinterConfigs: 'Gestionar configuración de VinApp Print',
   };
 }
 

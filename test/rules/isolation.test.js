@@ -29,6 +29,8 @@ const SUPER_B = "superB";
 const WORKER_A = "workerA";
 const OWNER_UID = "platformOwnerUid";
 const OUTSIDER_UID = "noEmpresaUid"; // signed in, but no users/{uid} doc at all
+const ADMIN_NO_PRINT_PERM_A = "adminNoPrintPermA";
+const ADMIN_WITH_PRINT_PERM_A = "adminWithPrintPermA";
 
 let testEnv;
 let results = [];
@@ -62,6 +64,14 @@ async function seed() {
       email: "workerA@test.com", role: "trabajador_normal", empresaId: EMPRESA_A,
       groupId: "groupA1", managedGroupIds: [], permissions: {}, isActive: true,
     });
+    await db.collection("users").doc(ADMIN_NO_PRINT_PERM_A).set({
+      email: "adminNoPrintPermA@test.com", role: "admin_equipo", empresaId: EMPRESA_A,
+      groupId: null, managedGroupIds: ["groupA1"], permissions: {}, isActive: true,
+    });
+    await db.collection("users").doc(ADMIN_WITH_PRINT_PERM_A).set({
+      email: "adminWithPrintPermA@test.com", role: "admin_equipo", empresaId: EMPRESA_A,
+      groupId: null, managedGroupIds: ["groupA1"], permissions: { managePrinterConfigs: true }, isActive: true,
+    });
 
     for (const [empresaId, suffix] of [[EMPRESA_A, "A"], [EMPRESA_B, "B"]]) {
       await db.collection("groups").doc(`group${suffix}1`).set({ empresaId, name: `Equipo ${suffix}` });
@@ -69,6 +79,7 @@ async function seed() {
       await db.collection("statuses").doc(`status${suffix}1`).set({ empresaId, name: "Completada", groupIds: [] });
       await db.collection("availableHours").doc(`hour${suffix}1`).set({ empresaId, hour: "09:00", groupIds: [] });
       await db.collection("clients").doc(`client${suffix}1`).set({ empresaId, name: `Cliente ${suffix}`, phone: "111" });
+      await db.collection("printerConfigs").doc(`printerConfig${suffix}1`).set({ empresaId, clientName: `Restaurante ${suffix}`, fields: {} });
       await db.collection("tasks").doc(`task${suffix}1`).set({
         empresaId, groupId: `group${suffix}1`, assignedUserId: empresaId === EMPRESA_A ? WORKER_A : SUPER_B,
         date: "2026-08-01", hour: "09:00", visibleToAllGroups: false,
@@ -106,7 +117,8 @@ async function main() {
   });
   await run("superA CAN list users filtered to empresa A", async () => {
     const snap = await assertSucceeds(ctx(SUPER_A).collection("users").where("empresaId", "==", EMPRESA_A).get());
-    assert.strictEqual(snap.size, 2, `expected 2 users in empresa A, got ${snap.size}`);
+    // SUPER_A, WORKER_A, ADMIN_NO_PRINT_PERM_A, ADMIN_WITH_PRINT_PERM_A
+    assert.strictEqual(snap.size, 4, `expected 4 users in empresa A, got ${snap.size}`);
   });
   await run("superA cannot DELETE a user from empresa B", async () => {
     await assertFails(ctx(SUPER_A).collection("users").doc(SUPER_B).delete());
@@ -147,6 +159,7 @@ async function main() {
     ["statuses", "statusB1", { name: "hacked" }],
     ["availableHours", "hourB1", { hour: "23:00" }],
     ["clients", "clientB1", { name: "hacked" }],
+    ["printerConfigs", "printerConfigB1", { clientName: "hacked" }],
   ];
   for (const [col, docId, patch] of catalogCases) {
     await run(`superA cannot READ ${col} doc from empresa B`, async () => {
@@ -161,6 +174,24 @@ async function main() {
   }
   await run("superA CAN read own empresa's groups", async () => {
     await assertSucceeds(ctx(SUPER_A).collection("groups").doc("groupA1").get());
+  });
+
+  // ---- printerConfigs: unlike clients, create ALSO requires the permission ----
+  await run("admin_equipo WITHOUT managePrinterConfigs cannot CREATE a printerConfigs doc", async () => {
+    await assertFails(ctx(ADMIN_NO_PRINT_PERM_A).collection("printerConfigs").doc("newConfig1").set({
+      empresaId: EMPRESA_A, clientName: "Restaurante Nuevo", fields: {},
+    }));
+  });
+  await run("admin_equipo WITH managePrinterConfigs CAN CREATE a printerConfigs doc", async () => {
+    await assertSucceeds(ctx(ADMIN_WITH_PRINT_PERM_A).collection("printerConfigs").doc("newConfig2").set({
+      empresaId: EMPRESA_A, clientName: "Restaurante Nuevo 2", fields: {},
+    }));
+  });
+  await run("admin_equipo WITHOUT managePrinterConfigs cannot READ printerConfigs in their own empresa", async () => {
+    await assertFails(ctx(ADMIN_NO_PRINT_PERM_A).collection("printerConfigs").doc("printerConfigA1").get());
+  });
+  await run("admin_equipo WITH managePrinterConfigs CAN read printerConfigs in their own empresa", async () => {
+    await assertSucceeds(ctx(ADMIN_WITH_PRINT_PERM_A).collection("printerConfigs").doc("printerConfigA1").get());
   });
 
   // ---- empresas / platformOwners ----

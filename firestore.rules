@@ -308,6 +308,24 @@ service cloud.firestore {
     }
 
     // -----------------------------------------------------------------
+    // printerConfigs — VinApp Print settings per restaurant client
+    // (managePrinterConfigs permission). Unlike clients, there is no
+    // auto-create-on-task-save flow here, so EVERY operation (read/create/
+    // update/delete) requires the permission — no open create.
+    // -----------------------------------------------------------------
+    match /printerConfigs/{id} {
+      allow read: if sameEmpresa(resource.data.empresaId)
+        && (isSuperAdmin() || hasPermission('managePrinterConfigs'));
+      allow create: if request.resource.data.empresaId == myEmpresaId()
+        && (isSuperAdmin() || hasPermission('managePrinterConfigs'));
+      allow update: if resource.data.empresaId == request.resource.data.empresaId
+        && sameEmpresa(resource.data.empresaId)
+        && (isSuperAdmin() || hasPermission('managePrinterConfigs'));
+      allow delete: if sameEmpresa(resource.data.empresaId)
+        && (isSuperAdmin() || hasPermission('managePrinterConfigs'));
+    }
+
+    // -----------------------------------------------------------------
     // systemConfig — global system configuration (Sprint 22). Genuinely
     // platform-wide (one deployed web build, one version banner for every
     // empresa) — deliberately does NOT carry empresaId, unlike every other

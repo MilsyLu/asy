@@ -25,6 +25,7 @@ import '../widgets/update_banner.dart';
 import 'admin/available_hours_page.dart';
 import 'admin/clients_page.dart';
 import 'admin/groups_page.dart';
+import 'admin/printer_configs_page.dart';
 import 'admin/statuses_page.dart';
 import 'admin/task_types_page.dart';
 import 'admin/users_page.dart';
@@ -398,6 +399,17 @@ class _MainShellState extends State<MainShell> {
               icon: LucideIcons.layoutDashboard,
               label: 'Panel de administración',
               page: _AdminSection(),
+            ),
+          // Lives as its own top-level sidebar item (not inside
+          // AdminPanelPage's module grid) — Michel's explicit placement
+          // preference, since it's a different kind of tool (an unrelated
+          // desktop program's client config) than the catalog-style modules
+          // grouped in the panel.
+          if (auth.hasPermission(AppPermissions.managePrinterConfigs))
+            const _ShellEntry(
+              icon: LucideIcons.printer,
+              label: 'VinApp Print',
+              page: PrinterConfigsPage(showAppBar: false),
             ),
           if (auth.hasPermission(AppPermissions.manageTasks))
             const _ShellEntry(

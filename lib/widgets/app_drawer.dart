@@ -7,6 +7,7 @@ import '../core/theme/theme_colors.dart';
 import '../providers/auth_provider.dart';
 import '../providers/catalog_provider.dart';
 import '../screens/admin/admin_panel_page.dart';
+import '../screens/admin/printer_configs_page.dart';
 import '../screens/home/home_page.dart';
 import '../screens/profile/settings_page.dart';
 import '../screens/trash/trash_page.dart';
@@ -141,6 +142,20 @@ class AppDrawer extends StatelessWidget {
                     Navigator.of(context).pop();
                     Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const AdminPanelPage()),
+                    );
+                  },
+                ),
+              // Own top-level item (not inside AdminPanelPage's module grid)
+              // — Michel's explicit placement preference, mirrors
+              // main_shell.dart's sidebar.
+              if (auth.hasPermission(AppPermissions.managePrinterConfigs))
+                ListTile(
+                  leading: Icon(LucideIcons.printer, color: colors.primary),
+                  title: const Text('VinApp Print'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const PrinterConfigsPage()),
                     );
                   },
                 ),

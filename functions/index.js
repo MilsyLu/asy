@@ -10,6 +10,7 @@ const { cleanOldNotifications } = require("./src/cleanOldNotifications");
 const { syncTaskFromSheet } = require("./src/syncTaskFromSheet");
 const { createEmpresa } = require("./src/createEmpresa");
 const { toggleEmpresa } = require("./src/toggleEmpresa");
+const { extractPrinterConfigFromImages } = require("./src/extractPrinterConfigFromImages");
 
 exports.onTaskCreate = onTaskCreate;
 exports.onTaskUpdate = onTaskUpdate;
@@ -19,3 +20,4 @@ exports.cleanOldNotifications = cleanOldNotifications;
 exports.syncTaskFromSheet = syncTaskFromSheet;
 exports.createEmpresa = createEmpresa;
 exports.toggleEmpresa = toggleEmpresa;
+exports.extractPrinterConfigFromImages = extractPrinterConfigFromImages;

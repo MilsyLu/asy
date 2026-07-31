@@ -17,6 +17,7 @@ import 'services/auth_service.dart';
 import 'services/catalog_repository.dart';
 import 'services/notification_navigation.dart';
 import 'services/notification_repository.dart';
+import 'services/printer_config_repository.dart';
 import 'services/task_repository.dart';
 import 'services/user_repository.dart';
 import 'widgets/brand_logo.dart';
@@ -85,6 +86,7 @@ class TaskFlowApp extends StatelessWidget {
                   Provider<CatalogRepository>(create: (_) => CatalogRepository(empresaId: empresaId)),
                   Provider<UserRepository>(create: (_) => UserRepository(empresaId: empresaId)),
                   Provider<NotificationRepository>(create: (_) => NotificationRepository()),
+                  Provider<PrinterConfigRepository>(create: (_) => PrinterConfigRepository(empresaId: empresaId)),
                 ],
                 child: ChangeNotifierProvider<AppUpdateService>(
                   create: (_) => AppUpdateService(),
