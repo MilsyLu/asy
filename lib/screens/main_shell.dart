@@ -36,6 +36,7 @@ import 'notifications/notifications_page.dart';
 import 'profile/profile_page.dart';
 import 'profile/settings_page.dart';
 import 'reports/reports_page.dart';
+import 'tools/qr_generator_page.dart';
 import 'trash/trash_page.dart';
 import 'week/week_page.dart';
 
@@ -421,6 +422,13 @@ class _MainShellState extends State<MainShell> {
               page: TrashPage(showAppBar: false),
             ),
         ],
+        // Generic "paste a link, get a QR" utility — no permission gate,
+        // open to any signed-in user (unlike the admin-only entries above).
+        const _ShellEntry(
+          icon: LucideIcons.qrCode,
+          label: 'Generador de QR',
+          page: QrGeneratorPage(showAppBar: false),
+        ),
         const _ShellEntry(
           icon: LucideIcons.settings,
           label: 'Configuración',

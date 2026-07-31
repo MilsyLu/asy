@@ -10,6 +10,7 @@ import '../screens/admin/admin_panel_page.dart';
 import '../screens/admin/printer_configs_page.dart';
 import '../screens/home/home_page.dart';
 import '../screens/profile/settings_page.dart';
+import '../screens/tools/qr_generator_page.dart';
 import '../screens/trash/trash_page.dart';
 import '../services/auth_service.dart';
 import 'confirm_dialog.dart';
@@ -174,6 +175,18 @@ class AppDrawer extends StatelessWidget {
                   },
                 ),
             ],
+            // Generic "paste a link, get a QR" utility — no permission
+            // gate, open to any signed-in user (mirrors main_shell.dart).
+            ListTile(
+              leading: Icon(LucideIcons.qrCode, color: colors.primary),
+              title: const Text('Generador de QR'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const QrGeneratorPage()),
+                );
+              },
+            ),
             ListTile(
               leading: Icon(LucideIcons.settings, color: colors.primary),
               title: const Text('Configuración'),
