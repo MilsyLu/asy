@@ -1,0 +1,13 @@
+{
+  "name": "checu-rules-tests",
+  "version": "1.0.0",
+  "description": "Firestore security-rules isolation tests for CheCu's multi-tenant (empresaId) conversion — run against the local emulator, never against production.",
+  "main": "isolation.test.js",
+  "scripts": {
+    "test": "node isolation.test.js"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4"
+  },
+  "private": true
+}

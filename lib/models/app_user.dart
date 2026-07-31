@@ -9,6 +9,12 @@ class AppUser {
   final String role;
   final String? groupId;
 
+  /// The tenant ("empresa") this user belongs to. Nullable only for legacy
+  /// docs written before the multi-tenant migration backfilled every
+  /// document — a null empresaId is deliberately treated as "no access" by
+  /// firestore.rules (see `sameEmpresa()`), never as "every tenant's".
+  final String? empresaId;
+
   /// Teams this user manages, only meaningful when [role] is
   /// [AppRoles.adminEquipo] — an `admin_equipo` may be assigned more than
   /// one. Empty for every other role. Defaults to `[]` so documents written
@@ -58,6 +64,7 @@ class AppUser {
     required this.name,
     required this.role,
     this.groupId,
+    this.empresaId,
     this.managedGroupIds = const [],
     this.permissions = const {},
     this.fcmTokens = const [],
@@ -101,6 +108,7 @@ class AppUser {
       name: map['name'] as String? ?? '',
       role: map['role'] as String? ?? AppRoles.trabajadorNormal,
       groupId: map['groupId'] as String?,
+      empresaId: map['empresaId'] as String?,
       managedGroupIds: (map['managedGroupIds'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
@@ -160,6 +168,7 @@ class AppUser {
       'name': name,
       'role': role,
       'groupId': groupId,
+      'empresaId': empresaId,
       'managedGroupIds': managedGroupIds,
       'permissions': permissions,
       'fcmTokens': fcmTokens,

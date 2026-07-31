@@ -11,6 +11,7 @@ import 'providers/catalog_provider.dart';
 import 'providers/system_config_provider.dart';
 import 'screens/auth/login_page.dart';
 import 'screens/main_shell.dart';
+import 'screens/platform/platform_admin_shell.dart';
 import 'services/app_update_service.dart';
 import 'services/auth_service.dart';
 import 'services/catalog_repository.dart';
@@ -27,11 +28,14 @@ class TaskFlowApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        // Multi-tenant: TaskRepository/CatalogRepository/UserRepository/
+        // NotificationRepository all need the signed-in user's empresaId to
+        // scope their queries, which isn't known until AuthProvider resolves
+        // it — so they're constructed further down, in `builder` below
+        // (same trick already used for CatalogProvider), not here at the
+        // MultiProvider root. AuthService stays root-level since it's used
+        // pre-login (sign-in, password reset).
         Provider<AuthService>(create: (_) => AuthService()),
-        Provider<UserRepository>(create: (_) => UserRepository()),
-        Provider<TaskRepository>(create: (_) => TaskRepository()),
-        Provider<CatalogRepository>(create: (_) => CatalogRepository()),
-        Provider<NotificationRepository>(create: (_) => NotificationRepository()),
         ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider()),
         ChangeNotifierProxyProvider<AuthProvider, ThemeManager>(
           create: (_) => ThemeManager(),
@@ -68,15 +72,29 @@ class TaskFlowApp extends StatelessWidget {
             // couldn't see it.
             builder: (context, child) {
               final user = context.watch<AuthProvider>().appUser;
+              // Platform owners never reach here with a non-null appUser
+              // (AuthProvider deliberately leaves it null for them — see
+              // isPlatformOwner) so none of these tenant-scoped
+              // repositories/providers are ever constructed for a platform
+              // owner session.
               if (user == null) return child!;
-              return ChangeNotifierProvider<AppUpdateService>(
-                create: (_) => AppUpdateService(),
-                child: ChangeNotifierProvider<SystemConfigProvider>(
-                  create: (_) => SystemConfigProvider(),
-                  child: ChangeNotifierProvider<CatalogProvider>(
-                    key: ValueKey(user.id),
-                    create: (_) => CatalogProvider(),
-                    child: child!,
+              final empresaId = user.empresaId!;
+              return MultiProvider(
+                providers: [
+                  Provider<TaskRepository>(create: (_) => TaskRepository(empresaId: empresaId)),
+                  Provider<CatalogRepository>(create: (_) => CatalogRepository(empresaId: empresaId)),
+                  Provider<UserRepository>(create: (_) => UserRepository(empresaId: empresaId)),
+                  Provider<NotificationRepository>(create: (_) => NotificationRepository()),
+                ],
+                child: ChangeNotifierProvider<AppUpdateService>(
+                  create: (_) => AppUpdateService(),
+                  child: ChangeNotifierProvider<SystemConfigProvider>(
+                    create: (_) => SystemConfigProvider(),
+                    child: ChangeNotifierProvider<CatalogProvider>(
+                      key: ValueKey(user.id),
+                      create: (_) => CatalogProvider(empresaId: empresaId),
+                      child: child!,
+                    ),
                   ),
                 ),
               );
@@ -101,7 +119,18 @@ class AuthGate extends StatelessWidget {
       return const _BootSplash();
     }
 
-    if (!auth.isAuthenticated || auth.appUser == null) {
+    if (!auth.isAuthenticated) {
+      return const LoginPage();
+    }
+
+    // Checked before the tenant appUser check below — a platform owner
+    // (Michel) has no `users/{uid}` profile at all, by design (see
+    // AuthProvider._onAuthChanged).
+    if (auth.isPlatformOwner) {
+      return const PlatformAdminShell();
+    }
+
+    if (auth.appUser == null) {
       return const LoginPage();
     }
 

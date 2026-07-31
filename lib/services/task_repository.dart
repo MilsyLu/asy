@@ -39,14 +39,22 @@ class ClientTaskHistory {
 }
 
 /// CRUD + queries for the `tasks` collection.
+///
+/// Multi-tenant: every read is pre-filtered to [empresaId] at the query
+/// level, and every write stamps `empresaId` into the document —
+/// firestore.rules independently re-verifies this (see `sameEmpresa()`).
 class TaskRepository {
-  TaskRepository({FirebaseFirestore? firestore})
+  TaskRepository({required this.empresaId, FirebaseFirestore? firestore})
       : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
+  final String empresaId;
 
-  CollectionReference<Map<String, dynamic>> get _collection =>
+  CollectionReference<Map<String, dynamic>> get _tasksCollection =>
       _firestore.collection(FirestoreCollections.tasks);
+
+  Query<Map<String, dynamic>> get _collection =>
+      _tasksCollection.where('empresaId', isEqualTo: empresaId);
 
   /// Tasks scheduled for a single day, ordered by hour.
   /// Soft-deleted tasks are excluded client-side (no index change required).
@@ -96,7 +104,7 @@ class TaskRepository {
   }
 
   Stream<TaskModel?> watchTask(String taskId) {
-    return _collection.doc(taskId).snapshots().map((doc) {
+    return _tasksCollection.doc(taskId).snapshots().map((doc) {
       if (!doc.exists) return null;
       return TaskModel.fromDoc(doc);
     });
@@ -130,16 +138,17 @@ class TaskRepository {
   }
 
   Future<String> createTask(TaskModel task) async {
-    final doc = await _collection.add(task.toMap(withServerTimestamp: true));
+    final data = task.toMap(withServerTimestamp: true)..['empresaId'] = empresaId;
+    final doc = await _tasksCollection.add(data);
     return doc.id;
   }
 
   Future<void> updateTask(String taskId, Map<String, dynamic> data) {
-    return _collection.doc(taskId).update(data);
+    return _tasksCollection.doc(taskId).update(data);
   }
 
   Future<void> deleteTask(String taskId) {
-    return _collection.doc(taskId).delete();
+    return _tasksCollection.doc(taskId).delete();
   }
 
   /// Counts every task ever assigned to [userId] — including soft-deleted
@@ -205,7 +214,7 @@ class TaskRepository {
   /// Marks a task as deleted without removing it from Firestore.
   Future<void> softDeleteTask(
       String taskId, String deletedBy, String deletedByName) {
-    return _collection.doc(taskId).update({
+    return _tasksCollection.doc(taskId).update({
       'isDeleted': true,
       'deletedAt': Timestamp.fromDate(DateTime.now()),
       'deletedBy': deletedBy,
@@ -215,7 +224,7 @@ class TaskRepository {
 
   /// Restores a soft-deleted task, clearing all deletion metadata.
   Future<void> restoreTask(String taskId) {
-    return _collection.doc(taskId).update({
+    return _tasksCollection.doc(taskId).update({
       'isDeleted': false,
       'deletedAt': FieldValue.delete(),
       'deletedBy': FieldValue.delete(),
@@ -225,12 +234,11 @@ class TaskRepository {
 
   /// Permanently removes a task document from Firestore (irreversible).
   Future<void> permanentlyDeleteTask(String taskId) {
-    return _collection.doc(taskId).delete();
+    return _tasksCollection.doc(taskId).delete();
   }
 
   /// Stream of all soft-deleted tasks, ordered by deletion date (newest first).
-  /// Requires composite index (isDeleted ASC, deletedAt DESC) — deploy before
-  /// enabling the trash-bin screen in Sprint 2.
+  /// Requires composite index (empresaId ASC, isDeleted ASC, deletedAt DESC).
   Stream<List<TaskModel>> watchDeletedTasks() {
     return _collection
         .where('isDeleted', isEqualTo: true)
@@ -240,8 +248,7 @@ class TaskRepository {
   }
 
   /// Stream of soft-deleted tasks within an inclusive date range.
-  /// Requires composite index (isDeleted ASC, date ASC) — deploy before
-  /// enabling the trash-bin screen in Sprint 2.
+  /// Requires composite index (empresaId ASC, isDeleted ASC, date ASC).
   Stream<List<TaskModel>> watchDeletedTasksByDateRange(
       DateTime start, DateTime end) {
     final startKey = AppDateUtils.formatDateKey(start);
@@ -257,7 +264,7 @@ class TaskRepository {
 
   /// Marks a task as completed by the worker.
   Future<void> completeTask(String taskId, String completedStatusId) {
-    return _collection.doc(taskId).update({
+    return _tasksCollection.doc(taskId).update({
       'statusId': completedStatusId,
       'completedAt': Timestamp.fromDate(DateTime.now()),
     });
@@ -274,7 +281,7 @@ class TaskRepository {
     DateTime? reminderTime,
     bool clearReminder = false,
   }) {
-    return _collection.doc(taskId).update({
+    return _tasksCollection.doc(taskId).update({
       'date': newDate,
       'hour': newHour,
       'statusId': rescheduledStatusId,

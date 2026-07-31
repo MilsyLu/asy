@@ -27,10 +27,23 @@ const deleteUserPermanently = onCall(async (request) => {
       "Solo un administrador puede eliminar usuarios."
     );
   }
+  const callerEmpresaId = callerSnap.get("empresaId");
 
   const targetUid = request.data?.uid;
   if (!targetUid || typeof targetUid !== "string") {
     throw new HttpsError("invalid-argument", "Falta el id del usuario a eliminar.");
+  }
+
+  // Multi-tenant (empresas): without this check, a super_admin of one
+  // empresa could delete a user belonging to a different empresa purely by
+  // knowing their uid — the role check above alone no longer implies
+  // "same company" once more than one empresa exists.
+  const targetSnap = await db.collection("users").doc(targetUid).get();
+  if (!targetSnap.exists || targetSnap.get("empresaId") !== callerEmpresaId) {
+    throw new HttpsError(
+      "permission-denied",
+      "No puedes eliminar usuarios de otra empresa."
+    );
   }
 
   const tasksSnap = await db
@@ -39,9 +52,17 @@ const deleteUserPermanently = onCall(async (request) => {
     .get();
 
   if (!tasksSnap.empty) {
+    // Scoped by empresaId (Multi-tenant): a name-based lookup like
+    // "Completada" could otherwise resolve to a different tenant's status
+    // sharing the same name, silently miscounting completed/rescheduled
+    // tasks below.
     const [completedStatusSnap, rescheduledStatusSnap] = await Promise.all([
-      db.collection("statuses").where("name", "==", "Completada").limit(1).get(),
-      db.collection("statuses").where("name", "==", "Reprogramada").limit(1).get(),
+      db.collection("statuses")
+        .where("empresaId", "==", callerEmpresaId)
+        .where("name", "==", "Completada").limit(1).get(),
+      db.collection("statuses")
+        .where("empresaId", "==", callerEmpresaId)
+        .where("name", "==", "Reprogramada").limit(1).get(),
     ]);
     const completedId = completedStatusSnap.empty ? null : completedStatusSnap.docs[0].id;
     const rescheduledId = rescheduledStatusSnap.empty ? null : rescheduledStatusSnap.docs[0].id;

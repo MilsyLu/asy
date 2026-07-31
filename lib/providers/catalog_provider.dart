@@ -17,10 +17,11 @@ import '../services/user_repository.dart';
 /// screen can resolve IDs to human-readable names without re-subscribing.
 class CatalogProvider extends ChangeNotifier {
   CatalogProvider({
+    required String empresaId,
     CatalogRepository? repository,
     UserRepository? userRepository,
-  })  : _repository = repository ?? CatalogRepository(),
-        _userRepository = userRepository ?? UserRepository() {
+  })  : _repository = repository ?? CatalogRepository(empresaId: empresaId),
+        _userRepository = userRepository ?? UserRepository(empresaId: empresaId) {
     _groupsSub = _repository.watchGroups().listen((v) {
       groups = v;
       notifyListeners();

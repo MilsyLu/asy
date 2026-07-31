@@ -33,7 +33,7 @@ const onTaskCreate = onDocumentCreated("tasks/{taskId}", async (event) => {
   // Sprint 7.4.3 Parte 2 — latency measurement only, no behavior change.
   console.log(`[FCM_TIMING]\ntrigger_received\ntaskId=${taskId}\ntimestamp=${Date.now()}`);
 
-  const { assignedUserId, clientName, taskTypeId, groupId, hour, createdBy } = task;
+  const { assignedUserId, clientName, taskTypeId, groupId, hour, createdBy, empresaId } = task;
   if (!assignedUserId) return;
 
   const db = getFirestore();
@@ -122,7 +122,7 @@ const onTaskCreate = onDocumentCreated("tasks/{taskId}", async (event) => {
   pending.push(
     (async () => {
       try {
-        const adminIds = (await getAdminIdsForTask(db, groupId)).filter(
+        const adminIds = (await getAdminIdsForTask(db, empresaId, groupId)).filter(
           (id) => id !== createdBy
         );
 

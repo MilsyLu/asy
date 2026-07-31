@@ -286,22 +286,37 @@ async function notifyAdminsOfTaskCreated(adminIds, message) {
 
 /**
  * Resolves every admin who should be notified about a task belonging to
- * [groupId]: every super_admin (org-wide oversight, unchanged since
- * Sprint 7.4.7), plus — for the permissions system — every admin_equipo
- * whose `managedGroupIds` includes that team. `groupId` may be null/empty
- * for legacy/ungrouped tasks, in which case only super_admins are returned,
- * same as before this system existed.
+ * [groupId], WITHIN [empresaId]: every super_admin of that empresa (org-wide
+ * oversight, unchanged since Sprint 7.4.7), plus — for the permissions
+ * system — every admin_equipo of that same empresa whose `managedGroupIds`
+ * includes that team. `groupId` may be null/empty for legacy/ungrouped
+ * tasks, in which case only super_admins are returned, same as before this
+ * system existed.
+ *
+ * Multi-tenant (empresas): [empresaId] is required and always filtered on —
+ * without it, this would resolve every super_admin across every tenant in
+ * the database, notifying other companies' admins about a task that isn't
+ * theirs (this was the actual behavior here before empresas existed, since
+ * a task belonged to exactly one deployment back then).
  *
  * @param {FirebaseFirestore.Firestore} db
+ * @param {string} empresaId
  * @param {string | null | undefined} groupId
  * @returns {Promise<string[]>} deduped admin user ids.
  */
-async function getAdminIdsForTask(db, groupId) {
-  const queries = [db.collection("users").where("role", "==", "super_admin").get()];
+async function getAdminIdsForTask(db, empresaId, groupId) {
+  const queries = [
+    db
+      .collection("users")
+      .where("empresaId", "==", empresaId)
+      .where("role", "==", "super_admin")
+      .get(),
+  ];
   if (groupId) {
     queries.push(
       db
         .collection("users")
+        .where("empresaId", "==", empresaId)
         .where("role", "==", "admin_equipo")
         .where("managedGroupIds", "array-contains", groupId)
         .get()

@@ -5,11 +5,23 @@ import '../core/constants/firestore_paths.dart';
 import '../models/app_user.dart';
 
 /// CRUD + streams for the `users` collection.
+///
+/// Multi-tenant: [empresaId] is optional here (unlike the other
+/// repositories) because this repository is used two ways — (a) the
+/// tenant-scoped instance held by CatalogProvider, which needs it to filter
+/// [watchAllUsers]/[watchUsersByGroup]/[getUsersByGroup], and (b) the
+/// root-level instance AuthProvider uses to bootstrap the signed-in user's
+/// own profile via [watchUser] *before* their empresaId is even known (a
+/// self-read of `users/{uid}` is always allowed by firestore.rules
+/// regardless of empresaId, since it compares the doc to itself). Every
+/// other method here operates on a specific `uid` directly and doesn't need
+/// empresaId either — only the three list/query methods do.
 class UserRepository {
-  UserRepository({FirebaseFirestore? firestore})
+  UserRepository({this.empresaId, FirebaseFirestore? firestore})
       : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
+  final String? empresaId;
 
   /// Max FCM tokens kept per user (Sprint 7.4.2 — Parte 1.4). Beyond this,
   /// the oldest token is evicted so multi-device logins never grow the
@@ -35,20 +47,29 @@ class UserRepository {
   }
 
   Stream<List<AppUser>> watchAllUsers() {
-    return _collection.orderBy('name').snapshots().map(
-        (snap) => snap.docs.map((d) => AppUser.fromDoc(d)).toList());
+    assert(empresaId != null, 'watchAllUsers() requires a tenant-scoped UserRepository');
+    return _collection
+        .where('empresaId', isEqualTo: empresaId)
+        .orderBy('name')
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => AppUser.fromDoc(d)).toList());
   }
 
   Stream<List<AppUser>> watchUsersByGroup(String groupId) {
+    assert(empresaId != null, 'watchUsersByGroup() requires a tenant-scoped UserRepository');
     return _collection
+        .where('empresaId', isEqualTo: empresaId)
         .where('groupId', isEqualTo: groupId)
         .snapshots()
         .map((snap) => snap.docs.map((d) => AppUser.fromDoc(d)).toList());
   }
 
   Future<List<AppUser>> getUsersByGroup(String groupId) async {
-    final snap =
-        await _collection.where('groupId', isEqualTo: groupId).get();
+    assert(empresaId != null, 'getUsersByGroup() requires a tenant-scoped UserRepository');
+    final snap = await _collection
+        .where('empresaId', isEqualTo: empresaId)
+        .where('groupId', isEqualTo: groupId)
+        .get();
     return snap.docs.map((d) => AppUser.fromDoc(d)).toList();
   }
 
@@ -122,21 +143,36 @@ class UserRepository {
   /// matches a doc that was correctly written for someone else. Stripping
   /// the token from every other account before attaching it here keeps a
   /// token bound to exactly one account at a time.
-  Future<void> addFcmToken(String uid, String token) async {
+  ///
+  /// [callerEmpresaId] scopes the stale-holder scan to the caller's own
+  /// tenant — required since firestore.rules now requires every `users`
+  /// list query to filter by empresaId (a query without it is rejected
+  /// outright, not silently unfiltered). When null (only possible for a
+  /// not-yet-migrated legacy account) the stale-holder scan is skipped
+  /// entirely rather than attempting a query the rules would reject — a
+  /// stale token from a different tenant on a shared device is still
+  /// eventually pruned when FCM reports it invalid (see
+  /// `functions/src/notifications.js`), so this is a minor push-delivery
+  /// efficiency trade-off, not a confidentiality one.
+  Future<void> addFcmToken(String uid, String token, {String? callerEmpresaId}) async {
     if (token.isEmpty) return;
 
     final tokenShort = '${token.substring(0, 8)}...${token.substring(token.length - 8)}';
     debugPrint('[WEB_FCM_DIAG] addFcmToken() ENTRY uid=$uid token=$tokenShort');
 
-    final staleHolders =
-        await _collection.where('fcmTokens', arrayContains: token).get();
-    debugPrint('[WEB_FCM_DIAG] addFcmToken(): stale query done — ${staleHolders.docs.length} doc(s) hold this token');
-    for (final doc in staleHolders.docs) {
-      if (doc.id == uid) continue;
-      await doc.reference.update({
-        'fcmTokens': FieldValue.arrayRemove([token]),
-      });
-      debugPrint('[FCM] Stale token removed from previous owner: ${doc.id}');
+    if (callerEmpresaId != null) {
+      final staleHolders = await _collection
+          .where('empresaId', isEqualTo: callerEmpresaId)
+          .where('fcmTokens', arrayContains: token)
+          .get();
+      debugPrint('[WEB_FCM_DIAG] addFcmToken(): stale query done — ${staleHolders.docs.length} doc(s) hold this token');
+      for (final doc in staleHolders.docs) {
+        if (doc.id == uid) continue;
+        await doc.reference.update({
+          'fcmTokens': FieldValue.arrayRemove([token]),
+        });
+        debugPrint('[FCM] Stale token removed from previous owner: ${doc.id}');
+      }
     }
 
     final docRef = _collection.doc(uid);

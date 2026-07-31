@@ -50,12 +50,19 @@ function formatHour12h(hourStr) {
 }
 
 /**
- * Looks up the document id of the status named "Completada", if any.
- * Used to skip sending stale reminders for tasks already finished.
+ * Looks up the document id of the status named "Completada" WITHIN
+ * [empresaId], if any. Used to skip sending stale reminders for tasks
+ * already finished.
+ *
+ * Multi-tenant (empresas): a name-based lookup like this could otherwise
+ * resolve to a DIFFERENT tenant's "Completada" status (a name any tenant
+ * would plausibly pick), silently breaking the skip-if-completed check —
+ * scoping by empresaId here fixes that.
  */
-async function getCompletedStatusId(db) {
+async function getCompletedStatusId(db, empresaId) {
   const snap = await db
     .collection("statuses")
+    .where("empresaId", "==", empresaId)
     .where("name", "==", "Completada")
     .limit(1)
     .get();
@@ -66,11 +73,28 @@ async function getCompletedStatusId(db) {
  * Runs every minute. Sends a push notification for every task whose
  * `reminderTime` has passed and `reminderSent` is still `false`, then
  * marks it as sent so it isn't repeated.
+ *
+ * Multi-tenant (empresas): a single invocation still scans `tasks` globally
+ * across every tenant in one query — every downstream action already
+ * targets that specific task's own `assignedUserId`, which is inherently
+ * that task's own tenant's user, so this doesn't leak anything across
+ * tenants. Splitting into a per-tenant query would only be a scale
+ * optimization, not a correctness fix — deferred until it's actually
+ * needed. [completedStatusId] IS empresa-scoped though (see above), so it's
+ * memoized per empresaId within a single run instead of re-querying
+ * `statuses` once per task.
  */
 const checkReminders = onSchedule("every 1 minutes", async () => {
   const db = getFirestore();
   const now = Timestamp.now();
-  const completedStatusId = await getCompletedStatusId(db);
+  const completedStatusIdCache = new Map();
+  async function completedStatusIdFor(empresaId) {
+    if (!empresaId) return null;
+    if (!completedStatusIdCache.has(empresaId)) {
+      completedStatusIdCache.set(empresaId, await getCompletedStatusId(db, empresaId));
+    }
+    return completedStatusIdCache.get(empresaId);
+  }
 
   const snap = await db
     .collection("tasks")
@@ -84,6 +108,7 @@ const checkReminders = onSchedule("every 1 minutes", async () => {
     snap.docs.map(async (doc) => {
       try {
         const task = doc.data();
+        const completedStatusId = await completedStatusIdFor(task.empresaId);
 
         if (completedStatusId && task.statusId === completedStatusId) {
           await doc.ref.update({ reminderSent: true });

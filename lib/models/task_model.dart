@@ -34,6 +34,9 @@ class TaskModel {
   // task, or a task in the creator's own group).
   final String? createdBy;
 
+  /// The tenant ("empresa") this task belongs to. See `AppUser.empresaId`.
+  final String? empresaId;
+
   const TaskModel({
     required this.id,
     required this.hour,
@@ -57,6 +60,7 @@ class TaskModel {
     this.deletedBy,
     this.deletedByName,
     this.createdBy,
+    this.empresaId,
   });
 
   /// The full scheduled [DateTime] obtained by combining [date] and [hour].
@@ -92,6 +96,7 @@ class TaskModel {
       deletedBy: map['deletedBy'] as String?,
       deletedByName: map['deletedByName'] as String?,
       createdBy: map['createdBy'] as String?,
+      empresaId: map['empresaId'] as String?,
     );
   }
 
@@ -126,6 +131,7 @@ class TaskModel {
       'deletedBy': deletedBy,
       'deletedByName': deletedByName,
       'createdBy': createdBy,
+      'empresaId': empresaId,
     };
   }
 
@@ -186,6 +192,7 @@ class TaskModel {
       deletedByName:
           clearDeletedByName == true ? null : (deletedByName ?? this.deletedByName),
       createdBy: createdBy,
+      empresaId: empresaId,
     );
   }
 }

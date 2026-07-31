@@ -13,10 +13,15 @@ class AvailableHourModel {
   /// `TaskTypeModel.groupIds`.
   final List<String> groupIds;
 
+  /// The tenant ("empresa") this hour slot belongs to. See
+  /// `AppUser.empresaId`.
+  final String? empresaId;
+
   const AvailableHourModel({
     required this.id,
     required this.hour,
     this.groupIds = const [],
+    this.empresaId,
   });
 
   factory AvailableHourModel.fromMap(String id, Map<String, dynamic> map) {
@@ -27,6 +32,7 @@ class AvailableHourModel {
               ?.map((e) => e.toString())
               .toList() ??
           const [],
+      empresaId: map['empresaId'] as String?,
     );
   }
 
@@ -43,6 +49,6 @@ class AvailableHourModel {
   }
 
   Map<String, dynamic> toMap() {
-    return {'hour': hour, 'groupIds': groupIds};
+    return {'hour': hour, 'groupIds': groupIds, 'empresaId': empresaId};
   }
 }

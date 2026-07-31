@@ -16,12 +16,17 @@ class TaskTypeModel {
   /// [appliesToGroup].
   final List<String> groupIds;
 
+  /// The tenant ("empresa") this task type belongs to. See
+  /// `AppUser.empresaId`.
+  final String? empresaId;
+
   const TaskTypeModel({
     required this.id,
     required this.name,
     this.order = 0,
     this.color,
     this.groupIds = const [],
+    this.empresaId,
   });
 
   factory TaskTypeModel.fromMap(String id, Map<String, dynamic> map) {
@@ -34,6 +39,7 @@ class TaskTypeModel {
               ?.map((e) => e.toString())
               .toList() ??
           const [],
+      empresaId: map['empresaId'] as String?,
     );
   }
 
@@ -54,6 +60,7 @@ class TaskTypeModel {
       'order': order,
       'color': ?color,
       'groupIds': groupIds,
+      'empresaId': empresaId,
     };
   }
 }

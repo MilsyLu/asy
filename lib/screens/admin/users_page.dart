@@ -294,12 +294,14 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
     }
     setState(() => _isSaving = true);
     final authService = context.read<AuthService>();
+    final empresaId = context.read<AuthProvider>().appUser!.empresaId!;
     try {
       await authService.createUser(
         email: _emailController.text.trim(),
         password: _passwordController.text,
         name: _nameController.text.trim(),
         role: _role,
+        empresaId: empresaId,
         groupId: _groupId,
         managedGroupIds: _managedGroupIds,
         permissions: _permissions,
@@ -1250,6 +1252,7 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
 Future<void> _showCreateUserDialog(BuildContext context) async {
   final colors = context.colors;
   final authService = context.read<AuthService>();
+  final empresaId = context.read<AuthProvider>().appUser!.empresaId!;
   final catalog = context.read<CatalogProvider>();
   final formKey = GlobalKey<FormState>();
   final nameController = TextEditingController();
@@ -1368,6 +1371,7 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                             password: passwordController.text,
                             name: nameController.text.trim(),
                             role: role,
+                            empresaId: empresaId,
                             groupId: groupId,
                             managedGroupIds: managedGroupIds,
                             permissions: permissions,

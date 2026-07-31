@@ -11,12 +11,16 @@ class ClientModel {
   final String notes;
   final DateTime? createdAt;
 
+  /// The tenant ("empresa") this client belongs to. See `AppUser.empresaId`.
+  final String? empresaId;
+
   const ClientModel({
     required this.id,
     required this.name,
     this.phone = '',
     this.notes = '',
     this.createdAt,
+    this.empresaId,
   });
 
   factory ClientModel.fromMap(String id, Map<String, dynamic> map) {
@@ -26,6 +30,7 @@ class ClientModel {
       phone: map['phone'] as String? ?? '',
       notes: map['notes'] as String? ?? '',
       createdAt: (map['createdAt'] as Timestamp?)?.toDate(),
+      empresaId: map['empresaId'] as String?,
     );
   }
 
@@ -41,6 +46,7 @@ class ClientModel {
       'createdAt': withServerTimestamp
           ? FieldValue.serverTimestamp()
           : (createdAt != null ? Timestamp.fromDate(createdAt!) : null),
+      'empresaId': empresaId,
     };
   }
 }

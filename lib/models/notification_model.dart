@@ -14,6 +14,12 @@ class NotificationModel {
   final bool isRead;
   final DateTime? createdAt;
 
+  /// The tenant ("empresa") this notification belongs to. Not required for
+  /// security (ownership is already keyed by [userId], and a uid always
+  /// belongs to exactly one empresa) — kept for audit/future-filtering
+  /// value. See `AppUser.empresaId`.
+  final String? empresaId;
+
   const NotificationModel({
     required this.id,
     required this.userId,
@@ -23,6 +29,7 @@ class NotificationModel {
     this.taskId,
     this.isRead = false,
     this.createdAt,
+    this.empresaId,
   });
 
   factory NotificationModel.fromMap(String id, Map<String, dynamic> map) {
@@ -35,6 +42,7 @@ class NotificationModel {
       taskId: map['taskId'] as String?,
       isRead: map['isRead'] as bool? ?? false,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate(),
+      empresaId: map['empresaId'] as String?,
     );
   }
 
@@ -53,6 +61,7 @@ class NotificationModel {
       'createdAt': withServerTimestamp
           ? FieldValue.serverTimestamp()
           : (createdAt != null ? Timestamp.fromDate(createdAt!) : null),
+      'empresaId': empresaId,
     };
   }
 

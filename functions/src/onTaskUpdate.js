@@ -36,7 +36,7 @@ const onTaskUpdate = onDocumentUpdated("tasks/{taskId}", async (event) => {
   if (!dateChanged && !hourChanged) return;
   if (after.isDeleted) return;
 
-  const { assignedUserId, clientName, taskTypeId, groupId, hour, date } = after;
+  const { assignedUserId, clientName, taskTypeId, groupId, hour, date, empresaId } = after;
   if (!assignedUserId) return;
 
   console.log(`[FCM] Task rescheduled: ${taskId}`);
@@ -108,7 +108,7 @@ const onTaskUpdate = onDocumentUpdated("tasks/{taskId}", async (event) => {
   pending.push(
     (async () => {
       try {
-        const adminIds = await getAdminIdsForTask(db, groupId);
+        const adminIds = await getAdminIdsForTask(db, empresaId, groupId);
         if (adminIds.length === 0) return;
 
         const body = groupId

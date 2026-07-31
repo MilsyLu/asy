@@ -19,6 +19,30 @@ service cloud.firestore {
       return isSignedIn() && me().role == 'super_admin';
     }
 
+    // Multi-tenant (empresas): a platform owner is Michel's own account —
+    // an allow-list collection (not a custom claim, so revocation/grants
+    // are visible immediately instead of waiting for a token refresh).
+    // Deliberately NOT a blanket bypass on tenant business data (users,
+    // tasks, clients, etc.) below — only on empresas/platformOwners/
+    // systemConfig, matching the product decision that Michel manages
+    // tenants without reaching into any tenant's own data.
+    function isPlatformOwner() {
+      return isSignedIn() && exists(/databases/$(database)/documents/platformOwners/$(request.auth.uid));
+    }
+
+    function myEmpresaId() {
+      return me().get('empresaId', null);
+    }
+
+    // True only when both sides are non-null and equal — a doc with no
+    // empresaId (not yet backfilled) or a user with no empresaId (should
+    // never happen post-migration) is deliberately inaccessible rather than
+    // silently treated as "everyone's", mirroring how this file already
+    // treats legacy groupId-less tasks below.
+    function sameEmpresa(docEmpresaId) {
+      return docEmpresaId != null && myEmpresaId() != null && docEmpresaId == myEmpresaId();
+    }
+
     // Permissions system (scoped "admin_equipo" role): a super_admin still
     // sees/does everything everywhere. An admin_equipo only manages the
     // teams listed in their own `managedGroupIds`, and only for the actions
@@ -124,33 +148,50 @@ service cloud.firestore {
     // users
     // -----------------------------------------------------------------
     match /users/{userId} {
-      allow read: if isSignedIn();
+      // Multi-tenant: unlike team-level visibility (which stays broad within
+      // one empresa), two different empresas must NEVER see each other's
+      // users at all — get()/list() both require the doc's empresaId to
+      // match the caller's own.
+      allow get: if isPlatformOwner() || sameEmpresa(resource.data.empresaId);
+      allow list: if isSignedIn() && resource.data.empresaId == myEmpresaId();
       // Accounts are provisioned from the admin panel: super_admin always;
       // an admin_equipo with manageUsers may only create a trabajador_normal
       // directly into one of their own managed teams — never another admin.
-      allow create: if isSuperAdmin()
-        || (hasPermission('manageUsers')
-            && request.resource.data.role == 'trabajador_normal'
-            && request.resource.data.groupId in myManagedGroupIds());
-      // super_admin can edit any field (role, group, permissions, etc).
-      // An admin_equipo with manageUsers may edit a trabajador_normal who
-      // is (and, if their team is being changed, remains) in one of their
-      // own managed teams — they can never touch role, and never touch an
-      // admin or super_admin account. Regular users may only update the
-      // fields the app touches on their own behalf, including their own
-      // visual preferences (themeMode/accentColor).
-      allow update: if isSuperAdmin()
-        || (isOwner(userId)
-            && request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['fcmTokens', 'lastLogin', 'streakDays', 'maxStreakDays', 'name', 'themeMode', 'accentColor',  'photoUrl', 'pushNotificationMode']))
-        || (hasPermission('manageUsers')
-            && resource.data.role == 'trabajador_normal'
-            && managesGroup(resource.data.groupId)
-            && request.resource.data.role == 'trabajador_normal'
-            && managesGroup(request.resource.data.groupId));
+      // The new doc's empresaId must match the creator's own (the very
+      // first admin of a brand-new empresa is instead created server-side
+      // by the createEmpresa Cloud Function via the Admin SDK, which
+      // bypasses these rules entirely).
+      allow create: if request.resource.data.empresaId == myEmpresaId()
+        && (isSuperAdmin()
+            || (hasPermission('manageUsers')
+                && request.resource.data.role == 'trabajador_normal'
+                && request.resource.data.groupId in myManagedGroupIds()));
+      // super_admin can edit any field (role, group, permissions, etc) but
+      // only within their own empresa. An admin_equipo with manageUsers may
+      // edit a trabajador_normal who is (and, if their team is being
+      // changed, remains) in one of their own managed teams — they can
+      // never touch role, and never touch an admin or super_admin account.
+      // Regular users may only update the fields the app touches on their
+      // own behalf, including their own visual preferences. empresaId is
+      // immutable in every branch — a user can never be moved between
+      // empresas by an update.
+      allow update: if resource.data.empresaId == request.resource.data.empresaId
+        && (
+          (isSuperAdmin() && sameEmpresa(resource.data.empresaId))
+          || (isOwner(userId)
+              && request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly(['fcmTokens', 'lastLogin', 'streakDays', 'maxStreakDays', 'name', 'themeMode', 'accentColor',  'photoUrl', 'pushNotificationMode']))
+          || (hasPermission('manageUsers')
+              && sameEmpresa(resource.data.empresaId)
+              && resource.data.role == 'trabajador_normal'
+              && managesGroup(resource.data.groupId)
+              && request.resource.data.role == 'trabajador_normal'
+              && managesGroup(request.resource.data.groupId))
+        );
       // Permanent delete stays super_admin-only, same as the Cloud Function
-      // (functions/src/deleteUser.js) that actually performs it.
-      allow delete: if isSuperAdmin();
+      // (functions/src/deleteUser.js) that actually performs it — now also
+      // scoped to the caller's own empresa.
+      allow delete: if isSuperAdmin() && sameEmpresa(resource.data.empresaId);
     }
 
     // -----------------------------------------------------------------
@@ -159,22 +200,30 @@ service cloud.firestore {
     match /tasks/{taskId} {
       // Single-document reads: `resource.data` is concrete here, so the
       // get()-based canAccessTask() check evaluates per document as expected.
-      allow get: if isSignedIn() && canAccessTask(resource.data);
+      // Multi-tenant: sameEmpresa() wraps around the existing team/role
+      // logic without changing any of it — a task from another empresa is
+      // now rejected before canAccessTask() even runs.
+      allow get: if sameEmpresa(resource.data.empresaId) && canAccessTask(resource.data);
       // Collection queries (watchTasksForDate/watchTasksInRange): rules
       // aren't filters. canAccessTask() depends on resource.data fields
       // that vary per doc and aren't constrained by the date/hour query
       // filters, so for any role other than super_admin (the only branch
       // that's constant w.r.t. resource.data) Firestore can't prove the
       // rule holds for the whole result set and rejects the ENTIRE query
-      // with permission-denied. So list is open to any signed-in user;
-      // privacy is enforced client-side via isTaskVisibleToUser
+      // with permission-denied. So list is scoped only by empresaId (a
+      // single equality constraint Firestore CAN prove — the client always
+      // filters .where('empresaId', isEqualTo: ...)); privacy WITHIN one
+      // empresa is enforced client-side via isTaskVisibleToUser
       // (lib/core/utils/task_visibility.dart), same as groups/taskTypes/etc.
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && canAccessTask(request.resource.data) && canWriteTask();
+      allow list: if isSignedIn() && resource.data.empresaId == myEmpresaId();
+      allow create: if request.resource.data.empresaId == myEmpresaId()
+        && canAccessTask(request.resource.data) && canWriteTask();
       // Sprint 7.4.9B: a direct change to reminderTime/reminderSent (not a
       // side effect of rescheduling) additionally requires canEditReminder()
-      // — the task's current assignedUserId or a super_admin.
-      allow update: if isSignedIn()
+      // — the task's current assignedUserId or a super_admin. empresaId is
+      // immutable — a task can never be moved between empresas by an update.
+      allow update: if resource.data.empresaId == request.resource.data.empresaId
+        && sameEmpresa(resource.data.empresaId)
         && canAccessTask(resource.data)
         && canAccessTask(request.resource.data)
         && canWriteTask()
@@ -183,8 +232,9 @@ service cloud.firestore {
       // manageTasks deleting a task that belongs to one of their teams.
       // Soft delete uses update() above and is available to any signed-in
       // user who can access the task.
-      allow delete: if isSuperAdmin()
-        || (hasPermission('manageTasks') && managesGroup(resource.data.get('groupId', null)));
+      allow delete: if sameEmpresa(resource.data.empresaId)
+        && (isSuperAdmin()
+            || (hasPermission('manageTasks') && managesGroup(resource.data.get('groupId', null))));
     }
 
     // -----------------------------------------------------------------
@@ -193,33 +243,47 @@ service cloud.firestore {
     // a scoped admin_equipo with the matching permission.
     // -----------------------------------------------------------------
     match /groups/{id} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && sameEmpresa(resource.data.empresaId);
       // Teams are created/deleted by super_admin only — an admin_equipo
       // never creates/removes teams, even their own.
-      allow create: if isSuperAdmin();
-      allow update: if isSuperAdmin() || (hasPermission('manageTeams') && managesGroup(id));
-      allow delete: if isSuperAdmin();
+      allow create: if request.resource.data.empresaId == myEmpresaId() && isSuperAdmin();
+      allow update: if resource.data.empresaId == request.resource.data.empresaId
+        && sameEmpresa(resource.data.empresaId)
+        && (isSuperAdmin() || (hasPermission('manageTeams') && managesGroup(id)));
+      allow delete: if sameEmpresa(resource.data.empresaId) && isSuperAdmin();
     }
 
     match /taskTypes/{id} {
-      allow read: if isSignedIn();
-      allow create: if canWriteScopedCatalog(request.resource.data.get('groupIds', []));
-      allow update: if canWriteScopedCatalog(request.resource.data.get('groupIds', []));
-      allow delete: if canWriteScopedCatalog(resource.data.get('groupIds', []));
+      allow read: if isSignedIn() && sameEmpresa(resource.data.empresaId);
+      allow create: if request.resource.data.empresaId == myEmpresaId()
+        && canWriteScopedCatalog(request.resource.data.get('groupIds', []));
+      allow update: if resource.data.empresaId == request.resource.data.empresaId
+        && sameEmpresa(resource.data.empresaId)
+        && canWriteScopedCatalog(request.resource.data.get('groupIds', []));
+      allow delete: if sameEmpresa(resource.data.empresaId)
+        && canWriteScopedCatalog(resource.data.get('groupIds', []));
     }
 
     match /statuses/{id} {
-      allow read: if isSignedIn();
-      allow create: if canWriteScopedCatalog(request.resource.data.get('groupIds', []));
-      allow update: if canWriteScopedCatalog(request.resource.data.get('groupIds', []));
-      allow delete: if canWriteScopedCatalog(resource.data.get('groupIds', []));
+      allow read: if isSignedIn() && sameEmpresa(resource.data.empresaId);
+      allow create: if request.resource.data.empresaId == myEmpresaId()
+        && canWriteScopedCatalog(request.resource.data.get('groupIds', []));
+      allow update: if resource.data.empresaId == request.resource.data.empresaId
+        && sameEmpresa(resource.data.empresaId)
+        && canWriteScopedCatalog(request.resource.data.get('groupIds', []));
+      allow delete: if sameEmpresa(resource.data.empresaId)
+        && canWriteScopedCatalog(resource.data.get('groupIds', []));
     }
 
     match /availableHours/{id} {
-      allow read: if isSignedIn();
-      allow create: if canWriteScopedCatalog(request.resource.data.get('groupIds', []));
-      allow update: if canWriteScopedCatalog(request.resource.data.get('groupIds', []));
-      allow delete: if canWriteScopedCatalog(resource.data.get('groupIds', []));
+      allow read: if isSignedIn() && sameEmpresa(resource.data.empresaId);
+      allow create: if request.resource.data.empresaId == myEmpresaId()
+        && canWriteScopedCatalog(request.resource.data.get('groupIds', []));
+      allow update: if resource.data.empresaId == request.resource.data.empresaId
+        && sameEmpresa(resource.data.empresaId)
+        && canWriteScopedCatalog(request.resource.data.get('groupIds', []));
+      allow delete: if sameEmpresa(resource.data.empresaId)
+        && canWriteScopedCatalog(resource.data.get('groupIds', []));
     }
 
     // -----------------------------------------------------------------
@@ -234,22 +298,53 @@ service cloud.firestore {
     // info, and the admin "Clientes" screen itself, stay permission-gated.
     // -----------------------------------------------------------------
     match /clients/{id} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSuperAdmin() || hasPermission('manageClients');
-      allow delete: if isSuperAdmin() || hasPermission('manageClients');
+      allow read: if isSignedIn() && sameEmpresa(resource.data.empresaId);
+      allow create: if isSignedIn() && request.resource.data.empresaId == myEmpresaId();
+      allow update: if resource.data.empresaId == request.resource.data.empresaId
+        && sameEmpresa(resource.data.empresaId)
+        && (isSuperAdmin() || hasPermission('manageClients'));
+      allow delete: if sameEmpresa(resource.data.empresaId)
+        && (isSuperAdmin() || hasPermission('manageClients'));
     }
 
     // -----------------------------------------------------------------
-    // systemConfig — global system configuration (Sprint 22)
-    // Readable by any signed-in user (all screens need the current mode);
-    // writable only by super_admin. The time-selection toggle this doc used
-    // to hold moved to per-team (`groups/{id}.timeSelectionMode`); this
-    // collection is kept for any other future global setting.
+    // systemConfig — global system configuration (Sprint 22). Genuinely
+    // platform-wide (one deployed web build, one version banner for every
+    // empresa) — deliberately does NOT carry empresaId, unlike every other
+    // collection in this file. Readable by any signed-in user; writable
+    // only by the platform owner (not isSuperAdmin() — once more than one
+    // empresa exists, any tenant's super_admin being able to overwrite the
+    // version banner for every other tenant would be a new cross-tenant
+    // capability that didn't exist when there was only one super_admin).
     // -----------------------------------------------------------------
     match /systemConfig/{doc} {
       allow read: if isSignedIn();
-      allow write: if isSuperAdmin();
+      allow write: if isPlatformOwner();
+    }
+
+    // -----------------------------------------------------------------
+    // empresas — tenants of the platform. Provisioned only by Michel
+    // (platform owner) via the createEmpresa Cloud Function; toggled
+    // active/suspended via the toggleEmpresa Cloud Function or directly
+    // here. `get` is open to any signed-in member of that empresa (not just
+    // admins) because AuthProvider watches this doc live for every logged
+    // in user, to force-sign-out the moment their empresa is deactivated.
+    // -----------------------------------------------------------------
+    match /empresas/{empresaId} {
+      allow get: if isPlatformOwner() || (isSignedIn() && sameEmpresa(empresaId));
+      allow list: if isPlatformOwner();
+      allow create, update, delete: if isPlatformOwner();
+    }
+
+    // -----------------------------------------------------------------
+    // platformOwners — allow-list of who may manage empresas (Michel).
+    // Never written from the app — provisioned by hand / a one-time admin
+    // script only (see scripts/migrate-empresas/). A client only ever needs
+    // to check its own membership (AuthGate), never enumerate the list.
+    // -----------------------------------------------------------------
+    match /platformOwners/{uid} {
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
     }
 
     // -----------------------------------------------------------------

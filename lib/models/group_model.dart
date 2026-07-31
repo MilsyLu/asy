@@ -9,6 +9,9 @@ class GroupModel {
   final String description;
   final DateTime? createdAt;
 
+  /// The tenant ("empresa") this team belongs to. See [AppUser.empresaId].
+  final String? empresaId;
+
   /// 'catalog' (pick from configured `availableHours`) or 'free' (any time)
   /// — replaces the old single global `systemConfig.timeSelectionMode`, now
   /// per-team. Reuses [SystemConfigModel]'s mode constants. Defaults to
@@ -21,6 +24,7 @@ class GroupModel {
     required this.name,
     this.description = '',
     this.createdAt,
+    this.empresaId,
     this.timeSelectionMode = SystemConfigModel.modeCatalog,
   });
 
@@ -32,6 +36,7 @@ class GroupModel {
       name: map['name'] as String? ?? '',
       description: map['description'] as String? ?? '',
       createdAt: (map['createdAt'] as Timestamp?)?.toDate(),
+      empresaId: map['empresaId'] as String?,
       timeSelectionMode: map['timeSelectionMode'] as String? ??
           SystemConfigModel.modeCatalog,
     );
@@ -48,6 +53,7 @@ class GroupModel {
       'createdAt': withServerTimestamp
           ? FieldValue.serverTimestamp()
           : (createdAt != null ? Timestamp.fromDate(createdAt!) : null),
+      'empresaId': empresaId,
       'timeSelectionMode': timeSelectionMode,
     };
   }

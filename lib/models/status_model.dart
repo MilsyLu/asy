@@ -14,11 +14,15 @@ class StatusModel {
   /// `TaskTypeModel.groupIds`.
   final List<String> groupIds;
 
+  /// The tenant ("empresa") this status belongs to. See `AppUser.empresaId`.
+  final String? empresaId;
+
   const StatusModel({
     required this.id,
     required this.name,
     this.order = 0,
     this.groupIds = const [],
+    this.empresaId,
   });
 
   factory StatusModel.fromMap(String id, Map<String, dynamic> map) {
@@ -30,6 +34,7 @@ class StatusModel {
               ?.map((e) => e.toString())
               .toList() ??
           const [],
+      empresaId: map['empresaId'] as String?,
     );
   }
 
@@ -49,6 +54,7 @@ class StatusModel {
       'name': name,
       'order': order,
       'groupIds': groupIds,
+      'empresaId': empresaId,
     };
   }
 }

@@ -8,6 +8,8 @@ const { checkReminders } = require("./src/checkReminders");
 const { deleteUserPermanently } = require("./src/deleteUser");
 const { cleanOldNotifications } = require("./src/cleanOldNotifications");
 const { syncTaskFromSheet } = require("./src/syncTaskFromSheet");
+const { createEmpresa } = require("./src/createEmpresa");
+const { toggleEmpresa } = require("./src/toggleEmpresa");
 
 exports.onTaskCreate = onTaskCreate;
 exports.onTaskUpdate = onTaskUpdate;
@@ -15,3 +17,5 @@ exports.checkReminders = checkReminders;
 exports.deleteUserPermanently = deleteUserPermanently;
 exports.cleanOldNotifications = cleanOldNotifications;
 exports.syncTaskFromSheet = syncTaskFromSheet;
+exports.createEmpresa = createEmpresa;
+exports.toggleEmpresa = toggleEmpresa;

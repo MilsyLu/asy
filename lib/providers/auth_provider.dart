@@ -5,7 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../models/app_user.dart';
+import '../models/empresa_model.dart';
 import '../services/auth_service.dart';
+import '../services/empresa_repository.dart';
 import '../services/notification_service.dart';
 import '../services/user_repository.dart';
 
@@ -16,8 +18,10 @@ class AuthProvider extends ChangeNotifier {
   AuthProvider({
     AuthService? authService,
     UserRepository? userRepository,
+    EmpresaRepository? empresaRepository,
   })  : _authService = authService ?? AuthService(),
-        _userRepository = userRepository ?? UserRepository() {
+        _userRepository = userRepository ?? UserRepository(),
+        _empresaRepository = empresaRepository ?? EmpresaRepository() {
     _authSub = _authService.authStateChanges.listen(_onAuthChanged);
     // A session left open across midnight never calls signIn() again (the
     // Firebase Auth token just stays valid), so nothing would otherwise
@@ -34,14 +38,25 @@ class AuthProvider extends ChangeNotifier {
 
   final AuthService _authService;
   final UserRepository _userRepository;
+  final EmpresaRepository _empresaRepository;
 
   StreamSubscription<User?>? _authSub;
   StreamSubscription<AppUser?>? _userSub;
+  StreamSubscription<EmpresaModel?>? _empresaSub;
   Timer? _dayRolloverTimer;
 
   User? firebaseUser;
   AppUser? appUser;
   bool isLoading = true;
+
+  /// True if the signed-in Firebase Auth account is a platform owner
+  /// (Michel) — a completely separate identity from any empresa's own
+  /// super_admin, checked once per sign-in via `platformOwners/{uid}` (see
+  /// [EmpresaRepository.isPlatformOwner]). When true, [appUser] is
+  /// deliberately left null and no tenant-scoped subscription is ever
+  /// started — see `AuthGate` in `app.dart`, which routes a platform owner
+  /// straight to `PlatformAdminShell` instead of `MainShell`.
+  bool isPlatformOwner = false;
 
   DateTime _today = _startOfDay(DateTime.now());
 
@@ -85,12 +100,14 @@ class AuthProvider extends ChangeNotifier {
   bool managesGroup(String? groupId) =>
       appUser?.managesGroup(groupId) ?? false;
 
-  void _onAuthChanged(User? user) {
+  void _onAuthChanged(User? user) async {
     firebaseUser = user;
     _userSub?.cancel();
+    _empresaSub?.cancel();
 
     if (user == null) {
       appUser = null;
+      isPlatformOwner = false;
       isLoading = false;
       notifyListeners();
       return;
@@ -98,6 +115,21 @@ class AuthProvider extends ChangeNotifier {
 
     isLoading = true;
     notifyListeners();
+
+    // Checked first, before any tenant-scoped subscription starts — a
+    // platform owner (Michel) never has (and never needs) a `users/{uid}`
+    // profile of their own. This is a one-time check, not a live watch:
+    // platform-owner status essentially never changes for an already-open
+    // session, so it's not worth the extra always-on listener.
+    final owner = await _empresaRepository.isPlatformOwner(user.uid);
+    if (owner) {
+      isPlatformOwner = true;
+      appUser = null;
+      isLoading = false;
+      notifyListeners();
+      return;
+    }
+    isPlatformOwner = false;
 
     _userSub = _userRepository.watchUser(user.uid).listen((profile) async {
       if (profile != null && !profile.isActive) {
@@ -115,7 +147,25 @@ class AuthProvider extends ChangeNotifier {
       isLoading = false;
       notifyListeners();
       if (profile != null) {
-        _registerFcmToken(profile.id);
+        _registerFcmToken(profile.id, profile.empresaId);
+        _watchEmpresaStatus(profile.empresaId);
+      }
+    });
+  }
+
+  /// Mirrors the individual-account force-signout above, one level up: if
+  /// the signed-in user's own empresa is deactivated (e.g. Michel cuts off
+  /// a customer for non-payment) while their session is open, they're
+  /// signed out immediately with a clear reason instead of silently hitting
+  /// permission-denied errors on their next Firestore call.
+  void _watchEmpresaStatus(String? empresaId) {
+    _empresaSub?.cancel();
+    if (empresaId == null) return;
+    _empresaSub = _empresaRepository.watchEmpresa(empresaId).listen((empresa) async {
+      if (empresa != null && !empresa.activo) {
+        deactivationMessage =
+            'Tu empresa ha sido desactivada. Contacta al administrador de la plataforma.';
+        await signOut();
       }
     });
   }
@@ -124,7 +174,7 @@ class AuthProvider extends ChangeNotifier {
     deactivationMessage = null;
   }
 
-  Future<void> _registerFcmToken(String uid) async {
+  Future<void> _registerFcmToken(String uid, String? empresaId) async {
     debugPrint('[WEB_FCM_DIAG] _registerFcmToken() ENTRY uid=$uid');
     try {
       debugPrint('[WEB_FCM_DIAG] _registerFcmToken(): calling getToken()...');
@@ -134,7 +184,7 @@ class AuthProvider extends ChangeNotifier {
         '${token == null ? "NULL — addFcmToken() will NOT be called" : "token(len=${token.length}) — calling addFcmToken()"}',
       );
       if (token != null) {
-        await _userRepository.addFcmToken(uid, token);
+        await _userRepository.addFcmToken(uid, token, callerEmpresaId: empresaId);
         debugPrint('[WEB_FCM_DIAG] _registerFcmToken(): addFcmToken() returned');
       }
       // Sprint 7.4.3 Parte 1: this only swaps the handler reference — the
@@ -144,7 +194,7 @@ class AuthProvider extends ChangeNotifier {
       // a new listener each time.
       NotificationService.instance.setTokenRefreshHandler((newToken) {
         debugPrint('[WEB_FCM_DIAG] onTokenRefresh: new token (len=${newToken.length}), calling addFcmToken(uid=$uid)');
-        _userRepository.addFcmToken(uid, newToken);
+        _userRepository.addFcmToken(uid, newToken, callerEmpresaId: empresaId);
       });
     } catch (e, st) {
       debugPrint(
@@ -204,6 +254,7 @@ class AuthProvider extends ChangeNotifier {
   void dispose() {
     _authSub?.cancel();
     _userSub?.cancel();
+    _empresaSub?.cancel();
     _dayRolloverTimer?.cancel();
     super.dispose();
   }

@@ -56,3 +56,6 @@ firebase-debug.*.log
 # Seed script (Firebase Admin SDK service account key must never be committed)
 /scripts/seed/node_modules/
 /scripts/seed/serviceAccountKey.json
+
+# Rules-unit-testing scratch harness
+/test/rules/node_modules/
