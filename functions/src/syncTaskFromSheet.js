@@ -24,6 +24,19 @@ const { getFirestore, Timestamp } = require("firebase-admin/firestore");
  * Usuarios names for this to work, by design (see the conversation this
  * shipped from — Michel chose "rename the sheet to match CheCu" over
  * building a separate mapping table).
+ *
+ * Multi-tenant: this endpoint is single-tenant by design — it's wired to
+ * one shared secret for one Apps Script (VinApp's), so it's scoped to a
+ * single `SHEET_SYNC_EMPRESA_ID` (set in `functions/.env`, VinApp's real
+ * empresaId) rather than accepting one from the request body. This was
+ * ADDED after the multi-tenant migration — this file predates it and, until
+ * fixed, created tasks with no `empresaId` at all (invisible in the app,
+ * since every read is `where('empresaId', '==', ...)`) and resolved
+ * users/groups/statuses/taskTypes across every tenant instead of just
+ * VinApp's. If Michel ever sells the Sheets integration to a second empresa,
+ * this needs a real per-sheet empresaId (e.g. a second secret+id pair, or a
+ * signed value baked into that sheet's Script Properties) — not just a
+ * second env var, since both sheets would hit the same URL.
  */
 const syncTaskFromSheet = onRequest(async (req, res) => {
   if (req.method !== "POST") {
@@ -35,6 +48,13 @@ const syncTaskFromSheet = onRequest(async (req, res) => {
   const providedSecret = req.get("X-Sheet-Secret");
   if (!expectedSecret || !providedSecret || providedSecret !== expectedSecret) {
     res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const empresaId = process.env.SHEET_SYNC_EMPRESA_ID;
+  if (!empresaId) {
+    console.error("[SHEET_SYNC][ERROR] SHEET_SYNC_EMPRESA_ID is not configured");
+    res.status(500).json({ error: "Internal error" });
     return;
   }
 
@@ -63,10 +83,10 @@ const syncTaskFromSheet = onRequest(async (req, res) => {
 
   try {
     const [usersSnap, groupsSnap, statusesSnap, taskTypesSnap] = await Promise.all([
-      db.collection("users").get(),
-      db.collection("groups").get(),
-      db.collection("statuses").get(),
-      db.collection("taskTypes").get(),
+      db.collection("users").where("empresaId", "==", empresaId).get(),
+      db.collection("groups").where("empresaId", "==", empresaId).get(),
+      db.collection("statuses").where("empresaId", "==", empresaId).get(),
+      db.collection("taskTypes").where("empresaId", "==", empresaId).get(),
     ]);
 
     const findIdByName = (snap, name) => {
@@ -99,6 +119,7 @@ const syncTaskFromSheet = onRequest(async (req, res) => {
       groupId,
       taskTypeId,
       statusId,
+      empresaId,
     };
 
     let resultTaskId = taskId || null;
@@ -106,11 +127,13 @@ const syncTaskFromSheet = onRequest(async (req, res) => {
     if (resultTaskId) {
       const ref = db.collection("tasks").doc(resultTaskId);
       const existing = await ref.get();
-      if (existing.exists) {
+      if (existing.exists && existing.get("empresaId") === empresaId) {
         await ref.update(fields);
       } else {
-        // Stale id — e.g. the task was deleted in CheCu since the sheet
-        // last synced this row. Fall through to creating a fresh one.
+        // Stale id (task deleted in CheCu since the sheet last synced this
+        // row) or, defensively, a doc that doesn't belong to this empresa —
+        // either way, fall through to creating a fresh one instead of
+        // touching it.
         resultTaskId = null;
       }
     }
