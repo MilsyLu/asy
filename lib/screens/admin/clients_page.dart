@@ -15,6 +15,7 @@ import '../../services/catalog_repository.dart';
 import '../../services/task_repository.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/responsive_sheet.dart';
 import '../../widgets/side_panel_shell.dart';
 
 /// Admin: CRUD for `clients`. Not team-scoped — `manageClients` is a flat
@@ -35,10 +36,223 @@ class _ClientsPageState extends State<ClientsPage> {
   final _searchController = TextEditingController();
   String _query = '';
 
+  // Tablet/desktop-only bulk inline-edit mode (Sprint UX: "Editar" toggles
+  // every row's Nombre/Teléfono/Notas into text fields, "Guardar cambios"
+  // persists all of them at once). Keyed by client id, not tied to the
+  // current search filter, so filtering doesn't affect what gets saved.
+  bool _editMode = false;
+  bool _isSavingBulk = false;
+  Map<String, _ClientEditControllers> _editControllers = {};
+
   @override
   void dispose() {
     _searchController.dispose();
+    _disposeEditControllers();
     super.dispose();
+  }
+
+  void _disposeEditControllers() {
+    for (final c in _editControllers.values) {
+      c.dispose();
+    }
+    _editControllers = {};
+  }
+
+  void _enterEditMode(List<ClientModel> clients) {
+    _disposeEditControllers();
+    for (final c in clients) {
+      _editControllers[c.id] = _ClientEditControllers(c);
+    }
+    setState(() => _editMode = true);
+  }
+
+  void _cancelEditMode() {
+    _disposeEditControllers();
+    setState(() => _editMode = false);
+  }
+
+  Future<void> _saveBulkEdits(List<ClientModel> clients) async {
+    for (final c in clients) {
+      final ctrl = _editControllers[c.id];
+      if (ctrl != null && ctrl.name.text.trim().isEmpty) {
+        SnackbarUtils.showError(context, 'El nombre de "${c.name}" no puede quedar vacío.');
+        return;
+      }
+    }
+    setState(() => _isSavingBulk = true);
+    final repo = context.read<CatalogRepository>();
+    var updated = 0;
+    try {
+      for (final c in clients) {
+        final ctrl = _editControllers[c.id];
+        if (ctrl == null) continue;
+        final newName = ctrl.name.text.trim();
+        final newPhone = Validators.cleanPhone(ctrl.phone.text);
+        final newNotes = ctrl.notes.text.trim();
+        if (newName != c.name || newPhone != c.phone || newNotes != c.notes) {
+          await repo.updateClient(c.id, newName, newPhone, notes: newNotes);
+          updated++;
+        }
+      }
+      if (mounted) {
+        SnackbarUtils.showSuccess(
+          context,
+          updated == 0 ? 'Sin cambios para guardar' : '$updated cliente(s) actualizado(s)',
+        );
+        _disposeEditControllers();
+        setState(() => _editMode = false);
+      }
+    } catch (e) {
+      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+    } finally {
+      if (mounted) setState(() => _isSavingBulk = false);
+    }
+  }
+
+  Future<void> _confirmDeleteClient(ClientModel client) async {
+    final catalogRepo = context.read<CatalogRepository>();
+    final taskRepo = context.read<TaskRepository>();
+    final catalog = context.read<CatalogProvider>();
+    final history = await taskRepo.getClientTaskHistory(
+      client.id,
+      completedStatusId: catalog.completedStatusId,
+      rescheduledStatusId: catalog.rescheduledStatusId,
+    );
+    if (!mounted) return;
+    if (history.hasHistory) {
+      await showInfoDialog(
+        context,
+        title: 'No es posible eliminar este cliente',
+        message: 'Este cliente tiene ${history.total} tarea(s) registradas. '
+            'Para conservar el historial, edita sus datos en lugar de eliminarlo.',
+      );
+      return;
+    }
+    final confirm = await showConfirmDialog(
+      context,
+      title: 'Eliminar cliente',
+      message: '¿Eliminar a "${client.name}" de forma permanente?',
+      confirmLabel: 'Eliminar',
+      destructive: true,
+    );
+    if (!confirm || !mounted) return;
+    try {
+      await catalogRepo.deleteClient(client.id);
+      _editControllers.remove(client.id);
+      if (mounted) SnackbarUtils.showSuccess(context, 'Cliente eliminado');
+    } catch (e) {
+      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+    }
+  }
+
+  /// Small read-only history popup, replacing the "Historial" section that
+  /// used to live inside the old full-detail sheet — now its own per-row
+  /// action so the row itself never needs to open a big form just to check
+  /// history.
+  void _showClientHistory(ClientModel client) {
+    final taskRepo = context.read<TaskRepository>();
+    final catalog = context.read<CatalogProvider>();
+    final historyFuture = taskRepo.getClientTaskHistory(
+      client.id,
+      completedStatusId: catalog.completedStatusId,
+      rescheduledStatusId: catalog.rescheduledStatusId,
+    );
+    showResponsiveSheet<void>(
+      context,
+      desktopMaxWidth: 380,
+      contentBuilder: (sheetCtx) {
+        final colors = sheetCtx.colors;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor: colors.primary.withValues(alpha: 0.15),
+                      child: Icon(LucideIcons.contact, color: colors.primary, size: 16),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        client.name,
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Divider(color: colors.divider, height: 1),
+                const SizedBox(height: 16),
+                FutureBuilder(
+                  future: historyFuture,
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Center(
+                          child: SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      );
+                    }
+                    final history = snapshot.data!;
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: _HistoryStatBox(
+                            label: 'Tareas',
+                            value: '${history.total}',
+                            color: colors.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _HistoryStatBox(
+                            label: 'Completadas',
+                            value: '${history.completed}',
+                            color: colors.success,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _HistoryStatBox(
+                            label: 'Reprogramadas',
+                            value: '${history.rescheduled}',
+                            color: colors.error,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(sheetCtx).pop(),
+                    child: const Text('Cerrar'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -81,6 +295,47 @@ class _ClientsPageState extends State<ClientsPage> {
       ),
     );
 
+    // Tablet/desktop only: search field + Editar/Guardar cambios/Cancelar
+    // toolbar. Mobile keeps just the plain search field, untouched.
+    final toolbar = (isMobile || !canEdit)
+        ? searchField
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: searchField),
+              Padding(
+                padding: const EdgeInsets.only(top: 12, right: 16),
+                child: _editMode
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextButton(
+                            onPressed: _isSavingBulk ? null : _cancelEditMode,
+                            child: const Text('Cancelar'),
+                          ),
+                          const SizedBox(width: 4),
+                          ElevatedButton.icon(
+                            onPressed: _isSavingBulk ? null : () => _saveBulkEdits(clients),
+                            icon: _isSavingBulk
+                                ? const SizedBox(
+                                    height: 14,
+                                    width: 14,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(LucideIcons.check, size: 16),
+                            label: const Text('Guardar cambios'),
+                          ),
+                        ],
+                      )
+                    : OutlinedButton.icon(
+                        onPressed: () => _enterEditMode(clients),
+                        icon: const Icon(LucideIcons.pencil, size: 16),
+                        label: const Text('Editar'),
+                      ),
+              ),
+            ],
+          );
+
     Widget buildList({required bool shrink}) {
       if (filtered.isEmpty) {
         return EmptyState(
@@ -90,17 +345,35 @@ class _ClientsPageState extends State<ClientsPage> {
           icon: LucideIcons.contact,
         );
       }
-      return ListView.separated(
+      if (isMobile) {
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+          shrinkWrap: shrink,
+          physics: shrink ? const NeverScrollableScrollPhysics() : null,
+          itemCount: filtered.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 8),
+          itemBuilder: (context, index) {
+            final client = filtered[index];
+            return _ClientCard(
+              client: client,
+              onTap: () => _showClientDetailSheet(context, client, canEdit: canEdit),
+            );
+          },
+        );
+      }
+      return ListView.builder(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
         shrinkWrap: shrink,
         physics: shrink ? const NeverScrollableScrollPhysics() : null,
         itemCount: filtered.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           final client = filtered[index];
-          return _ClientCard(
+          return _ClientTableRow(
             client: client,
-            onTap: () => _showClientDetailSheet(context, client, canEdit: canEdit),
+            editControllers: _editMode ? _editControllers[client.id] : null,
+            canEdit: canEdit,
+            onHistory: () => _showClientHistory(client),
+            onDelete: () => _confirmDeleteClient(client),
           );
         },
       );
@@ -108,14 +381,14 @@ class _ClientsPageState extends State<ClientsPage> {
 
     Widget body;
     if (isMobile) {
-      body = Column(children: [searchField, Expanded(child: buildList(shrink: false))]);
+      body = Column(children: [toolbar, Expanded(child: buildList(shrink: false))]);
     } else if (!canEdit) {
       // No create panel to show if this admin can't create/edit clients.
       body = Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: AppLayout.contentMaxWidthWide),
           child: Column(
-            children: [searchField, Expanded(child: buildList(shrink: false))],
+            children: [toolbar, Expanded(child: buildList(shrink: false))],
           ),
         ),
       );
@@ -136,7 +409,7 @@ class _ClientsPageState extends State<ClientsPage> {
                       constraints:
                           const BoxConstraints(maxWidth: AppLayout.contentMaxWidthWide),
                       child: Column(
-                        children: [searchField, Expanded(child: buildList(shrink: false))],
+                        children: [toolbar, Expanded(child: buildList(shrink: false))],
                       ),
                     ),
                   ),
@@ -154,7 +427,7 @@ class _ClientsPageState extends State<ClientsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                searchField,
+                toolbar,
                 buildList(shrink: true),
                 const SizedBox(height: 16),
                 const Padding(
@@ -243,6 +516,149 @@ class _ClientCard extends StatelessWidget {
             Icon(LucideIcons.chevronRight, color: colors.textSecondary, size: 16),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Per-client text controllers used while [_ClientsPageState._editMode] is
+/// active — pre-filled with the client's current values, diffed against
+/// them again on save so only actually-changed rows trigger a write.
+class _ClientEditControllers {
+  _ClientEditControllers(ClientModel client)
+      : name = TextEditingController(text: client.name),
+        phone = TextEditingController(text: client.phone),
+        notes = TextEditingController(text: client.notes);
+
+  final TextEditingController name;
+  final TextEditingController phone;
+  final TextEditingController notes;
+
+  void dispose() {
+    name.dispose();
+    phone.dispose();
+    notes.dispose();
+  }
+}
+
+/// Tablet/desktop horizontal row: Nombre | Teléfono | Notas | Historial |
+/// Eliminar. Replaces the old tap-to-open-sheet interaction on these
+/// widths — editing happens in place (see [editControllers]) and history/
+/// delete are their own small per-row actions instead of being bundled
+/// into one big sheet. Mobile keeps [_ClientCard] instead, unchanged.
+class _ClientTableRow extends StatelessWidget {
+  const _ClientTableRow({
+    required this.client,
+    required this.editControllers,
+    required this.canEdit,
+    required this.onHistory,
+    required this.onDelete,
+  });
+
+  final ClientModel client;
+
+  /// Non-null while bulk edit mode is active — swaps the row's text into
+  /// editable fields bound to these controllers.
+  final _ClientEditControllers? editControllers;
+  final bool canEdit;
+  final VoidCallback onHistory;
+  final VoidCallback onDelete;
+
+  Widget _cell(BuildContext context, {
+    required int flex,
+    required String value,
+    required TextEditingController? controller,
+    required String hint,
+  }) {
+    final colors = context.colors;
+    return Expanded(
+      flex: flex,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: controller != null
+            ? TextFormField(
+                controller: controller,
+                style: TextStyle(color: colors.textPrimary, fontSize: 13),
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: hint,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                ),
+              )
+            : Text(
+                value.isEmpty ? '—' : value,
+                style: TextStyle(
+                  color: value.isEmpty ? colors.textSecondary : colors.textPrimary,
+                  fontSize: 13,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final editing = editControllers != null;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      margin: const EdgeInsets.only(bottom: 6),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colors.primary.withValues(alpha: editing ? 0.45 : 0.15)),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final showNotes = constraints.maxWidth >= 480;
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              CircleAvatar(
+                radius: 14,
+                backgroundColor: colors.primary.withValues(alpha: 0.15),
+                child: Icon(LucideIcons.contact, color: colors.primary, size: 13),
+              ),
+              const SizedBox(width: 8),
+              _cell(
+                context,
+                flex: 3,
+                value: client.name,
+                controller: editControllers?.name,
+                hint: 'Nombre',
+              ),
+              _cell(
+                context,
+                flex: 2,
+                value: client.phone.isEmpty ? '' : Validators.formatPhone(client.phone),
+                controller: editControllers?.phone,
+                hint: 'Teléfono',
+              ),
+              if (showNotes)
+                _cell(
+                  context,
+                  flex: 3,
+                  value: client.notes,
+                  controller: editControllers?.notes,
+                  hint: 'Notas',
+                ),
+              IconButton(
+                tooltip: 'Historial',
+                icon: Icon(LucideIcons.clock, size: 17, color: colors.primary),
+                onPressed: onHistory,
+              ),
+              if (canEdit)
+                IconButton(
+                  tooltip: 'Eliminar',
+                  icon: Icon(LucideIcons.trash2, size: 17, color: colors.error),
+                  onPressed: onDelete,
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -669,6 +1085,43 @@ class _HistoryChip extends StatelessWidget {
         border: Border.all(color: colors.primary.withValues(alpha: 0.3)),
       ),
       child: Text(label, style: TextStyle(color: colors.primary, fontSize: 11)),
+    );
+  }
+}
+
+/// Boxed stat used by the tablet/desktop "Historial" popup — label above a
+/// large bold number, matching the visual weight of stat boxes used
+/// elsewhere in the app (e.g. Reportes) instead of the plainer pill chips.
+class _HistoryStatBox extends StatelessWidget {
+  const _HistoryStatBox({required this.label, required this.value, required this.color});
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: colors.background,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: colors.textSecondary, fontSize: 11),
+          ),
+          const SizedBox(height: 4),
+          Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold)),
+        ],
+      ),
     );
   }
 }

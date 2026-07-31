@@ -7,6 +7,7 @@ import '../../../models/app_user.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/catalog_provider.dart';
 import '../../../widgets/loading_indicator.dart';
+import '../../../widgets/responsive_sheet.dart';
 
 /// Report 3: per-user task counts (assigned / completed / rescheduled)
 /// with quick highlight cards, a top-3 productivity ranking and a tap-for-
@@ -177,16 +178,13 @@ class PerformanceReportTab extends StatelessWidget {
 /// fields, no extra query. Racha actual / mejor racha come straight from
 /// [AppUser.streakDays] / [AppUser.maxStreakDays].
 void _showUserDetailSheet(BuildContext context, AppUser? user, _UserStats stats) {
-  final colors = context.colors;
   final name = user?.name ?? 'Sin asignar';
 
-  showModalBottomSheet(
-    context: context,
-    backgroundColor: colors.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-    ),
-    builder: (sheetContext) {
+  showResponsiveSheet(
+    context,
+    desktopMaxWidth: 460,
+    contentBuilder: (sheetContext) {
+      final colors = sheetContext.colors;
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),

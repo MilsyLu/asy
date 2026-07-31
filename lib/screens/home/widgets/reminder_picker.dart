@@ -4,6 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../widgets/responsive_sheet.dart';
 
 /// The "Recordatorio" picker: a fixed set of relative offsets before the
 /// task's scheduled time, plus a free "Personalizado" date+time.
@@ -126,13 +127,10 @@ Future<ReminderPickResult?> pickReminder(
   required DateTime? currentReminderDateTime,
   required DateTime? taskDateTime,
 }) async {
-  final result = await showModalBottomSheet<ReminderOption>(
-    context: context,
-    backgroundColor: context.colors.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
-    builder: (sheetCtx) {
+  final result = await showResponsiveSheet<ReminderOption>(
+    context,
+    desktopMaxWidth: 400,
+    contentBuilder: (sheetCtx) {
       final colors = sheetCtx.colors;
       return SafeArea(
         top: false,

@@ -20,6 +20,7 @@ import '../../services/task_repository.dart';
 import '../../services/user_repository.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/responsive_sheet.dart';
 import '../../widgets/user_avatar.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -115,20 +116,16 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   /// Mobile: bottom sheet (the standard mobile pattern for this kind of
-  /// action list). Tablet/desktop: a centered floating dialog instead — a
-  /// sheet pinned to the bottom of a tall desktop viewport could render
-  /// clipped/oddly placed, and "floating like the task detail dialog" is
-  /// exactly the reference the user asked for.
+  /// action list). Tablet/desktop: a centered floating dialog instead — via
+  /// the shared [showResponsiveSheet] helper, generalized from this screen's
+  /// original hand-written version of the same pattern.
   Future<void> _showPhotoOptions(AppUser user) async {
-    final colors = context.colors;
-    if (context.isMobile) {
-      await showModalBottomSheet<void>(
-        context: context,
-        backgroundColor: colors.surface,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        builder: (sheetCtx) => SafeArea(
+    await showResponsiveSheet<void>(
+      context,
+      desktopMaxWidth: 340,
+      contentBuilder: (sheetCtx) {
+        final colors = sheetCtx.colors;
+        return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -148,47 +145,8 @@ class _ProfilePageState extends State<ProfilePage> {
               const SizedBox(height: 8),
             ],
           ),
-        ),
-      );
-      return;
-    }
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogCtx) => Dialog(
-        backgroundColor: colors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-        ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 340),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Foto de perfil',
-                        style: TextStyle(
-                          color: colors.textPrimary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              ..._photoOptionTiles(dialogCtx, user),
-              const SizedBox(height: 8),
-            ],
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 

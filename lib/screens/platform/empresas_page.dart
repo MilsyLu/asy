@@ -10,6 +10,7 @@ import '../../models/empresa_model.dart';
 import '../../services/empresa_repository.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/responsive_sheet.dart';
 
 /// Michel's own screen: list every empresa (tenant), create a new one (with
 /// its first admin account), and activate/deactivate one — e.g. for
@@ -250,10 +251,10 @@ Future<void> _showEmpresaDetailSheet(
   final reasonController = TextEditingController();
   bool isSaving = false;
 
-  await showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    builder: (sheetContext) => StatefulBuilder(
+  await showResponsiveSheet<void>(
+    context,
+    desktopMaxWidth: 480,
+    contentBuilder: (sheetContext) => StatefulBuilder(
       builder: (sheetContext, setState) => Padding(
         padding: EdgeInsets.only(
           left: AppSpacing.lg,

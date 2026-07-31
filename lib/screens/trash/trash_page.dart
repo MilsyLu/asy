@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/snackbar_utils.dart';
@@ -210,12 +211,19 @@ class _TrashPageState extends State<TrashPage> {
                       child: ListView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                         itemCount: tasks.length,
-                        itemBuilder: (context, i) => _TrashCard(
-                          task: tasks[i],
-                          catalog: catalog,
-                          onRestore: () => _restore(tasks[i]),
-                          onDelete: () => _permanentlyDelete(tasks[i]),
-                        ),
+                        itemBuilder: (context, i) => context.isMobile
+                            ? _TrashCard(
+                                task: tasks[i],
+                                catalog: catalog,
+                                onRestore: () => _restore(tasks[i]),
+                                onDelete: () => _permanentlyDelete(tasks[i]),
+                              )
+                            : _TrashRow(
+                                task: tasks[i],
+                                catalog: catalog,
+                                onRestore: () => _restore(tasks[i]),
+                                onDelete: () => _permanentlyDelete(tasks[i]),
+                              ),
                       ),
                     ),
                   ],
@@ -478,6 +486,185 @@ class _TrashCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Trash task row (tablet/desktop) — same info as _TrashCard but condensed
+// into a single horizontal line so each entry takes far less vertical
+// space. Mobile keeps _TrashCard unchanged.
+// ---------------------------------------------------------------------------
+
+class _TrashRow extends StatelessWidget {
+  const _TrashRow({
+    required this.task,
+    required this.catalog,
+    required this.onRestore,
+    required this.onDelete,
+  });
+
+  final TaskModel task;
+  final CatalogProvider catalog;
+  final VoidCallback onRestore;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final taskType = catalog.taskTypeName(task.taskTypeId);
+    final typeColor =
+        catalog.taskTypeById(task.taskTypeId)?.parsedColor ?? colors.primary;
+    final formattedDate = AppDateUtils.formatShortDate(
+      AppDateUtils.parseDateKey(task.date),
+    );
+    final deletedByName = task.deletedByName ?? 'Usuario desconocido';
+    final createdByName =
+        task.createdBy != null ? catalog.userName(task.createdBy) : 'No disponible';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colors.error.withValues(alpha: 0.25)),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 720;
+
+          Widget actionButton(
+            IconData icon,
+            String label,
+            VoidCallback onTap, {
+            Color? color,
+          }) {
+            if (wide) {
+              return TextButton.icon(
+                onPressed: onTap,
+                style: color != null ? TextButton.styleFrom(foregroundColor: color) : null,
+                icon: Icon(icon, size: 15),
+                label: Text(label),
+              );
+            }
+            return IconButton(
+              tooltip: label,
+              onPressed: onTap,
+              icon: Icon(icon, size: 18, color: color),
+            );
+          }
+
+          return IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  width: 4,
+                  decoration: BoxDecoration(
+                    color: colors.error.withValues(alpha: 0.55),
+                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(10)),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Icon(LucideIcons.userCircle, size: 15, color: colors.textSecondary),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                task.clientName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: colors.textPrimary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            TaskTypeChip(label: taskType, color: typeColor, dense: true),
+                            const SizedBox(width: 8),
+                            actionButton(LucideIcons.rotateCcw, 'Restaurar', onRestore),
+                            actionButton(
+                              LucideIcons.trash2,
+                              'Eliminar',
+                              onDelete,
+                              color: colors.error,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        // Secondary metadata as badges that size to their own
+                        // content and wrap onto more lines instead of ever
+                        // truncating — narrowing the window never hides info.
+                        Padding(
+                          padding: const EdgeInsets.only(left: 21),
+                          child: Wrap(
+                            spacing: 12,
+                            runSpacing: 6,
+                            children: [
+                              _TrashMetaBadge(
+                                icon: LucideIcons.calendar,
+                                text: '$formattedDate ${task.hour}',
+                              ),
+                              if (task.deletedAt != null)
+                                _TrashMetaBadge(
+                                  icon: LucideIcons.trash2,
+                                  text:
+                                      'Eliminada: ${AppDateUtils.formatDateTimeOrDash(task.deletedAt)}',
+                                  color: colors.error.withValues(alpha: 0.75),
+                                ),
+                              _TrashMetaBadge(
+                                icon: LucideIcons.userPlus,
+                                text: 'Creada por: $createdByName',
+                              ),
+                              _TrashMetaBadge(
+                                icon: LucideIcons.userCircle,
+                                text: 'Eliminado por: $deletedByName',
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Small icon+text badge — sizes to its own content and never truncates.
+/// Used for _TrashRow's secondary metadata so narrowing the window makes
+/// badges wrap onto more lines instead of ever hiding information.
+class _TrashMetaBadge extends StatelessWidget {
+  const _TrashMetaBadge({required this.icon, required this.text, this.color});
+
+  final IconData icon;
+  final String text;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? context.colors.textSecondary;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: c),
+        const SizedBox(width: 4),
+        Text(text, style: TextStyle(color: c, fontSize: 12)),
+      ],
     );
   }
 }

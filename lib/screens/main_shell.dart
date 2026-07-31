@@ -74,7 +74,10 @@ class _CalendarSection extends StatefulWidget {
 }
 
 class _CalendarSectionState extends State<_CalendarSection> {
-  _CalView _view = _CalView.mes;
+  // Default to Semana on first open (no saved preference yet) — the user's
+  // explicit preference. Once they pick a view it's persisted and restored
+  // as usual.
+  _CalView _view = _CalView.semana;
   static const String _kPrefsKey = 'calendar_view';
 
   @override
@@ -89,7 +92,7 @@ class _CalendarSectionState extends State<_CalendarSection> {
     if (mounted && saved != null) {
       final v = _CalView.values.firstWhere(
         (e) => e.name == saved,
-        orElse: () => _CalView.mes,
+        orElse: () => _CalView.semana,
       );
       setState(() => _view = v);
     }

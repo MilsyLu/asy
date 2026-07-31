@@ -18,6 +18,7 @@ import '../../services/task_repository.dart';
 import '../../services/user_repository.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/responsive_sheet.dart';
 import '../../widgets/side_panel_shell.dart';
 import '../../widgets/user_avatar.dart';
 
@@ -862,14 +863,11 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
   bool tokensExpanded = false;
   bool isUserActive = user.isActive;
 
-  await showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: colors.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-    ),
-    builder: (sheetContext) {
+  await showResponsiveSheet<void>(
+    context,
+    desktopMaxWidth: 600,
+    scrollable: false,
+    contentBuilder: (sheetContext) {
       return StatefulBuilder(
         builder: (sheetContext, setState) {
           return Padding(

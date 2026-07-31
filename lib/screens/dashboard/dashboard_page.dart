@@ -15,6 +15,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/task_repository.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/responsive_sheet.dart';
 import '../home/widgets/compact_task_card.dart' show taskStatusColor;
 
 /// Spacing system (Sprint 6.3.1): preserved unchanged for mobile.
@@ -1731,14 +1732,11 @@ void _showOverdueTasksSheet(
   CatalogProvider catalog,
   List<TaskModel> overdueTasks,
 ) {
-  final colors = context.colors;
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: colors.surface,
-    shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-    builder: (sheetContext) => _DetailSheet(
+  showResponsiveSheet(
+    context,
+    desktopMaxWidth: 480,
+    scrollable: false,
+    contentBuilder: (sheetContext) => _DetailSheet(
       title: 'Tareas vencidas (${overdueTasks.length})',
       itemCount: overdueTasks.length,
       emptyMessage: 'No hay tareas vencidas.',
@@ -1764,14 +1762,11 @@ void _showUpcomingTasksSheet(
   CatalogProvider catalog,
   List<TaskModel> upcomingTasks,
 ) {
-  final colors = context.colors;
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: colors.surface,
-    shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-    builder: (sheetContext) => _DetailSheet(
+  showResponsiveSheet(
+    context,
+    desktopMaxWidth: 480,
+    scrollable: false,
+    contentBuilder: (sheetContext) => _DetailSheet(
       title: 'Próximas 24 horas (${upcomingTasks.length})',
       itemCount: upcomingTasks.length,
       emptyMessage: 'No hay tareas programadas en las próximas 24 horas.',
@@ -1797,14 +1792,11 @@ void _showInactiveUsersSheet(
   CatalogProvider catalog,
   List<InactiveUserStat> inactiveUsers,
 ) {
-  final colors = context.colors;
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: colors.surface,
-    shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-    builder: (sheetContext) => _DetailSheet(
+  showResponsiveSheet(
+    context,
+    desktopMaxWidth: 480,
+    scrollable: false,
+    contentBuilder: (sheetContext) => _DetailSheet(
       title: 'Usuarios sin actividad (${inactiveUsers.length})',
       itemCount: inactiveUsers.length,
       emptyMessage: 'Todos los usuarios completaron tareas en los últimos 7 días.',

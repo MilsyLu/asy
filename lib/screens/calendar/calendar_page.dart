@@ -111,9 +111,7 @@ class _CalendarPageState extends State<CalendarPage> {
           final selectedTasks = (tasksByDate[selectedKey] ?? [])
             ..sort((a, b) => a.hour.compareTo(b.hour));
 
-          return Column(
-            children: [
-              TableCalendar<TaskModel>(
+          final calendarWidget = TableCalendar<TaskModel>(
                 locale: 'es_ES',
                 firstDay: DateTime.utc(2020, 1, 1),
                 lastDay: DateTime.utc(2035, 12, 31),
@@ -189,49 +187,85 @@ class _CalendarPageState extends State<CalendarPage> {
                     );
                   },
                 ),
-              ),
-              const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: Row(
+              );
+
+          final listHeader = Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Row(
+              children: [
+                Icon(LucideIcons.listChecks, color: colors.primary, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  AppDateUtils.formatShortDate(_selectedDay),
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '${selectedTasks.length} ${selectedTasks.length == 1 ? 'tarea' : 'tareas'}',
+                  style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                ),
+              ],
+            ),
+          );
+
+          final listBody = selectedTasks.isEmpty
+              ? const EmptyState(
+                  message: 'No hay tareas para este día.',
+                  icon: LucideIcons.calendarDays,
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
+                  itemCount: selectedTasks.length,
+                  itemBuilder: (context, index) {
+                    final task = selectedTasks[index];
+                    return GestureDetector(
+                      onTap: () => showTaskDetailDialog(context, task),
+                      onLongPress: () => showTaskQuickActionsSheet(context, task),
+                      child: CompactTaskCard(task: task),
+                    );
+                  },
+                );
+
+          // Tablet/desktop: calendar and task list side by side (half width
+          // each) instead of stacked, so both are visible without scrolling
+          // past the month grid. Mobile keeps the original stacked layout.
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final splitView = constraints.maxWidth >= 900;
+              if (!splitView) {
+                return Column(
                   children: [
-                    Icon(LucideIcons.listChecks, color: colors.primary, size: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                      AppDateUtils.formatShortDate(_selectedDay),
-                      style: TextStyle(
-                        color: colors.textPrimary,
-                        fontWeight: FontWeight.w600,
+                    calendarWidget,
+                    const Divider(height: 1),
+                    listHeader,
+                    Expanded(child: listBody),
+                  ],
+                );
+              }
+              return SizedBox(
+                height: constraints.maxHeight,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: calendarWidget,
                       ),
                     ),
-                    const Spacer(),
-                    Text(
-                      '${selectedTasks.length} ${selectedTasks.length == 1 ? 'tarea' : 'tareas'}',
-                      style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                    VerticalDivider(width: 1, color: colors.divider),
+                    Expanded(
+                      child: Column(
+                        children: [listHeader, Expanded(child: listBody)],
+                      ),
                     ),
                   ],
                 ),
-              ),
-              Expanded(
-                child: selectedTasks.isEmpty
-                    ? const EmptyState(
-                        message: 'No hay tareas para este día.',
-                        icon: LucideIcons.calendarDays,
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
-                        itemCount: selectedTasks.length,
-                        itemBuilder: (context, index) {
-                          final task = selectedTasks[index];
-                          return GestureDetector(
-                            onTap: () => showTaskDetailDialog(context, task),
-                            onLongPress: () => showTaskQuickActionsSheet(context, task),
-                            child: CompactTaskCard(task: task),
-                          );
-                        },
-                      ),
-              ),
-            ],
+              );
+            },
           );
         },
       ),

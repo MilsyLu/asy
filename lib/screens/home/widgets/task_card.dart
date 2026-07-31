@@ -13,6 +13,7 @@ import '../../../providers/auth_provider.dart';
 import '../../../providers/catalog_provider.dart';
 import '../../../services/task_repository.dart';
 import '../../../widgets/confirm_dialog.dart';
+import '../../../widgets/responsive_sheet.dart';
 import '../../../widgets/task_type_chip.dart';
 import '../../../widgets/trash_dialog.dart';
 import '../add_edit_task_page.dart';
@@ -317,13 +318,10 @@ Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
   final canComplete = !isCompleted;
   final canReschedule = !isCompleted;
 
-  return showModalBottomSheet(
-    context: context,
-    backgroundColor: colors.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-    ),
-    builder: (sheetContext) {
+  return showResponsiveSheet(
+    context,
+    desktopMaxWidth: 400,
+    contentBuilder: (sheetContext) {
       return SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
