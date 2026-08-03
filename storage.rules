@@ -1,0 +1,35 @@
+rules_version = '2';
+
+// First storage.rules ever committed for this project — Storage security
+// previously lived wherever it was last set in the Firebase console,
+// unversioned. Deploying this FILE replaces whatever rules are live today,
+// so it must cover every path this app already writes to, not just the new
+// one (see `profile_photos/` below — the pre-existing upload from
+// `lib/services/storage_service.dart`).
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function myEmpresaId() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.empresaId;
+    }
+
+    // Pre-existing path (StorageService.uploadProfilePhoto/deleteProfilePhoto)
+    // — any signed-in user can view any avatar (shown throughout the app),
+    // but only the owner can upload/replace/delete their own.
+    match /profile_photos/{uid}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Casos de Soporte attachments — scoped per empresa, matching
+    // firestore.rules' sameEmpresa()/myEmpresaId() pattern. Create/read/
+    // comment on a case is open to any signed-in user in that empresa (see
+    // firestore.rules), so attachments follow the same openness.
+    match /supportCases/{empresaId}/{caseId}/{fileName} {
+      allow read, write: if isSignedIn() && myEmpresaId() == empresaId;
+    }
+  }
+}

@@ -10,6 +10,7 @@ import '../screens/admin/admin_panel_page.dart';
 import '../screens/admin/printer_configs_page.dart';
 import '../screens/home/home_page.dart';
 import '../screens/profile/settings_page.dart';
+import '../screens/support_cases/support_cases_page.dart';
 import '../screens/tools/qr_generator_page.dart';
 import '../screens/trash/trash_page.dart';
 import '../services/auth_service.dart';
@@ -175,6 +176,18 @@ class AppDrawer extends StatelessWidget {
                   },
                 ),
             ],
+            // Casos de Soporte — open to any signed-in user (mirrors
+            // main_shell.dart); permanent delete is gated inside the page.
+            ListTile(
+              leading: Icon(LucideIcons.lifeBuoy, color: colors.primary),
+              title: const Text('Casos de Soporte'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SupportCasesPage()),
+                );
+              },
+            ),
             // Generic "paste a link, get a QR" utility — no permission
             // gate, open to any signed-in user (mirrors main_shell.dart).
             ListTile(

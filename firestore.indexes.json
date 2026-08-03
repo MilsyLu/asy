@@ -138,6 +138,14 @@
         { "fieldPath": "empresaId", "order": "ASCENDING" },
         { "fieldPath": "clientName", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "supportCases",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "empresaId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

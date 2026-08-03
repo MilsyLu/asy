@@ -25,6 +25,12 @@ class AppPermissions {
   static const String viewReports = 'viewReports';
   static const String managePrinterConfigs = 'managePrinterConfigs';
 
+  /// Casos de Soporte are deliberately open to every signed-in user for
+  /// create/read/comment/status changes — this permission only gates the
+  /// one destructive action (permanent delete), unlike every permission
+  /// above which gates the whole module.
+  static const String manageSupportCases = 'manageSupportCases';
+
   static const List<String> all = [
     manageUsers,
     manageTasks,
@@ -33,6 +39,7 @@ class AppPermissions {
     manageClients,
     viewReports,
     managePrinterConfigs,
+    manageSupportCases,
   ];
 
   static const Map<String, String> labels = {
@@ -43,6 +50,7 @@ class AppPermissions {
     manageClients: 'Gestionar clientes',
     viewReports: 'Ver reportes',
     managePrinterConfigs: 'Gestionar configuración de VinApp Print',
+    manageSupportCases: 'Eliminar casos de soporte permanentemente',
   };
 }
 

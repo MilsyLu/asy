@@ -25,4 +25,20 @@ class StorageService {
           .delete();
     } catch (_) {}
   }
+
+  /// Uploads a support case attachment and returns its public download URL.
+  /// Path is empresa/case-scoped to match `storage.rules`.
+  static Future<String> uploadSupportCaseAttachment({
+    required String empresaId,
+    required String caseId,
+    required Uint8List bytes,
+    required String fileName,
+    required String contentType,
+  }) async {
+    final ref = FirebaseStorage.instance
+        .ref()
+        .child('supportCases/$empresaId/$caseId/${DateTime.now().millisecondsSinceEpoch}_$fileName');
+    final snapshot = await ref.putData(bytes, SettableMetadata(contentType: contentType));
+    return snapshot.ref.getDownloadURL();
+  }
 }

@@ -36,6 +36,7 @@ import 'notifications/notifications_page.dart';
 import 'profile/profile_page.dart';
 import 'profile/settings_page.dart';
 import 'reports/reports_page.dart';
+import 'support_cases/support_cases_page.dart';
 import 'tools/qr_generator_page.dart';
 import 'trash/trash_page.dart';
 import 'week/week_page.dart';
@@ -422,6 +423,15 @@ class _MainShellState extends State<MainShell> {
               page: TrashPage(showAppBar: false),
             ),
         ],
+        // Casos de Soporte — create/read/comment/status changes are open to
+        // any signed-in user by design (see firestore.rules); only
+        // permanent delete is gated behind manageSupportCases, checked
+        // inside the page itself, not the nav entry.
+        const _ShellEntry(
+          icon: LucideIcons.lifeBuoy,
+          label: 'Casos de Soporte',
+          page: SupportCasesPage(showAppBar: false),
+        ),
         // Generic "paste a link, get a QR" utility — no permission gate,
         // open to any signed-in user (unlike the admin-only entries above).
         const _ShellEntry(

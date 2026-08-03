@@ -13,6 +13,9 @@ class FirestoreCollections {
   static const String empresas = 'empresas';
   static const String platformOwners = 'platformOwners';
   static const String printerConfigs = 'printerConfigs';
+  static const String supportCases = 'supportCases';
+  static const String supportCaseCounters = 'supportCaseCounters';
+  static const String supportCaseHistory = 'history';
 
   // Global system configuration
   static const String systemConfig = 'systemConfig';

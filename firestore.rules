@@ -326,6 +326,37 @@ service cloud.firestore {
     }
 
     // -----------------------------------------------------------------
+    // Casos de Soporte — deliberately open: create/read/update (comment,
+    // change status/priority/assignee) require only being signed in and in
+    // the same empresa, no permission check. Only permanent delete is
+    // gated (manageSupportCases or super_admin) — the one destructive
+    // action, matching this file's general pattern of gating delete more
+    // strictly than everything else.
+    match /supportCaseCounters/{empresaId} {
+      allow read, write: if isSignedIn() && empresaId == myEmpresaId();
+    }
+
+    match /supportCases/{caseId} {
+      allow read: if sameEmpresa(resource.data.empresaId);
+      allow create: if isSignedIn() && request.resource.data.empresaId == myEmpresaId();
+      allow update: if sameEmpresa(resource.data.empresaId)
+        && resource.data.empresaId == request.resource.data.empresaId;
+      allow delete: if sameEmpresa(resource.data.empresaId)
+        && (isSuperAdmin() || hasPermission('manageSupportCases'));
+
+      match /history/{entryId} {
+        allow read: if sameEmpresa(
+          get(/databases/$(database)/documents/supportCases/$(caseId)).data.empresaId
+        );
+        allow create: if isSignedIn() && sameEmpresa(
+          get(/databases/$(database)/documents/supportCases/$(caseId)).data.empresaId
+        );
+        // History is an append-only log — never edited or removed
+        // individually (the parent case's own delete rule handles cleanup).
+      }
+    }
+
+    // -----------------------------------------------------------------
     // systemConfig — global system configuration (Sprint 22). Genuinely
     // platform-wide (one deployed web build, one version banner for every
     // empresa) — deliberately does NOT carry empresaId, unlike every other

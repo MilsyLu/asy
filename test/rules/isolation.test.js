@@ -31,6 +31,7 @@ const OWNER_UID = "platformOwnerUid";
 const OUTSIDER_UID = "noEmpresaUid"; // signed in, but no users/{uid} doc at all
 const ADMIN_NO_PRINT_PERM_A = "adminNoPrintPermA";
 const ADMIN_WITH_PRINT_PERM_A = "adminWithPrintPermA";
+const ADMIN_WITH_SUPPORT_PERM_A = "adminWithSupportPermA";
 
 let testEnv;
 let results = [];
@@ -72,6 +73,10 @@ async function seed() {
       email: "adminWithPrintPermA@test.com", role: "admin_equipo", empresaId: EMPRESA_A,
       groupId: null, managedGroupIds: ["groupA1"], permissions: { managePrinterConfigs: true }, isActive: true,
     });
+    await db.collection("users").doc(ADMIN_WITH_SUPPORT_PERM_A).set({
+      email: "adminWithSupportPermA@test.com", role: "admin_equipo", empresaId: EMPRESA_A,
+      groupId: null, managedGroupIds: ["groupA1"], permissions: { manageSupportCases: true }, isActive: true,
+    });
 
     for (const [empresaId, suffix] of [[EMPRESA_A, "A"], [EMPRESA_B, "B"]]) {
       await db.collection("groups").doc(`group${suffix}1`).set({ empresaId, name: `Equipo ${suffix}` });
@@ -80,6 +85,10 @@ async function seed() {
       await db.collection("availableHours").doc(`hour${suffix}1`).set({ empresaId, hour: "09:00", groupIds: [] });
       await db.collection("clients").doc(`client${suffix}1`).set({ empresaId, name: `Cliente ${suffix}`, phone: "111" });
       await db.collection("printerConfigs").doc(`printerConfig${suffix}1`).set({ empresaId, clientName: `Restaurante ${suffix}`, fields: {} });
+      await db.collection("supportCaseCounters").doc(empresaId).set({ value: 1, empresaId });
+      await db.collection("supportCases").doc(`supportCase${suffix}1`).set({
+        empresaId, caseNumber: 1, clientName: `Cliente ${suffix}`, status: "Nuevo", priority: "Media",
+      });
       await db.collection("tasks").doc(`task${suffix}1`).set({
         empresaId, groupId: `group${suffix}1`, assignedUserId: empresaId === EMPRESA_A ? WORKER_A : SUPER_B,
         date: "2026-08-01", hour: "09:00", visibleToAllGroups: false,
@@ -117,8 +126,8 @@ async function main() {
   });
   await run("superA CAN list users filtered to empresa A", async () => {
     const snap = await assertSucceeds(ctx(SUPER_A).collection("users").where("empresaId", "==", EMPRESA_A).get());
-    // SUPER_A, WORKER_A, ADMIN_NO_PRINT_PERM_A, ADMIN_WITH_PRINT_PERM_A
-    assert.strictEqual(snap.size, 4, `expected 4 users in empresa A, got ${snap.size}`);
+    // SUPER_A, WORKER_A, ADMIN_NO_PRINT_PERM_A, ADMIN_WITH_PRINT_PERM_A, ADMIN_WITH_SUPPORT_PERM_A
+    assert.strictEqual(snap.size, 5, `expected 5 users in empresa A, got ${snap.size}`);
   });
   await run("superA cannot DELETE a user from empresa B", async () => {
     await assertFails(ctx(SUPER_A).collection("users").doc(SUPER_B).delete());
@@ -160,6 +169,7 @@ async function main() {
     ["availableHours", "hourB1", { hour: "23:00" }],
     ["clients", "clientB1", { name: "hacked" }],
     ["printerConfigs", "printerConfigB1", { clientName: "hacked" }],
+    ["supportCases", "supportCaseB1", { clientName: "hacked" }],
   ];
   for (const [col, docId, patch] of catalogCases) {
     await run(`superA cannot READ ${col} doc from empresa B`, async () => {
@@ -192,6 +202,53 @@ async function main() {
   });
   await run("admin_equipo WITH managePrinterConfigs CAN read printerConfigs in their own empresa", async () => {
     await assertSucceeds(ctx(ADMIN_WITH_PRINT_PERM_A).collection("printerConfigs").doc("printerConfigA1").get());
+  });
+
+  // ---- supportCases: deliberately open (unlike every collection above) —
+  // create/read/update require only being signed in and same-empresa, no
+  // permission check. Only DELETE is gated behind manageSupportCases.
+  await run("workerA (trabajador_normal, no special permission) CAN create a supportCases doc in their own empresa", async () => {
+    await assertSucceeds(ctx(WORKER_A).collection("supportCases").doc("newCaseA1").set({
+      empresaId: EMPRESA_A, caseNumber: 2, clientName: "Cliente Nuevo", status: "Nuevo", priority: "Baja",
+      createdBy: WORKER_A, createdByName: "Worker A",
+    }));
+  });
+  await run("workerA CANNOT create a supportCases doc stamped with empresa B's id", async () => {
+    await assertFails(ctx(WORKER_A).collection("supportCases").doc("newCaseA2").set({
+      empresaId: EMPRESA_B, caseNumber: 99, clientName: "Hack", status: "Nuevo", priority: "Baja",
+    }));
+  });
+  await run("workerA CAN read a supportCases doc in their own empresa", async () => {
+    await assertSucceeds(ctx(WORKER_A).collection("supportCases").doc("supportCaseA1").get());
+  });
+  await run("workerA CAN update (e.g. change status of) a supportCases doc in their own empresa", async () => {
+    await assertSucceeds(ctx(WORKER_A).collection("supportCases").doc("supportCaseA1").update({ status: "En proceso" }));
+  });
+  await run("workerA CAN append a history entry on their own empresa's case", async () => {
+    await assertSucceeds(
+      ctx(WORKER_A).collection("supportCases").doc("supportCaseA1").collection("history").doc("h1").set({
+        type: "comment", text: "hola", authorId: WORKER_A, authorName: "Worker A",
+      })
+    );
+  });
+  await run("workerA CANNOT read history on empresa B's case", async () => {
+    await assertFails(
+      ctx(WORKER_A).collection("supportCases").doc("supportCaseB1").collection("history").doc("hB").get()
+    );
+  });
+  await run("workerA (no manageSupportCases) CANNOT delete a supportCases doc, even in their own empresa", async () => {
+    await assertFails(ctx(WORKER_A).collection("supportCases").doc("supportCaseA1").delete());
+  });
+  await run("admin_equipo WITH manageSupportCases CAN delete a supportCases doc in their own empresa", async () => {
+    await assertSucceeds(ctx(ADMIN_WITH_SUPPORT_PERM_A).collection("supportCases").doc("newCaseA1").delete());
+  });
+  await run("superA cannot read/write empresa B's supportCaseCounters doc", async () => {
+    await assertFails(ctx(SUPER_A).collection("supportCaseCounters").doc(EMPRESA_B).get());
+    await assertFails(ctx(SUPER_A).collection("supportCaseCounters").doc(EMPRESA_B).set({ value: 999 }));
+  });
+  await run("superA CAN read/write their own empresa's supportCaseCounters doc", async () => {
+    await assertSucceeds(ctx(SUPER_A).collection("supportCaseCounters").doc(EMPRESA_A).get());
+    await assertSucceeds(ctx(SUPER_A).collection("supportCaseCounters").doc(EMPRESA_A).set({ value: 2, empresaId: EMPRESA_A }));
   });
 
   // ---- empresas / platformOwners ----
