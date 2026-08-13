@@ -93,6 +93,7 @@ async function recordNotification(userId, { title, body, data = {} }) {
       title,
       body,
       taskId: data.taskId || null,
+      caseId: data.caseId || null,
       isRead: false,
       createdAt: FieldValue.serverTimestamp(),
     });
@@ -158,12 +159,18 @@ async function sendNotificationToUser(userId, { title, body, data = {} }) {
       `[FCM_TIMING]\nsending_push\ntaskId=${data.taskId || "n/a"}\nuserId=${userId}\ntimestamp=${Date.now()}`
     );
 
-    // Tap-to-open-task: web/firebase-messaging-sw.js's notificationclick
-    // handler reads data.url to know where to send the user. Only added to
-    // the FCM payload (not to `data` itself, which is also what
-    // recordNotification above already persisted) — the in-app
-    // notification-center tap path doesn't need it, it already has taskId.
-    const pushData = data.taskId ? { ...data, url: `${APP_ORIGIN}/?openTask=${data.taskId}` } : data;
+    // Tap-to-open: web/firebase-messaging-sw.js's notificationclick handler
+    // reads data.url to know where to send the user. Only added to the FCM
+    // payload (not to `data` itself, which is also what recordNotification
+    // above already persisted) — the in-app notification-center tap path
+    // doesn't need it, it already has taskId/caseId directly. A task takes
+    // priority if a message somehow carried both (never happens today).
+    let pushData = data;
+    if (data.taskId) {
+      pushData = { ...data, url: `${APP_ORIGIN}/?openTask=${data.taskId}` };
+    } else if (data.caseId) {
+      pushData = { ...data, url: `${APP_ORIGIN}/?openCase=${data.caseId}` };
+    }
 
     const [response] = await Promise.all([
       getMessaging().sendEachForMulticast({
@@ -330,9 +337,38 @@ async function getAdminIdsForTask(db, empresaId, groupId) {
   return [...ids];
 }
 
+/**
+ * Resolves every user who should be notified about a Casos de Soporte
+ * threshold reminder, WITHIN [empresaId]: every super_admin, plus every
+ * admin_equipo who has the `manageSupportCases` permission — the same
+ * "encargado + supervisión" shape as [getAdminIdsForTask], but without a
+ * groupId dimension, since a support case isn't scoped to one equipo the
+ * way a task is (Casos de Soporte is empresa-wide).
+ *
+ * @param {FirebaseFirestore.Firestore} db
+ * @param {string} empresaId
+ * @returns {Promise<string[]>} deduped user ids.
+ */
+async function getSupportCaseSupervisorIds(db, empresaId) {
+  const [superSnap, scopedSnap] = await Promise.all([
+    db.collection("users").where("empresaId", "==", empresaId).where("role", "==", "super_admin").get(),
+    db
+      .collection("users")
+      .where("empresaId", "==", empresaId)
+      .where("role", "==", "admin_equipo")
+      .where("permissions.manageSupportCases", "==", true)
+      .get(),
+  ]);
+  const ids = new Set();
+  for (const doc of superSnap.docs) ids.add(doc.id);
+  for (const doc of scopedSnap.docs) ids.add(doc.id);
+  return [...ids];
+}
+
 module.exports = {
   sendNotificationToUser,
   sendNotificationToUsers,
   notifyAdminsOfTaskCreated,
   getAdminIdsForTask,
+  getSupportCaseSupervisorIds,
 };

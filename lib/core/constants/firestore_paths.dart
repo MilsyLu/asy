@@ -16,6 +16,7 @@ class FirestoreCollections {
   static const String supportCases = 'supportCases';
   static const String supportCaseCounters = 'supportCaseCounters';
   static const String supportCaseHistory = 'history';
+  static const String supportCaseTags = 'supportCaseTags';
 
   // Global system configuration
   static const String systemConfig = 'systemConfig';

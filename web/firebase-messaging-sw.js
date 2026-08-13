@@ -28,9 +28,10 @@ messaging.onBackgroundMessage((payload) => {
 });
 
 // The Cloud Functions layer (functions/src/notifications.js) sets
-// data.url = "<origin>/?openTask=<taskId>" on every business push. The app
-// reads that query param at startup (main_shell.dart) and opens the task's
-// detail dialog, then strips it from the URL bar.
+// data.url = "<origin>/?openTask=<taskId>" (or "?openCase=<caseId>" for
+// Casos de Soporte) on every business push. The app reads that query param
+// at startup (main_shell.dart) and opens the task/case detail, then strips
+// it from the URL bar.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const target = (event.notification.data && event.notification.data.url)

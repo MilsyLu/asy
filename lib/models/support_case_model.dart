@@ -57,6 +57,9 @@ class SupportCaseModel {
     required this.reportedAt,
     required this.updatedAt,
     this.resolvedAt,
+    this.reminderTime,
+    this.reminderNote = '',
+    this.reminderSetBy,
   });
 
   final String id;
@@ -87,6 +90,15 @@ class SupportCaseModel {
 
   final DateTime updatedAt;
   final DateTime? resolvedAt;
+
+  /// A one-off personal reminder for this case (e.g. "el lunes debo
+  /// consultarle algo al equipo de tecno") — separate from the automatic
+  /// 5/10/15-day "días sin resolver" reminders. Null means no reminder is
+  /// scheduled. Only [reminderSetBy] gets notified when it fires (see
+  /// `checkSupportCaseCustomReminders.js`), not the whole case's audience.
+  final DateTime? reminderTime;
+  final String reminderNote;
+  final String? reminderSetBy;
 
   /// Whole days since [reportedAt] (when the client reported it — not when
   /// the record was typed in), frozen at [resolvedAt] once the case is
@@ -122,6 +134,9 @@ class SupportCaseModel {
           DateTime.now(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       resolvedAt: (map['resolvedAt'] as Timestamp?)?.toDate(),
+      reminderTime: (map['reminderTime'] as Timestamp?)?.toDate(),
+      reminderNote: map['reminderNote'] as String? ?? '',
+      reminderSetBy: map['reminderSetBy'] as String?,
     );
   }
 

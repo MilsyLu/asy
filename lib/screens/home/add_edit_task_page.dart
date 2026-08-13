@@ -132,18 +132,19 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
   /// out the field.
   List<AppUser> _assignableUsers(CatalogProvider catalog, AppUser current) {
     // A scoped admin_equipo only assigns within the teams they manage
-    // (never the whole catalog, even though their own groupId is usually
-    // null); everyone else keeps the original single-group/full-catalog
-    // logic.
+    // (never the whole catalog, even though their own groupIds is usually
+    // empty); everyone else keeps the original multi-group/full-catalog
+    // logic — a worker in several teams sees the union of their teams.
     final List<AppUser> pool;
     if (current.isScopedAdmin) {
       pool = catalog.users
-          .where((u) => current.managedGroupIds.contains(u.groupId))
+          .where((u) => u.groupIds.any(current.managedGroupIds.contains))
           .toList();
-    } else if (current.groupId != null) {
-      pool = catalog.usersInGroup(current.groupId).isNotEmpty
-          ? catalog.usersInGroup(current.groupId)
-          : catalog.users;
+    } else if (current.groupIds.isNotEmpty) {
+      final inOwnGroups = {
+        for (final groupId in current.groupIds) ...catalog.usersInGroup(groupId),
+      }.toList();
+      pool = inOwnGroups.isNotEmpty ? inOwnGroups : catalog.users;
     } else {
       pool = catalog.users;
     }
@@ -379,11 +380,12 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     if (_statusId == null && !_isEditing) {
       _statusId = catalog.pendingStatusId;
     }
-    // Default to the assigned worker's group (covers both brand-new tasks
-    // and legacy tasks being edited for the first time after this
+    // Default to the assigned worker's (first) group (covers both brand-new
+    // tasks and legacy tasks being edited for the first time after this
     // feature shipped, which have groupId == null).
-    _groupId ??=
-        catalog.userById(_assignedUserId)?.groupId ?? currentUser.groupId;
+    final assignedUserGroupIds = catalog.userById(_assignedUserId)?.groupIds ?? const [];
+    _groupId ??= (assignedUserGroupIds.isNotEmpty ? assignedUserGroupIds.first : null) ??
+        (currentUser.groupIds.isNotEmpty ? currentUser.groupIds.first : null);
     // Time-selection mode now lives per-team (GroupModel.timeSelectionMode)
     // instead of the old single global systemConfig toggle.
     final useFreePicker = catalog.groupById(_groupId)?.useFreePicker ?? false;
@@ -403,20 +405,22 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
         .toList();
 
     final assignableUsers = _assignableUsers(catalog, currentUser);
-    // Non-admins can only create/edit tasks for their own group, so the
-    // selector is fully locked (Sprint 5.4); a super_admin may pick any
-    // group (e.g. to share a task across groups); a scoped admin_equipo
-    // stays enabled but restricted to the teams they manage. The task's
-    // current _groupId is always included in the options so editing a
-    // legacy/shared task doesn't show an empty field while locked/restricted.
-    final isGroupLocked = !isAdmin && currentUser.groupId != null;
+    // Non-admins can only create/edit tasks for one of their own teams —
+    // fully locked when they belong to exactly one (Sprint 5.4), or offered
+    // as a restricted choice among their several teams; a super_admin may
+    // pick any group (e.g. to share a task across groups); a scoped
+    // admin_equipo stays enabled but restricted to the teams they manage.
+    // The task's current _groupId is always included in the options so
+    // editing a legacy/shared task doesn't show an empty field while
+    // locked/restricted.
+    final isGroupLocked = !isAdmin && currentUser.groupIds.length == 1;
     final groupOptions = currentUser.isScopedAdmin
         ? catalog.groups
             .where((g) => currentUser.managesGroup(g.id) || g.id == _groupId)
             .toList()
-        : (isGroupLocked
+        : (currentUser.groupIds.isNotEmpty
             ? catalog.groups
-                .where((g) => g.id == currentUser.groupId || g.id == _groupId)
+                .where((g) => currentUser.groupIds.contains(g.id) || g.id == _groupId)
                 .toList()
             : catalog.groups);
 

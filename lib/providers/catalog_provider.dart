@@ -82,6 +82,14 @@ class CatalogProvider extends ChangeNotifier {
 
   String groupName(String? id) => groupById(id)?.name ?? 'Sin equipo';
 
+  /// Comma-joined display name for a user's (possibly several) teams — the
+  /// multi-team equivalent of [groupName], used everywhere a user's team
+  /// badge/chip is shown.
+  String groupNames(List<String> ids) {
+    if (ids.isEmpty) return 'Sin equipo';
+    return ids.map((id) => groupById(id)?.name).whereType<String>().join(', ');
+  }
+
   TaskTypeModel? taskTypeById(String? id) {
     if (id == null) return null;
     for (final t in taskTypes) {
@@ -135,7 +143,7 @@ class CatalogProvider extends ChangeNotifier {
 
   List<AppUser> usersInGroup(String? groupId) {
     if (groupId == null) return const [];
-    return users.where((u) => u.groupId == groupId).toList();
+    return users.where((u) => u.isInGroup(groupId)).toList();
   }
 
   ClientModel? clientById(String? id) {

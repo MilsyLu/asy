@@ -14,8 +14,8 @@ import '../../providers/catalog_provider.dart';
 ///   the team assignment itself, not the write permission.
 /// - A task with `visibleToAllGroups == true` is visible to any signed-in
 ///   user.
-/// - Otherwise a normal user sees the task only if `task.groupId` matches
-///   their own `groupId`.
+/// - Otherwise a normal user sees the task only if `task.groupId` is one of
+///   their own `groupIds` (a user can belong to more than one team).
 /// - Compatibility: tasks created before this feature have `groupId ==
 ///   null`. Those are only visible to `super_admin`/managing admins until an
 ///   admin assigns them a group.
@@ -30,5 +30,5 @@ bool isTaskVisibleToUser({
 
   if (task.groupId == null) return false;
 
-  return task.visibleToAllGroups || task.groupId == user.groupId;
+  return task.visibleToAllGroups || user.isInGroup(task.groupId);
 }

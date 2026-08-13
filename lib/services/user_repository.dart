@@ -9,7 +9,7 @@ import '../models/app_user.dart';
 /// Multi-tenant: [empresaId] is optional here (unlike the other
 /// repositories) because this repository is used two ways — (a) the
 /// tenant-scoped instance held by CatalogProvider, which needs it to filter
-/// [watchAllUsers]/[watchUsersByGroup]/[getUsersByGroup], and (b) the
+/// [watchAllUsers], and (b) the
 /// root-level instance AuthProvider uses to bootstrap the signed-in user's
 /// own profile via [watchUser] *before* their empresaId is even known (a
 /// self-read of `users/{uid}` is always allowed by firestore.rules
@@ -55,30 +55,30 @@ class UserRepository {
         .map((snap) => snap.docs.map((d) => AppUser.fromDoc(d)).toList());
   }
 
-  Stream<List<AppUser>> watchUsersByGroup(String groupId) {
-    assert(empresaId != null, 'watchUsersByGroup() requires a tenant-scoped UserRepository');
-    return _collection
-        .where('empresaId', isEqualTo: empresaId)
-        .where('groupId', isEqualTo: groupId)
-        .snapshots()
-        .map((snap) => snap.docs.map((d) => AppUser.fromDoc(d)).toList());
-  }
-
-  Future<List<AppUser>> getUsersByGroup(String groupId) async {
-    assert(empresaId != null, 'getUsersByGroup() requires a tenant-scoped UserRepository');
-    final snap = await _collection
-        .where('empresaId', isEqualTo: empresaId)
-        .where('groupId', isEqualTo: groupId)
-        .get();
-    return snap.docs.map((d) => AppUser.fromDoc(d)).toList();
-  }
-
   Future<void> updateRole(String uid, String role) {
     return _collection.doc(uid).update({'role': role});
   }
 
-  Future<void> updateGroup(String uid, String? groupId) {
-    return _collection.doc(uid).update({'groupId': groupId});
+  /// Replaces the full set of teams [uid] belongs to — used by the "Equipos"
+  /// multi-select on the Usuarios screen, which edits an arbitrary new set
+  /// at once rather than adding/removing one at a time.
+  Future<void> setGroupIds(String uid, List<String> groupIds) {
+    return _collection.doc(uid).update({'groupIds': groupIds});
+  }
+
+  /// Adds [uid] to [groupId] without disturbing their other teams — used by
+  /// the Equipos screen's per-team membership checklist.
+  Future<void> addToGroup(String uid, String groupId) {
+    return _collection.doc(uid).update({
+      'groupIds': FieldValue.arrayUnion([groupId]),
+    });
+  }
+
+  /// Removes [uid] from [groupId] without disturbing their other teams.
+  Future<void> removeFromGroup(String uid, String groupId) {
+    return _collection.doc(uid).update({
+      'groupIds': FieldValue.arrayRemove([groupId]),
+    });
   }
 
   /// Sets the teams an `admin_equipo` user manages. Only meaningful for that

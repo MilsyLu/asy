@@ -11,6 +11,9 @@ const { syncTaskFromSheet } = require("./src/syncTaskFromSheet");
 const { createEmpresa } = require("./src/createEmpresa");
 const { toggleEmpresa } = require("./src/toggleEmpresa");
 const { extractPrinterConfigFromImages } = require("./src/extractPrinterConfigFromImages");
+const { checkSupportCaseReminders } = require("./src/checkSupportCaseReminders");
+const { checkSupportCaseCustomReminders } = require("./src/checkSupportCaseCustomReminders");
+const { createTeamAsScopedAdmin } = require("./src/createTeamAsScopedAdmin");
 
 exports.onTaskCreate = onTaskCreate;
 exports.onTaskUpdate = onTaskUpdate;
@@ -21,3 +24,6 @@ exports.syncTaskFromSheet = syncTaskFromSheet;
 exports.createEmpresa = createEmpresa;
 exports.toggleEmpresa = toggleEmpresa;
 exports.extractPrinterConfigFromImages = extractPrinterConfigFromImages;
+exports.checkSupportCaseReminders = checkSupportCaseReminders;
+exports.checkSupportCaseCustomReminders = checkSupportCaseCustomReminders;
+exports.createTeamAsScopedAdmin = createTeamAsScopedAdmin;

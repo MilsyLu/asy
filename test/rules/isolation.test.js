@@ -32,6 +32,14 @@ const OUTSIDER_UID = "noEmpresaUid"; // signed in, but no users/{uid} doc at all
 const ADMIN_NO_PRINT_PERM_A = "adminNoPrintPermA";
 const ADMIN_WITH_PRINT_PERM_A = "adminWithPrintPermA";
 const ADMIN_WITH_SUPPORT_PERM_A = "adminWithSupportPermA";
+// Multi-team-membership fixtures: workerA2 belongs to two teams at once
+// (groupA1 + groupA2); adminGroupA1OnlyA manages only one of them, while
+// adminBothGroupsA manages both — used to test the "an admin_equipo may
+// only edit a worker whose ENTIRE team membership is within their own
+// managed teams" invariant.
+const WORKER_A2 = "workerA2";
+const ADMIN_GROUP_A1_ONLY_A = "adminGroupA1OnlyA";
+const ADMIN_BOTH_GROUPS_A = "adminBothGroupsA";
 
 let testEnv;
 let results = [];
@@ -55,27 +63,49 @@ async function seed() {
 
     await db.collection("users").doc(SUPER_A).set({
       email: "superA@test.com", role: "super_admin", empresaId: EMPRESA_A,
-      groupId: null, managedGroupIds: [], permissions: {}, isActive: true,
+      groupIds: [], managedGroupIds: [], permissions: {}, isActive: true,
     });
     await db.collection("users").doc(SUPER_B).set({
       email: "superB@test.com", role: "super_admin", empresaId: EMPRESA_B,
-      groupId: null, managedGroupIds: [], permissions: {}, isActive: true,
+      groupIds: [], managedGroupIds: [], permissions: {}, isActive: true,
     });
     await db.collection("users").doc(WORKER_A).set({
       email: "workerA@test.com", role: "trabajador_normal", empresaId: EMPRESA_A,
-      groupId: "groupA1", managedGroupIds: [], permissions: {}, isActive: true,
+      groupIds: ["groupA1"], managedGroupIds: [], permissions: {}, isActive: true,
     });
     await db.collection("users").doc(ADMIN_NO_PRINT_PERM_A).set({
       email: "adminNoPrintPermA@test.com", role: "admin_equipo", empresaId: EMPRESA_A,
-      groupId: null, managedGroupIds: ["groupA1"], permissions: {}, isActive: true,
+      groupIds: [], managedGroupIds: ["groupA1"], permissions: {}, isActive: true,
     });
     await db.collection("users").doc(ADMIN_WITH_PRINT_PERM_A).set({
       email: "adminWithPrintPermA@test.com", role: "admin_equipo", empresaId: EMPRESA_A,
-      groupId: null, managedGroupIds: ["groupA1"], permissions: { managePrinterConfigs: true }, isActive: true,
+      groupIds: [], managedGroupIds: ["groupA1"], permissions: { managePrinterConfigs: true }, isActive: true,
     });
     await db.collection("users").doc(ADMIN_WITH_SUPPORT_PERM_A).set({
       email: "adminWithSupportPermA@test.com", role: "admin_equipo", empresaId: EMPRESA_A,
-      groupId: null, managedGroupIds: ["groupA1"], permissions: { manageSupportCases: true }, isActive: true,
+      groupIds: [], managedGroupIds: ["groupA1"], permissions: { manageSupportCases: true }, isActive: true,
+    });
+    await db.collection("groups").doc("groupA2").set({ empresaId: EMPRESA_A, name: "Equipo A2" });
+    await db.collection("users").doc(WORKER_A2).set({
+      email: "workerA2@test.com", role: "trabajador_normal", empresaId: EMPRESA_A,
+      groupIds: ["groupA1", "groupA2"], managedGroupIds: [], permissions: {}, isActive: true,
+    });
+    await db.collection("users").doc(ADMIN_GROUP_A1_ONLY_A).set({
+      email: "adminGroupA1OnlyA@test.com", role: "admin_equipo", empresaId: EMPRESA_A,
+      groupIds: [], managedGroupIds: ["groupA1"], permissions: { manageUsers: true }, isActive: true,
+    });
+    await db.collection("users").doc(ADMIN_BOTH_GROUPS_A).set({
+      email: "adminBothGroupsA@test.com", role: "admin_equipo", empresaId: EMPRESA_A,
+      groupIds: [], managedGroupIds: ["groupA1", "groupA2"], permissions: { manageUsers: true }, isActive: true,
+    });
+    await db.collection("tasks").doc("taskA2").set({
+      empresaId: EMPRESA_A, groupId: "groupA2", assignedUserId: WORKER_A2,
+      date: "2026-08-01", hour: "09:00", visibleToAllGroups: false,
+    });
+    await db.collection("groups").doc("groupA3").set({ empresaId: EMPRESA_A, name: "Equipo A3" });
+    await db.collection("tasks").doc("taskA3").set({
+      empresaId: EMPRESA_A, groupId: "groupA3", assignedUserId: SUPER_A,
+      date: "2026-08-01", hour: "09:00", visibleToAllGroups: false,
     });
 
     for (const [empresaId, suffix] of [[EMPRESA_A, "A"], [EMPRESA_B, "B"]]) {
@@ -89,6 +119,7 @@ async function seed() {
       await db.collection("supportCases").doc(`supportCase${suffix}1`).set({
         empresaId, caseNumber: 1, clientName: `Cliente ${suffix}`, status: "Nuevo", priority: "Media",
       });
+      await db.collection("supportCaseTags").doc(`tag${suffix}1`).set({ empresaId, name: `Etiqueta ${suffix}` });
       await db.collection("tasks").doc(`task${suffix}1`).set({
         empresaId, groupId: `group${suffix}1`, assignedUserId: empresaId === EMPRESA_A ? WORKER_A : SUPER_B,
         date: "2026-08-01", hour: "09:00", visibleToAllGroups: false,
@@ -126,15 +157,16 @@ async function main() {
   });
   await run("superA CAN list users filtered to empresa A", async () => {
     const snap = await assertSucceeds(ctx(SUPER_A).collection("users").where("empresaId", "==", EMPRESA_A).get());
-    // SUPER_A, WORKER_A, ADMIN_NO_PRINT_PERM_A, ADMIN_WITH_PRINT_PERM_A, ADMIN_WITH_SUPPORT_PERM_A
-    assert.strictEqual(snap.size, 5, `expected 5 users in empresa A, got ${snap.size}`);
+    // SUPER_A, WORKER_A, ADMIN_NO_PRINT_PERM_A, ADMIN_WITH_PRINT_PERM_A, ADMIN_WITH_SUPPORT_PERM_A,
+    // WORKER_A2, ADMIN_GROUP_A1_ONLY_A, ADMIN_BOTH_GROUPS_A
+    assert.strictEqual(snap.size, 8, `expected 8 users in empresa A, got ${snap.size}`);
   });
   await run("superA cannot DELETE a user from empresa B", async () => {
     await assertFails(ctx(SUPER_A).collection("users").doc(SUPER_B).delete());
   });
   await run("superA cannot CREATE a user stamped with empresa B's id", async () => {
     await assertFails(ctx(SUPER_A).collection("users").doc("newUser1").set({
-      email: "x@test.com", role: "trabajador_normal", empresaId: EMPRESA_B, groupId: "groupA1",
+      email: "x@test.com", role: "trabajador_normal", empresaId: EMPRESA_B, groupIds: ["groupA1"],
     }));
   });
 
@@ -147,7 +179,7 @@ async function main() {
   });
   await run("superA CAN list/read tasks in empresa A", async () => {
     const snap = await assertSucceeds(ctx(SUPER_A).collection("tasks").where("empresaId", "==", EMPRESA_A).get());
-    assert.strictEqual(snap.size, 1);
+    assert.strictEqual(snap.size, 3); // taskA1, taskA2, taskA3
   });
   await run("superA cannot UPDATE a task from empresa B", async () => {
     await assertFails(ctx(SUPER_A).collection("tasks").doc("taskB1").update({ hour: "10:00" }));
@@ -170,6 +202,7 @@ async function main() {
     ["clients", "clientB1", { name: "hacked" }],
     ["printerConfigs", "printerConfigB1", { clientName: "hacked" }],
     ["supportCases", "supportCaseB1", { clientName: "hacked" }],
+    ["supportCaseTags", "tagB1", { name: "hacked" }],
   ];
   for (const [col, docId, patch] of catalogCases) {
     await run(`superA cannot READ ${col} doc from empresa B`, async () => {
@@ -251,6 +284,28 @@ async function main() {
     await assertSucceeds(ctx(SUPER_A).collection("supportCaseCounters").doc(EMPRESA_A).set({ value: 2, empresaId: EMPRESA_A }));
   });
 
+  // ---- supportCaseTags: "administrado" — reading the catalog to apply
+  // tags is open to everyone, but writing to it requires manageSupportCases.
+  await run("workerA (no manageSupportCases) CAN read supportCaseTags in their own empresa", async () => {
+    await assertSucceeds(ctx(WORKER_A).collection("supportCaseTags").doc("tagA1").get());
+  });
+  await run("workerA (no manageSupportCases) CANNOT create a supportCaseTags doc", async () => {
+    await assertFails(ctx(WORKER_A).collection("supportCaseTags").doc("newTagA1").set({
+      empresaId: EMPRESA_A, name: "Nueva etiqueta",
+    }));
+  });
+  await run("workerA (no manageSupportCases) CANNOT delete a supportCaseTags doc", async () => {
+    await assertFails(ctx(WORKER_A).collection("supportCaseTags").doc("tagA1").delete());
+  });
+  await run("admin_equipo WITH manageSupportCases CAN create a supportCaseTags doc", async () => {
+    await assertSucceeds(ctx(ADMIN_WITH_SUPPORT_PERM_A).collection("supportCaseTags").doc("newTagA2").set({
+      empresaId: EMPRESA_A, name: "Otra etiqueta",
+    }));
+  });
+  await run("admin_equipo WITH manageSupportCases CAN delete a supportCaseTags doc", async () => {
+    await assertSucceeds(ctx(ADMIN_WITH_SUPPORT_PERM_A).collection("supportCaseTags").doc("newTagA2").delete());
+  });
+
   // ---- empresas / platformOwners ----
   await run("superA (not a platform owner) cannot LIST empresas", async () => {
     await assertFails(ctx(SUPER_A).collection("empresas").get());
@@ -291,6 +346,60 @@ async function main() {
   // ---- existing within-tenant behavior must still work (regression) ----
   await run("workerA (trabajador_normal) can still read their own assigned task", async () => {
     await assertSucceeds(ctx(WORKER_A).collection("tasks").doc("taskA1").get());
+  });
+
+  // ---- multi-team membership: a worker can belong to more than one team ----
+  await run("workerA2 (member of groupA1 + groupA2) CAN read a task from groupA1", async () => {
+    await assertSucceeds(ctx(WORKER_A2).collection("tasks").doc("taskA1").get());
+  });
+  await run("workerA2 (member of groupA1 + groupA2) CAN read a task from groupA2", async () => {
+    await assertSucceeds(ctx(WORKER_A2).collection("tasks").doc("taskA2").get());
+  });
+  await run("workerA2 (member of groupA1 + groupA2) CANNOT read a task from groupA3 (not their team)", async () => {
+    await assertFails(ctx(WORKER_A2).collection("tasks").doc("taskA3").get());
+  });
+
+  // ---- multi-team membership: admin_equipo editing a multi-team worker ----
+  await run("admin managing ONLY groupA1 CANNOT edit workerA2, who also belongs to groupA2", async () => {
+    await assertFails(
+      ctx(ADMIN_GROUP_A1_ONLY_A).collection("users").doc(WORKER_A2).update({ name: "Hacked" })
+    );
+  });
+  await run("admin managing BOTH groupA1 and groupA2 CAN edit workerA2 (e.g. removing one team)", async () => {
+    await assertSucceeds(
+      ctx(ADMIN_BOTH_GROUPS_A).collection("users").doc(WORKER_A2).update({ groupIds: ["groupA1"] })
+    );
+    // restore for any later test relying on the original fixture shape
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc(WORKER_A2)
+        .update({ groupIds: ["groupA1", "groupA2"] });
+    });
+  });
+  await run("admin managing BOTH groups CANNOT assign workerA2 a team outside their reach (groupA3)", async () => {
+    await assertFails(
+      ctx(ADMIN_BOTH_GROUPS_A).collection("users").doc(WORKER_A2)
+        .update({ groupIds: ["groupA1", "groupA3"] })
+    );
+  });
+
+  // ---- multi-team membership: admin_equipo creating a worker ----
+  await run("admin managing ONLY groupA1 CANNOT create a worker spanning groupA1 + groupA2", async () => {
+    await assertFails(ctx(ADMIN_GROUP_A1_ONLY_A).collection("users").doc("newWorkerMulti1").set({
+      email: "nuevo1@test.com", role: "trabajador_normal", empresaId: EMPRESA_A,
+      groupIds: ["groupA1", "groupA2"],
+    }));
+  });
+  await run("admin managing BOTH groups CAN create a worker spanning groupA1 + groupA2", async () => {
+    await assertSucceeds(ctx(ADMIN_BOTH_GROUPS_A).collection("users").doc("newWorkerMulti2").set({
+      email: "nuevo2@test.com", role: "trabajador_normal", empresaId: EMPRESA_A,
+      groupIds: ["groupA1", "groupA2"],
+    }));
+  });
+  await run("admin_equipo CANNOT create a worker with an empty groupIds array", async () => {
+    await assertFails(ctx(ADMIN_GROUP_A1_ONLY_A).collection("users").doc("newWorkerEmpty1").set({
+      email: "nuevo3@test.com", role: "trabajador_normal", empresaId: EMPRESA_A,
+      groupIds: [],
+    }));
   });
 
   await testEnv.cleanup();

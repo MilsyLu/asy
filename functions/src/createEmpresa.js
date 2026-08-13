@@ -71,7 +71,7 @@ const createEmpresa = onCall(async (request) => {
     name: adminName.trim(),
     role: "super_admin",
     empresaId: empresaRef.id,
-    groupId: null,
+    groupIds: [],
     managedGroupIds: [],
     permissions: {},
     fcmTokens: [],

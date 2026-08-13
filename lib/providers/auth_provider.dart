@@ -131,6 +131,22 @@ class AuthProvider extends ChangeNotifier {
     }
     isPlatformOwner = false;
 
+    // A session restored from an already-valid Firebase Auth token (the
+    // common case: closing the tab/browser and reopening it the next day)
+    // never goes through AuthService.signIn() — only an explicit
+    // email/password login does. Without this call, lastLogin/streakDays
+    // only ever updated while the app happened to stay open across a real
+    // midnight rollover (see _checkDayRollover below), never on the
+    // ordinary "open the app fresh the next day" flow — which is exactly
+    // what silently froze Michel's streak. Safe to call unconditionally
+    // here: it's a no-op for lastLogin/streak beyond bumping the timestamp
+    // if it's already been refreshed today (day-diff logic, not call-count
+    // based), and this only runs once per auth-state change, not on every
+    // watchUser() snapshot below.
+    _authService.refreshLoginAndStreak(user.uid).catchError((e) {
+      debugPrint('[AuthProvider] Session-restore streak refresh failed: $e');
+    });
+
     _userSub = _userRepository.watchUser(user.uid).listen((profile) async {
       if (profile != null && !profile.isActive) {
         // Set without notifyListeners() so MainShell never gets a chance to

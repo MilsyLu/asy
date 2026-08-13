@@ -30,19 +30,20 @@ class SupportCaseStatus {
   static const String enProceso = 'En proceso';
   static const String esperandoCliente = 'Esperando cliente';
   static const String resuelto = 'Resuelto';
-  static const String cerrado = 'Cerrado';
 
-  static const List<String> all = [nuevo, enProceso, esperandoCliente, resuelto, cerrado];
+  // "Cerrado" (a separate closed state) was removed — Michel felt it was
+  // practically the same as "Resuelto" and preferred one clear state
+  // instead of two similar ones.
+  static const List<String> all = [nuevo, enProceso, esperandoCliente, resuelto];
 
   static const List<String> openStates = [nuevo, enProceso, esperandoCliente];
-  static const List<String> closedStates = [resuelto, cerrado];
+  static const List<String> closedStates = [resuelto];
 
   static const Map<String, Color> colors = {
     nuevo: Colors.blue,
     enProceso: Colors.purple,
     esperandoCliente: Colors.teal,
     resuelto: Colors.green,
-    cerrado: Colors.blueGrey,
   };
 
   static Color colorFor(String status) => colors[status] ?? Colors.grey;

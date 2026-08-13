@@ -143,6 +143,152 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
     }
   }
 
+  Future<void> _editTags(SupportCaseModel c) async {
+    final repo = context.read<SupportCaseRepository>();
+    final user = context.read<AuthProvider>().appUser;
+    if (user == null) return;
+    final available = await repo.watchTags().first;
+    if (!mounted) return;
+    final selected = {...c.tags};
+    final result = await showDialog<Set<String>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) => AlertDialog(
+          title: const Text('Etiquetas'),
+          content: SizedBox(
+            width: 360,
+            child: available.isEmpty
+                ? const Text('Todavía no hay etiquetas creadas.')
+                : Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final tag in available)
+                        FilterChip(
+                          label: Text(tag.name),
+                          selected: selected.contains(tag.name),
+                          onSelected: (v) => setState(() {
+                            if (v) {
+                              selected.add(tag.name);
+                            } else {
+                              selected.remove(tag.name);
+                            }
+                          }),
+                        ),
+                    ],
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(selected),
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    try {
+      await repo.updateTags(c.id, result.toList(), authorId: user.id, authorName: user.name);
+    } catch (e) {
+      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+    }
+  }
+
+  Future<void> _editReminder(SupportCaseModel c) async {
+    final repo = context.read<SupportCaseRepository>();
+    final user = context.read<AuthProvider>().appUser;
+    if (user == null) return;
+
+    final now = DateTime.now();
+    final initialDate = c.reminderTime ?? now.add(const Duration(days: 1));
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate.isBefore(now) ? now : initialDate,
+      firstDate: now.subtract(const Duration(days: 1)),
+      lastDate: now.add(const Duration(days: 365)),
+      helpText: 'Fecha del recordatorio',
+    );
+    if (pickedDate == null || !mounted) return;
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: c.reminderTime != null
+          ? TimeOfDay.fromDateTime(c.reminderTime!)
+          : TimeOfDay.fromDateTime(now),
+      helpText: 'Hora del recordatorio',
+    );
+    if (pickedTime == null || !mounted) return;
+
+    final reminderTime = DateTime(
+      pickedDate.year,
+      pickedDate.month,
+      pickedDate.day,
+      pickedTime.hour,
+      pickedTime.minute,
+    );
+
+    final noteController = TextEditingController(text: c.reminderNote);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Recordatorio'),
+        content: SizedBox(
+          width: 360,
+          child: TextField(
+            controller: noteController,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Nota (opcional)',
+              hintText: 'Ej: consultarle al equipo de tecno',
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await repo.setReminder(
+        c.id,
+        reminderTime: reminderTime,
+        reminderNote: noteController.text.trim(),
+        authorId: user.id,
+        authorName: user.name,
+      );
+    } catch (e) {
+      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+    }
+  }
+
+  Future<void> _clearReminder(SupportCaseModel c) async {
+    final user = context.read<AuthProvider>().appUser;
+    if (user == null) return;
+    try {
+      await context.read<SupportCaseRepository>().setReminder(
+            c.id,
+            reminderTime: null,
+            authorId: user.id,
+            authorName: user.name,
+          );
+    } catch (e) {
+      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+    }
+  }
+
   Future<void> _confirmDelete(SupportCaseModel c) async {
     final confirm = await showConfirmDialog(
       context,
@@ -286,6 +432,69 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(LucideIcons.bellRing, size: 14, color: colors.textSecondary),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: c.reminderTime == null
+                          ? TextButton(
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              onPressed: () => _editReminder(c),
+                              child: const Text('Programar recordatorio'),
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Recordatorio: ${AppDateUtils.formatShortDate(c.reminderTime!)} '
+                                  '${AppDateUtils.formatTime12h(c.reminderTime!)}',
+                                  style: TextStyle(
+                                    color: colors.textPrimary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                if (c.reminderNote.isNotEmpty)
+                                  Text(
+                                    c.reminderNote,
+                                    style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                                  ),
+                                Row(
+                                  children: [
+                                    TextButton(
+                                      style: TextButton.styleFrom(
+                                        padding: EdgeInsets.zero,
+                                        minimumSize: Size.zero,
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      onPressed: () => _editReminder(c),
+                                      child: const Text('Editar', style: TextStyle(fontSize: 12)),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    TextButton(
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: colors.error,
+                                        padding: EdgeInsets.zero,
+                                        minimumSize: Size.zero,
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      onPressed: () => _clearReminder(c),
+                                      child: const Text('Quitar', style: TextStyle(fontSize: 12)),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 18),
                 sectionLabel('ASUNTO'),
                 const SizedBox(height: 4),
@@ -297,6 +506,27 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                   c.description.isEmpty ? '—' : c.description,
                   style: TextStyle(color: colors.textPrimary, fontSize: 14),
                 ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    sectionLabel('ETIQUETAS'),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: () => _editTags(c),
+                      icon: const Icon(LucideIcons.tag, size: 15),
+                      label: const Text('Editar'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                if (c.tags.isEmpty)
+                  Text('Sin etiquetas.', style: TextStyle(color: colors.textSecondary, fontSize: 12))
+                else
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [for (final tag in c.tags) Chip(label: Text(tag), visualDensity: VisualDensity.compact)],
+                  ),
                 const SizedBox(height: 18),
                 Row(
                   children: [

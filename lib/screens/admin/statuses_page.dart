@@ -141,7 +141,10 @@ class _StatusesPageState extends State<StatusesPage> {
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(0, 12, 16, 16),
-                  child: SizedBox(width: 320, child: panel),
+                  // Scrollable: avoids the confirm button being cut off
+                  // below the fold when the panel is taller than the
+                  // available height (see same fix in users_page.dart).
+                  child: SizedBox(width: 320, child: SingleChildScrollView(child: panel)),
                 ),
               ],
             );

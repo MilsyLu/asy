@@ -7,7 +7,12 @@ class AppUser {
   final String email;
   final String name;
   final String role;
-  final String? groupId;
+
+  /// Teams this user belongs to — a `trabajador_normal` can now be a member
+  /// of more than one at once (e.g. Soporte + Onboarding), so this is a
+  /// list, not a single id. Empty means no team. Mirrors [managedGroupIds]'s
+  /// own convention exactly.
+  final List<String> groupIds;
 
   /// The tenant ("empresa") this user belongs to. Nullable only for legacy
   /// docs written before the multi-tenant migration backfilled every
@@ -63,7 +68,7 @@ class AppUser {
     required this.email,
     required this.name,
     required this.role,
-    this.groupId,
+    this.groupIds = const [],
     this.empresaId,
     this.managedGroupIds = const [],
     this.permissions = const {},
@@ -101,13 +106,18 @@ class AppUser {
       isSuperAdmin ||
       (isScopedAdmin && groupId != null && managedGroupIds.contains(groupId));
 
+  /// True if this user is a member of [groupId] — one of possibly several
+  /// teams. Mirrors `groupId in me().get('groupIds', [])` in firestore.rules.
+  bool isInGroup(String? groupId) => groupId != null && groupIds.contains(groupId);
+
   factory AppUser.fromMap(String id, Map<String, dynamic> map) {
     return AppUser(
       id: id,
       email: map['email'] as String? ?? '',
       name: map['name'] as String? ?? '',
       role: map['role'] as String? ?? AppRoles.trabajadorNormal,
-      groupId: map['groupId'] as String?,
+      groupIds: (map['groupIds'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
+          const [],
       empresaId: map['empresaId'] as String?,
       managedGroupIds: (map['managedGroupIds'] as List<dynamic>?)
               ?.map((e) => e.toString())
@@ -167,7 +177,7 @@ class AppUser {
       'email': email,
       'name': name,
       'role': role,
-      'groupId': groupId,
+      'groupIds': groupIds,
       'empresaId': empresaId,
       'managedGroupIds': managedGroupIds,
       'permissions': permissions,
@@ -188,7 +198,7 @@ class AppUser {
   AppUser copyWith({
     String? name,
     String? role,
-    String? groupId,
+    List<String>? groupIds,
     List<String>? managedGroupIds,
     Map<String, bool>? permissions,
     List<String>? fcmTokens,
@@ -206,7 +216,7 @@ class AppUser {
       email: email,
       name: name ?? this.name,
       role: role ?? this.role,
-      groupId: groupId ?? this.groupId,
+      groupIds: groupIds ?? this.groupIds,
       managedGroupIds: managedGroupIds ?? this.managedGroupIds,
       permissions: permissions ?? this.permissions,
       fcmTokens: fcmTokens ?? this.fcmTokens,

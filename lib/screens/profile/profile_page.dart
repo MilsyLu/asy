@@ -578,10 +578,10 @@ class _HeroUserInfo extends StatelessWidget {
                 icon: LucideIcons.shieldCheck,
                 label: AuthService.roleLabel(user.role),
               ),
-              user.groupId != null
+              user.groupIds.isNotEmpty
                   ? _ProfileChip(
                       icon: LucideIcons.users,
-                      label: catalog.groupName(user.groupId),
+                      label: catalog.groupNames(user.groupIds),
                     )
                   : const _ProfileChip(
                       icon: LucideIcons.users,
@@ -645,9 +645,8 @@ class _HeroInfoGrid extends StatelessWidget {
             child: _AccountInfoBlock(
               icon: LucideIcons.users,
               title: 'Equipo',
-              value:
-                  user.groupId != null ? catalog.groupName(user.groupId) : 'Sin equipo',
-              subtitle: user.groupId != null ? 'Equipo asignado' : 'Sin asignación',
+              value: user.groupIds.isNotEmpty ? catalog.groupNames(user.groupIds) : 'Sin equipo',
+              subtitle: user.groupIds.isNotEmpty ? 'Equipo asignado' : 'Sin asignación',
             ),
           ),
         ],
@@ -1330,8 +1329,8 @@ class _ProfileAccountCard extends StatelessWidget {
       _AccountInfoBlock(
         icon: LucideIcons.users,
         title: 'Equipo',
-        value: user.groupId != null ? catalog.groupName(user.groupId) : 'Sin equipo',
-        subtitle: user.groupId != null ? 'Equipo asignado' : 'Sin asignación',
+        value: user.groupIds.isNotEmpty ? catalog.groupNames(user.groupIds) : 'Sin equipo',
+        subtitle: user.groupIds.isNotEmpty ? 'Equipo asignado' : 'Sin asignación',
       ),
       _AccountInfoBlock(
         icon: LucideIcons.mail,

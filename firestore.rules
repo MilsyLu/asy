@@ -96,8 +96,8 @@ service cloud.firestore {
     //   manageTasks additionally gates writes, see below.
     // - a task with visibleToAllGroups == true is visible to any
     //   signed-in user.
-    // - otherwise a normal user may only access tasks whose groupId
-    //   matches their own groupId.
+    // - otherwise a normal user may only access tasks whose groupId is one
+    //   of their own groupIds (a user can belong to more than one team).
     // - tasks created before this feature have no groupId field at all;
     //   `.get('groupId', null)` defaults those to null, so (per the rule
     //   above) only super_admin/managing admins can access them until
@@ -107,7 +107,7 @@ service cloud.firestore {
         || managesGroup(task.get('groupId', null))
         || (task.get('groupId', null) != null
             && (task.get('visibleToAllGroups', false) == true
-                || task.get('groupId', null) == me().groupId));
+                || task.get('groupId', null) in me().get('groupIds', [])));
     }
 
     // Additionally required for create/update: an admin_equipo may only
@@ -156,25 +156,30 @@ service cloud.firestore {
       allow list: if isSignedIn() && resource.data.empresaId == myEmpresaId();
       // Accounts are provisioned from the admin panel: super_admin always;
       // an admin_equipo with manageUsers may only create a trabajador_normal
-      // directly into one of their own managed teams — never another admin.
-      // The new doc's empresaId must match the creator's own (the very
-      // first admin of a brand-new empresa is instead created server-side
-      // by the createEmpresa Cloud Function via the Admin SDK, which
-      // bypasses these rules entirely).
+      // whose teams are ALL within their own managed teams (never empty —
+      // a scoped admin can't create a team-less worker, same intent as the
+      // old single-groupId "in myManagedGroupIds()" check). The new doc's
+      // empresaId must match the creator's own (the very first admin of a
+      // brand-new empresa is instead created server-side by the
+      // createEmpresa Cloud Function via the Admin SDK, which bypasses
+      // these rules entirely).
       allow create: if request.resource.data.empresaId == myEmpresaId()
         && (isSuperAdmin()
             || (hasPermission('manageUsers')
                 && request.resource.data.role == 'trabajador_normal'
-                && request.resource.data.groupId in myManagedGroupIds()));
-      // super_admin can edit any field (role, group, permissions, etc) but
+                && request.resource.data.get('groupIds', []).size() > 0
+                && request.resource.data.get('groupIds', []).hasOnly(myManagedGroupIds())));
+      // super_admin can edit any field (role, groups, permissions, etc) but
       // only within their own empresa. An admin_equipo with manageUsers may
-      // edit a trabajador_normal who is (and, if their team is being
-      // changed, remains) in one of their own managed teams — they can
-      // never touch role, and never touch an admin or super_admin account.
-      // Regular users may only update the fields the app touches on their
-      // own behalf, including their own visual preferences. empresaId is
-      // immutable in every branch — a user can never be moved between
-      // empresas by an update.
+      // edit a trabajador_normal only if EVERY one of that worker's current
+      // teams AND every one of their new teams is within the admin's own
+      // managed teams — a worker with even one team outside the admin's
+      // reach is untouchable by them, and they can never assign a team they
+      // don't manage. They can never touch role, and never touch an admin
+      // or super_admin account. Regular users may only update the fields
+      // the app touches on their own behalf, including their own visual
+      // preferences. empresaId is immutable in every branch — a user can
+      // never be moved between empresas by an update.
       allow update: if resource.data.empresaId == request.resource.data.empresaId
         && (
           (isSuperAdmin() && sameEmpresa(resource.data.empresaId))
@@ -184,9 +189,11 @@ service cloud.firestore {
           || (hasPermission('manageUsers')
               && sameEmpresa(resource.data.empresaId)
               && resource.data.role == 'trabajador_normal'
-              && managesGroup(resource.data.groupId)
+              && resource.data.get('groupIds', []).size() > 0
+              && resource.data.get('groupIds', []).hasOnly(myManagedGroupIds())
               && request.resource.data.role == 'trabajador_normal'
-              && managesGroup(request.resource.data.groupId))
+              && request.resource.data.get('groupIds', []).size() > 0
+              && request.resource.data.get('groupIds', []).hasOnly(myManagedGroupIds()))
         );
       // Permanent delete stays super_admin-only, same as the Cloud Function
       // (functions/src/deleteUser.js) that actually performs it — now also
@@ -354,6 +361,21 @@ service cloud.firestore {
         // History is an append-only log — never edited or removed
         // individually (the parent case's own delete rule handles cleanup).
       }
+    }
+
+    // Etiquetas: unlike supportCases itself, this catalog is "administrado"
+    // (Michel's own word) — reading the list to apply tags to a case is
+    // open to everyone, but creating/renaming/deleting a tag requires
+    // manageSupportCases, matching printerConfigs' fully-gated pattern.
+    match /supportCaseTags/{tagId} {
+      allow read: if sameEmpresa(resource.data.empresaId);
+      allow create: if request.resource.data.empresaId == myEmpresaId()
+        && (isSuperAdmin() || hasPermission('manageSupportCases'));
+      allow update: if resource.data.empresaId == request.resource.data.empresaId
+        && sameEmpresa(resource.data.empresaId)
+        && (isSuperAdmin() || hasPermission('manageSupportCases'));
+      allow delete: if sameEmpresa(resource.data.empresaId)
+        && (isSuperAdmin() || hasPermission('manageSupportCases'));
     }
 
     // -----------------------------------------------------------------

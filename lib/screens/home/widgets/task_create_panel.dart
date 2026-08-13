@@ -107,12 +107,13 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
     final List<AppUser> pool;
     if (current.isScopedAdmin) {
       pool = catalog.users
-          .where((u) => current.managedGroupIds.contains(u.groupId))
+          .where((u) => u.groupIds.any(current.managedGroupIds.contains))
           .toList();
-    } else if (current.groupId != null) {
-      pool = catalog.usersInGroup(current.groupId).isNotEmpty
-          ? catalog.usersInGroup(current.groupId)
-          : catalog.users;
+    } else if (current.groupIds.isNotEmpty) {
+      final inOwnGroups = {
+        for (final groupId in current.groupIds) ...catalog.usersInGroup(groupId),
+      }.toList();
+      pool = inOwnGroups.isNotEmpty ? inOwnGroups : catalog.users;
     } else {
       pool = catalog.users;
     }
@@ -279,7 +280,9 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
       _assignedUserId ??= currentUser.id;
     }
     _statusId ??= catalog.pendingStatusId;
-    _groupId ??= catalog.userById(_assignedUserId)?.groupId ?? currentUser.groupId;
+    final assignedUserGroupIds = catalog.userById(_assignedUserId)?.groupIds ?? const [];
+    _groupId ??= (assignedUserGroupIds.isNotEmpty ? assignedUserGroupIds.first : null) ??
+        (currentUser.groupIds.isNotEmpty ? currentUser.groupIds.first : null);
     // Time-selection mode now lives per-team (GroupModel.timeSelectionMode)
     // instead of the old single global systemConfig toggle.
     final useFreePicker = catalog.groupById(_groupId)?.useFreePicker ?? false;
@@ -294,14 +297,14 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
         .toList();
 
     final assignableUsers = _assignableUsers(catalog, currentUser);
-    final isGroupLocked = !isAdmin && currentUser.groupId != null;
+    final isGroupLocked = !isAdmin && currentUser.groupIds.length == 1;
     final groupOptions = currentUser.isScopedAdmin
         ? catalog.groups
             .where((g) => currentUser.managesGroup(g.id) || g.id == _groupId)
             .toList()
-        : (isGroupLocked
+        : (currentUser.groupIds.isNotEmpty
             ? catalog.groups
-                .where((g) => g.id == currentUser.groupId || g.id == _groupId)
+                .where((g) => currentUser.groupIds.contains(g.id) || g.id == _groupId)
                 .toList()
             : catalog.groups);
 

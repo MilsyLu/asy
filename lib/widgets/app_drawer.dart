@@ -95,10 +95,10 @@ class AppDrawer extends StatelessWidget {
                         icon: LucideIcons.userCheck,
                         label: AuthService.roleLabel(user?.role ?? ''),
                       ),
-                      if (user?.groupId != null)
+                      if (user != null && user.groupIds.isNotEmpty)
                         _Badge(
                           icon: LucideIcons.users,
-                          label: catalog.groupName(user?.groupId),
+                          label: catalog.groupNames(user.groupIds),
                         ),
                       _Badge(
                         icon: LucideIcons.barChart3,

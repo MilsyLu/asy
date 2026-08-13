@@ -1806,7 +1806,7 @@ void _showInactiveUsersSheet(
           title: stat.user.name,
           color: context.colors.statusRescheduled,
           lines: [
-            'Equipo: ${catalog.groupName(stat.user.groupId)}',
+            'Equipo: ${catalog.groupNames(stat.user.groupIds)}',
             'Completadas (7 días): ${stat.completedLast7Days}',
             'Último acceso: ${AppDateUtils.formatDateTimeOrDash(stat.user.lastLogin)}',
           ],

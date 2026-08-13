@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
@@ -139,10 +140,10 @@ class _GroupsPageState extends State<GroupsPage> {
     Widget body;
     if (isMobile) {
       body = Column(children: [searchField, Expanded(child: buildList(shrink: false))]);
-    } else if (!isSuperAdmin) {
-      // Scoped admins never create/delete teams or manage membership from
-      // here, so there's no right panel to show — just the (already
-      // filtered-to-their-teams) list.
+    } else if (!isSuperAdmin && !canEditTeams) {
+      // A scoped admin without manageTeams never creates/deletes teams or
+      // manages membership from here, so there's no right panel to show —
+      // just the (already filtered-to-their-teams) list.
       body = Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: AppLayout.contentMaxWidthWide),
@@ -187,7 +188,10 @@ class _GroupsPageState extends State<GroupsPage> {
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(0, 12, 16, 16),
-                  child: SizedBox(width: 320, child: panel),
+                  // Scrollable: a tall panel (e.g. a team with many members
+                  // to check off) can exceed the available height, leaving
+                  // the confirm button unreachable without this.
+                  child: SizedBox(width: 320, child: SingleChildScrollView(child: panel)),
                 ),
               ],
             );
@@ -214,8 +218,10 @@ class _GroupsPageState extends State<GroupsPage> {
 
     // Tablet/desktop: the panel replaces the FAB for creating a team, so no
     // FAB there. Mobile keeps it (no persistent panel to hold the form).
-    // Team creation is always super_admin-only, on every platform.
-    final fab = isMobile && isSuperAdmin
+    // Team creation is super_admin-only, plus a scoped admin_equipo with
+    // manageTeams (who becomes that team's manager automatically — see
+    // _CreateTeamPanel._save()).
+    final fab = isMobile && (isSuperAdmin || canEditTeams)
         ? FloatingActionButton(
             onPressed: () => _showGroupFormDialog(context),
             child: const Icon(LucideIcons.plus),
@@ -256,14 +262,29 @@ class _CreateTeamPanelState extends State<_CreateTeamPanel> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
-    final repo = context.read<CatalogRepository>();
+    final isSuperAdmin = context.read<AuthProvider>().isSuperAdmin;
+    final name = _nameController.text.trim();
+    final description = _descController.text.trim();
     try {
-      await repo.addGroup(_nameController.text.trim(), _descController.text.trim());
+      if (isSuperAdmin) {
+        await context.read<CatalogRepository>().addGroup(name, description);
+      } else {
+        // A scoped admin_equipo (with manageTeams) can't write to `groups`
+        // directly — firestore.rules keeps that create-only-by-super_admin.
+        // This Cloud Function does it server-side AND adds the new team to
+        // the caller's own managedGroupIds in the same atomic step, so they
+        // immediately administer the team they just created.
+        await FirebaseFunctions.instance
+            .httpsCallable('createTeamAsScopedAdmin')
+            .call<Map<String, dynamic>>({'name': name, 'description': description});
+      }
       if (mounted) {
         _nameController.clear();
         _descController.clear();
         SnackbarUtils.showSuccess(context, 'Equipo creado');
       }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) SnackbarUtils.showError(context, e.message ?? 'No se pudo crear el equipo');
     } catch (e) {
       if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
     } finally {
@@ -338,7 +359,7 @@ class _MembersPanelState extends State<_MembersPanel> {
     final catalog = context.read<CatalogProvider>();
     _selected = {
       for (final u in catalog.users)
-        if (u.groupId == widget.group.id) u.id,
+        if (u.isInGroup(widget.group.id)) u.id,
     };
   }
 
@@ -349,11 +370,11 @@ class _MembersPanelState extends State<_MembersPanel> {
     try {
       for (final user in catalog.users) {
         final shouldBeMember = _selected.contains(user.id);
-        final isMember = user.groupId == widget.group.id;
+        final isMember = user.isInGroup(widget.group.id);
         if (shouldBeMember && !isMember) {
-          await userRepo.updateGroup(user.id, widget.group.id);
+          await userRepo.addToGroup(user.id, widget.group.id);
         } else if (!shouldBeMember && isMember) {
-          await userRepo.updateGroup(user.id, null);
+          await userRepo.removeFromGroup(user.id, widget.group.id);
         }
       }
       if (mounted) {
@@ -395,8 +416,8 @@ class _MembersPanelState extends State<_MembersPanel> {
                 itemCount: allUsers.length,
                 itemBuilder: (context, index) {
                   final user = allUsers[index];
-                  final isInOtherGroup =
-                      user.groupId != null && user.groupId != widget.group.id;
+                  final otherGroupIds =
+                      user.groupIds.where((id) => id != widget.group.id).toList();
                   return CheckboxListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
@@ -406,8 +427,8 @@ class _MembersPanelState extends State<_MembersPanel> {
                       style: TextStyle(color: colors.textPrimary, fontSize: 13),
                     ),
                     subtitle: Text(
-                      isInOtherGroup
-                          ? '${user.email} · en "${catalog.groupName(user.groupId)}"'
+                      otherGroupIds.isNotEmpty
+                          ? '${user.email} · también en "${catalog.groupNames(otherGroupIds)}"'
                           : user.email,
                       style: TextStyle(color: colors.textSecondary, fontSize: 11),
                     ),
@@ -846,6 +867,7 @@ class _GroupCard extends StatelessWidget {
 Future<void> _showGroupFormDialog(BuildContext context, {GroupModel? existing}) async {
   final colors = context.colors;
   final repo = context.read<CatalogRepository>();
+  final isSuperAdmin = context.read<AuthProvider>().isSuperAdmin;
   final nameController = TextEditingController(text: existing?.name ?? '');
   final descriptionController = TextEditingController(text: existing?.description ?? '');
   final formKey = GlobalKey<FormState>();
@@ -894,10 +916,23 @@ Future<void> _showGroupFormDialog(BuildContext context, {GroupModel? existing}) 
                         setState(() => isSaving = true);
                         try {
                           if (existing == null) {
-                            await repo.addGroup(
-                              nameController.text.trim(),
-                              descriptionController.text.trim(),
-                            );
+                            if (isSuperAdmin) {
+                              await repo.addGroup(
+                                nameController.text.trim(),
+                                descriptionController.text.trim(),
+                              );
+                            } else {
+                              // See _CreateTeamPanel._save() — a scoped
+                              // admin_equipo creates a team via this Cloud
+                              // Function, which also adds it to their own
+                              // managedGroupIds in the same step.
+                              await FirebaseFunctions.instance
+                                  .httpsCallable('createTeamAsScopedAdmin')
+                                  .call<Map<String, dynamic>>({
+                                'name': nameController.text.trim(),
+                                'description': descriptionController.text.trim(),
+                              });
+                            }
                           } else {
                             await repo.updateGroup(
                               existing.id,
@@ -906,6 +941,12 @@ Future<void> _showGroupFormDialog(BuildContext context, {GroupModel? existing}) 
                             );
                           }
                           if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                        } on FirebaseFunctionsException catch (e) {
+                          if (dialogContext.mounted) {
+                            SnackbarUtils.showError(
+                                dialogContext, e.message ?? 'No se pudo crear el equipo');
+                          }
+                          setState(() => isSaving = false);
                         } catch (e) {
                           if (dialogContext.mounted) {
                             SnackbarUtils.showError(
@@ -944,10 +985,11 @@ Future<void> _deleteGroup(BuildContext context, GroupModel group) async {
 
   final catalogRepo = context.read<CatalogRepository>();
   final userRepo = context.read<UserRepository>();
+  final catalog = context.read<CatalogProvider>();
   try {
-    final members = await userRepo.getUsersByGroup(group.id);
+    final members = catalog.usersInGroup(group.id);
     for (final member in members) {
-      await userRepo.updateGroup(member.id, null);
+      await userRepo.removeFromGroup(member.id, group.id);
     }
     await catalogRepo.deleteGroup(group.id);
     if (context.mounted) {
@@ -969,7 +1011,7 @@ Future<void> _showMembersDialog(BuildContext context, GroupModel group) async {
 
   final selected = <String>{
     for (final u in allUsers)
-      if (u.groupId == group.id) u.id,
+      if (u.isInGroup(group.id)) u.id,
   };
   bool isSaving = false;
 
@@ -992,14 +1034,14 @@ Future<void> _showMembersDialog(BuildContext context, GroupModel group) async {
                       itemCount: allUsers.length,
                       itemBuilder: (context, index) {
                         final user = allUsers[index];
-                        final isInOtherGroup =
-                            user.groupId != null && user.groupId != group.id;
+                        final otherGroupIds =
+                            user.groupIds.where((id) => id != group.id).toList();
                         return CheckboxListTile(
                           value: selected.contains(user.id),
                           title: Text(user.name, style: TextStyle(color: colors.textPrimary)),
                           subtitle: Text(
-                            isInOtherGroup
-                                ? '${user.email} · en "${catalog.groupName(user.groupId)}"'
+                            otherGroupIds.isNotEmpty
+                                ? '${user.email} · también en "${catalog.groupNames(otherGroupIds)}"'
                                 : user.email,
                             style: TextStyle(color: colors.textSecondary, fontSize: 12),
                           ),
@@ -1031,11 +1073,11 @@ Future<void> _showMembersDialog(BuildContext context, GroupModel group) async {
                         try {
                           for (final user in allUsers) {
                             final shouldBeMember = selected.contains(user.id);
-                            final isMember = user.groupId == group.id;
+                            final isMember = user.isInGroup(group.id);
                             if (shouldBeMember && !isMember) {
-                              await userRepo.updateGroup(user.id, group.id);
+                              await userRepo.addToGroup(user.id, group.id);
                             } else if (!shouldBeMember && isMember) {
-                              await userRepo.updateGroup(user.id, null);
+                              await userRepo.removeFromGroup(user.id, group.id);
                             }
                           }
                           if (dialogContext.mounted) Navigator.of(dialogContext).pop();

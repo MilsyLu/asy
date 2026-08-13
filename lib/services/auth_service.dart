@@ -58,7 +58,7 @@ class AuthService {
     required String name,
     required String role,
     required String empresaId,
-    String? groupId,
+    List<String> groupIds = const [],
     List<String> managedGroupIds = const [],
     Map<String, bool> permissions = const {},
   }) async {
@@ -82,7 +82,7 @@ class AuthService {
         'email': email.trim(),
         'name': name.trim(),
         'role': role,
-        'groupId': groupId,
+        'groupIds': groupIds,
         'empresaId': empresaId,
         'managedGroupIds': managedGroupIds,
         'permissions': permissions,

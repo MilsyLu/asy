@@ -61,14 +61,15 @@ class _UsersPageState extends State<UsersPage> {
     final filtered = users.where((u) {
       // A scoped admin_equipo only ever sees workers in their own managed
       // teams — never other admins, never workers outside their reach.
-      if (!auth.isSuperAdmin && !(u.role == AppRoles.trabajadorNormal && auth.managesGroup(u.groupId))) {
+      if (!auth.isSuperAdmin &&
+          !(u.role == AppRoles.trabajadorNormal && u.groupIds.any(auth.managesGroup))) {
         return false;
       }
       if (_filter == _UserStatusFilter.active && !u.isActive) return false;
       if (_filter == _UserStatusFilter.inactive && u.isActive) return false;
       if (_groupFilter == AppFilterValues.noGroup) {
-        if (u.groupId != null) return false;
-      } else if (_groupFilter != null && u.groupId != _groupFilter) {
+        if (u.groupIds.isNotEmpty) return false;
+      } else if (_groupFilter != null && !u.groupIds.contains(_groupFilter)) {
         return false;
       }
       if (_roleFilter != null && u.role != _roleFilter) return false;
@@ -175,7 +176,7 @@ class _UsersPageState extends State<UsersPage> {
           final user = filtered[index];
           return _UserCard(
             user: user,
-            groupName: user.groupId != null ? catalog.groupName(user.groupId) : null,
+            groupName: user.groupIds.isNotEmpty ? catalog.groupNames(user.groupIds) : null,
             onTap: () => _showUserDetailSheet(context, user),
           );
         },
@@ -215,7 +216,11 @@ class _UsersPageState extends State<UsersPage> {
                   // to realign with the list, which now starts one row
                   // lower here — the Rol filter added a second filters row.
                   padding: const EdgeInsets.fromLTRB(0, 68, 16, 16),
-                  child: SizedBox(width: 320, child: panel),
+                  // Scrollable: the panel (esp. with admin_equipo's extra
+                  // teams/permissions fields) can be taller than the
+                  // available height — without this the "Crear" button ends
+                  // up cut off below the fold with no way to reach it.
+                  child: SizedBox(width: 320, child: SingleChildScrollView(child: panel)),
                 ),
               ],
             );
@@ -274,7 +279,7 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   String _role = AppRoles.trabajadorNormal;
-  String? _groupId;
+  List<String> _groupIds = [];
   List<String> _managedGroupIds = [];
   Map<String, bool> _permissions = {};
   bool _isSaving = false;
@@ -293,6 +298,11 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
       SnackbarUtils.showError(context, 'Selecciona al menos un equipo para el administrador');
       return;
     }
+    final isViewerSuperAdmin = context.read<AuthProvider>().isSuperAdmin;
+    if (_role == AppRoles.trabajadorNormal && !isViewerSuperAdmin && _groupIds.isEmpty) {
+      SnackbarUtils.showError(context, 'Selecciona al menos un equipo para el usuario');
+      return;
+    }
     setState(() => _isSaving = true);
     final authService = context.read<AuthService>();
     final empresaId = context.read<AuthProvider>().appUser!.empresaId!;
@@ -303,7 +313,7 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
         name: _nameController.text.trim(),
         role: _role,
         empresaId: empresaId,
-        groupId: _groupId,
+        groupIds: _groupIds,
         managedGroupIds: _managedGroupIds,
         permissions: _permissions,
       );
@@ -313,7 +323,7 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
         _emailController.clear();
         _passwordController.clear();
         setState(() {
-          _groupId = null;
+          _groupIds = [];
           _role = AppRoles.trabajadorNormal;
           _managedGroupIds = [];
           _permissions = {};
@@ -402,20 +412,15 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
                 onChanged: (v) => setState(() => _permissions = v),
               ),
             ] else ...[
-              DropdownButtonFormField<String?>(
-                initialValue: _groupId,
-                dropdownColor: colors.surface,
-                decoration: InputDecoration(
-                  labelText: isViewerSuperAdmin ? 'Equipo (opcional)' : 'Equipo',
-                ),
-                items: [
-                  if (isViewerSuperAdmin)
-                    const DropdownMenuItem<String?>(value: null, child: Text('Sin equipo')),
-                  for (final group in catalog.groups)
-                    if (isViewerSuperAdmin || viewerManagedGroupIds.contains(group.id))
-                      DropdownMenuItem<String?>(value: group.id, child: Text(group.name)),
-                ],
-                onChanged: (v) => setState(() => _groupId = v),
+              _ManagedGroupsField(
+                groups: isViewerSuperAdmin
+                    ? catalog.groups
+                    : catalog.groups
+                        .where((g) => viewerManagedGroupIds.contains(g.id))
+                        .toList(),
+                selected: _groupIds,
+                allowEmpty: isViewerSuperAdmin,
+                onChanged: (v) => setState(() => _groupIds = v),
               ),
             ],
             const SizedBox(height: 16),
@@ -445,11 +450,18 @@ class _ManagedGroupsField extends StatelessWidget {
     required this.groups,
     required this.selected,
     required this.onChanged,
+    this.allowEmpty = false,
   });
 
   final List<GroupModel> groups;
   final List<String> selected;
   final ValueChanged<List<String>> onChanged;
+
+  /// When true, an empty selection is a valid state (shown neutrally) rather
+  /// than the red "nothing selected yet" warning — used for a regular
+  /// worker's teams when created by a super_admin, who may leave it empty
+  /// (unlike an admin_equipo, who always needs at least one managed team).
+  final bool allowEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -462,7 +474,13 @@ class _ManagedGroupsField extends StatelessWidget {
         Text('Equipos asignados', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
         const SizedBox(height: 6),
         if (names.isEmpty)
-          Text('Ninguno seleccionado', style: TextStyle(color: colors.error, fontSize: 12))
+          Text(
+            allowEmpty ? 'Sin equipo' : 'Ninguno seleccionado',
+            style: TextStyle(
+              color: allowEmpty ? colors.textSecondary : colors.error,
+              fontSize: 12,
+            ),
+          )
         else
           Wrap(
             spacing: 6,
@@ -857,7 +875,7 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
   final viewerManagedGroupIds = viewerAuth.appUser?.managedGroupIds ?? const <String>[];
 
   String selectedRole = user.role;
-  String? selectedGroupId = user.groupId;
+  List<String> selectedGroupIds = List.of(user.groupIds);
   List<String> selectedManagedGroupIds = List.of(user.managedGroupIds);
   Map<String, bool> selectedPermissions = Map.of(user.permissions);
   bool tokensExpanded = false;
@@ -1004,25 +1022,20 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                         style: TextStyle(color: colors.textSecondary, fontSize: 12),
                       ),
                   ] else ...[
-                    Text('Equipo', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
-                    const SizedBox(height: 6),
-                    DropdownButtonFormField<String?>(
-                      initialValue: selectedGroupId,
-                      dropdownColor: colors.surface,
-                      items: [
-                        if (isViewerSuperAdmin)
-                          const DropdownMenuItem<String?>(value: null, child: Text('Sin equipo')),
-                        for (final group in catalog.groups)
-                          if (isViewerSuperAdmin || viewerManagedGroupIds.contains(group.id))
-                            DropdownMenuItem<String?>(value: group.id, child: Text(group.name)),
-                      ],
-                      onChanged: (value) async {
-                        if (value == selectedGroupId) return;
+                    _ManagedGroupsField(
+                      groups: isViewerSuperAdmin
+                          ? catalog.groups
+                          : catalog.groups
+                              .where((g) => viewerManagedGroupIds.contains(g.id))
+                              .toList(),
+                      selected: selectedGroupIds,
+                      allowEmpty: isViewerSuperAdmin,
+                      onChanged: (v) async {
                         try {
-                          await userRepo.updateGroup(user.id, value);
-                          setState(() => selectedGroupId = value);
+                          await userRepo.setGroupIds(user.id, v);
+                          setState(() => selectedGroupIds = v);
                           if (sheetContext.mounted) {
-                            SnackbarUtils.showSuccess(sheetContext, 'Equipo actualizado');
+                            SnackbarUtils.showSuccess(sheetContext, 'Equipos actualizados');
                           }
                         } catch (e) {
                           if (sheetContext.mounted) {
@@ -1257,7 +1270,7 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   String role = AppRoles.trabajadorNormal;
-  String? groupId;
+  List<String> groupIds = [];
   List<String> managedGroupIds = [];
   Map<String, bool> permissions = {};
   bool isSaving = false;
@@ -1332,16 +1345,11 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                         onChanged: (v) => setState(() => permissions = v),
                       ),
                     ] else
-                      DropdownButtonFormField<String?>(
-                        initialValue: groupId,
-                        dropdownColor: colors.surface,
-                        decoration: const InputDecoration(labelText: 'Equipo (opcional)'),
-                        items: [
-                          const DropdownMenuItem<String?>(value: null, child: Text('Sin equipo')),
-                          for (final group in catalog.groups)
-                            DropdownMenuItem<String?>(value: group.id, child: Text(group.name)),
-                        ],
-                        onChanged: (v) => setState(() => groupId = v),
+                      _ManagedGroupsField(
+                        groups: catalog.groups,
+                        selected: groupIds,
+                        allowEmpty: true,
+                        onChanged: (v) => setState(() => groupIds = v),
                       ),
                   ],
                 ),
@@ -1370,7 +1378,7 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                             name: nameController.text.trim(),
                             role: role,
                             empresaId: empresaId,
-                            groupId: groupId,
+                            groupIds: groupIds,
                             managedGroupIds: managedGroupIds,
                             permissions: permissions,
                           );

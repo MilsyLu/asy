@@ -2,8 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/constants/firestore_paths.dart';
 import '../core/constants/support_case_constants.dart';
+import '../core/utils/date_utils.dart';
 import '../models/support_case_history_entry.dart';
 import '../models/support_case_model.dart';
+import '../models/support_case_tag_model.dart';
 
 /// CRUD for `supportCases`, empresaId-scoped like `CatalogRepository`/
 /// `PrinterConfigRepository`. Unlike those, [description] is never mutated
@@ -27,6 +29,29 @@ class SupportCaseRepository {
 
   CollectionReference<Map<String, dynamic>> _historyCollection(String caseId) =>
       _collection.doc(caseId).collection(FirestoreCollections.supportCaseHistory);
+
+  CollectionReference<Map<String, dynamic>> get _tagsCollection =>
+      _firestore.collection(FirestoreCollections.supportCaseTags);
+
+  Query<Map<String, dynamic>> get _tagsQuery =>
+      _tagsCollection.where('empresaId', isEqualTo: empresaId);
+
+  /// The admin-curated tag catalog — readable by anyone (see
+  /// firestore.rules), only `manageSupportCases` can add/remove entries.
+  Stream<List<SupportCaseTagModel>> watchTags() {
+    return _tagsQuery.orderBy('name').snapshots().map(
+        (snap) => snap.docs.map((d) => SupportCaseTagModel.fromDoc(d)).toList());
+  }
+
+  Future<void> addTag(String name) {
+    return _tagsCollection.add({
+      'name': name,
+      'empresaId': empresaId,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> deleteTag(String tagId) => _tagsCollection.doc(tagId).delete();
 
   Stream<List<SupportCaseModel>> watchAll() {
     return _query.orderBy('createdAt', descending: true).snapshots().map(
@@ -200,6 +225,57 @@ class SupportCaseRepository {
       text: newAssigneeName != null
           ? 'Asignó el caso a $newAssigneeName.'
           : 'Quitó la asignación del caso.',
+      authorId: authorId,
+      authorName: authorName,
+    );
+  }
+
+  Future<void> updateTags(
+    String caseId,
+    List<String> newTags, {
+    required String authorId,
+    required String authorName,
+  }) async {
+    await _collection.doc(caseId).update({
+      'tags': newTags,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    await _appendHistory(
+      caseId,
+      type: SupportCaseHistoryType.tagsChanged,
+      text: newTags.isEmpty ? 'Quitó todas las etiquetas.' : 'Etiquetas: ${newTags.join(', ')}.',
+      authorId: authorId,
+      authorName: authorName,
+    );
+  }
+
+  /// Sets/clears a one-off personal reminder — only [authorId] gets
+  /// notified when it fires (see `checkSupportCaseCustomReminders.js`).
+  /// Passing `reminderTime: null` clears it. `reminderSent` always resets
+  /// to false here so editing a reminder's time re-arms it.
+  Future<void> setReminder(
+    String caseId, {
+    DateTime? reminderTime,
+    String reminderNote = '',
+    required String authorId,
+    required String authorName,
+  }) async {
+    await _collection.doc(caseId).update({
+      'reminderTime': reminderTime != null ? Timestamp.fromDate(reminderTime) : null,
+      'reminderNote': reminderNote,
+      'reminderSetBy': reminderTime != null ? authorId : null,
+      'reminderSent': false,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    final text = reminderTime == null
+        ? 'Quitó el recordatorio.'
+        : 'Programó un recordatorio para ${AppDateUtils.formatShortDate(reminderTime)} '
+            '${AppDateUtils.formatTime12h(reminderTime)}'
+            '${reminderNote.trim().isEmpty ? '' : ' — "${reminderNote.trim()}"'}.';
+    await _appendHistory(
+      caseId,
+      type: SupportCaseHistoryType.reminderChanged,
+      text: text,
       authorId: authorId,
       authorName: authorName,
     );

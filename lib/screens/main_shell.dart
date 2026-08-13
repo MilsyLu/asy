@@ -299,20 +299,23 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
-    // Tap-to-open-task, background/terminated-app case: the service worker
+    // Tap-to-open, background/terminated-app case: the service worker
     // (web/firebase-messaging-sw.js) sends a background push click to
-    // "<origin>/?openTask=<taskId>" — the foreground/in-app-list/mobile
-    // cases are handled directly in notification_service.dart and don't go
-    // through the URL at all. Deferred to a post-frame callback so the
-    // Provider tree (needed by openTaskFromNotification) is guaranteed to
-    // exist first; the query param is then stripped so refreshing the page
-    // doesn't reopen the same task forever (this app has no router to
-    // otherwise change the URL).
+    // "<origin>/?openTask=<taskId>" or "<origin>/?openCase=<caseId>" — the
+    // foreground/in-app-list/mobile cases are handled directly in
+    // notification_service.dart and don't go through the URL at all.
+    // Deferred to a post-frame callback so the Provider tree (needed by
+    // openTaskFromNotification/openSupportCaseFromNotification) is
+    // guaranteed to exist first; the query param is then stripped so
+    // refreshing the page doesn't reopen the same task/case forever (this
+    // app has no router to otherwise change the URL).
     if (kIsWeb) {
       final taskId = Uri.base.queryParameters['openTask'];
-      if (taskId != null && taskId.isNotEmpty) {
+      final caseId = Uri.base.queryParameters['openCase'];
+      if ((taskId != null && taskId.isNotEmpty) || (caseId != null && caseId.isNotEmpty)) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          openTaskFromNotification(taskId);
+          if (taskId != null && taskId.isNotEmpty) openTaskFromNotification(taskId);
+          if (caseId != null && caseId.isNotEmpty) openSupportCaseFromNotification(caseId);
           clearOpenTaskQueryParam();
         });
       }
@@ -895,10 +898,10 @@ class _AppSidebarState extends State<_AppSidebar> {
                   label: AuthService.roleLabel(user?.role ?? ''),
                   colors: colors,
                 ),
-                if (user?.groupId != null)
+                if (user != null && user.groupIds.isNotEmpty)
                   _SidebarBadge(
                     icon: LucideIcons.users,
-                    label: catalog.groupName(user?.groupId),
+                    label: catalog.groupNames(user.groupIds),
                     colors: colors,
                   ),
                 _SidebarBadge(

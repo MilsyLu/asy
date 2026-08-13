@@ -31,20 +31,22 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 /// established here; nothing currently dispatches on [type] — that's for
 /// whichever sprint adds in-app navigation on notification tap.
 class NotificationPayload {
-  const NotificationPayload({this.type, this.taskId});
+  const NotificationPayload({this.type, this.taskId, this.caseId});
 
   final String? type;
   final String? taskId;
+  final String? caseId;
 
   factory NotificationPayload.fromMessage(RemoteMessage message) {
     return NotificationPayload(
       type: message.data['type'] as String?,
       taskId: message.data['taskId'] as String?,
+      caseId: message.data['caseId'] as String?,
     );
   }
 
   @override
-  String toString() => 'NotificationPayload(type: $type, taskId: $taskId)';
+  String toString() => 'NotificationPayload(type: $type, taskId: $taskId, caseId: $caseId)';
 }
 
 /// Wraps Firebase Cloud Messaging + flutter_local_notifications.
@@ -109,7 +111,7 @@ class NotificationService {
         // `payload` carries the taskId (set below in `.show()`'s
         // `payload:` argument).
         onDidReceiveNotificationResponse: (response) {
-          openTaskFromNotification(response.payload);
+          openNotificationFromPayload(response.payload);
         },
       );
 
@@ -201,7 +203,7 @@ class NotificationService {
       );
     }
     debugPrint('Notification opened: $payload');
-    openTaskFromNotification(payload.taskId);
+    openNotificationFromData(message.data);
   }
 
   void _showForegroundNotification(RemoteMessage message) {
@@ -230,8 +232,7 @@ class NotificationService {
               'badge': '/icons/Icon-192.png',
               'tag': message.messageId ?? '',
             },
-            onClick: () =>
-                openTaskFromNotification(message.data['taskId'] as String?),
+            onClick: () => openNotificationFromData(message.data),
           );
           debugPrint('[WEB_FCM] foreground: notification shown via Web Notification API');
         } catch (e) {
@@ -262,8 +263,18 @@ class NotificationService {
           presentSound: true,
         ),
       ),
-      payload: message.data['taskId'] as String?,
+      payload: _encodeLocalNotificationPayload(message.data),
     );
+  }
+
+  /// Encodes which entity a mobile local notification's tap should open —
+  /// see [openNotificationFromPayload] for the decoding side.
+  static String? _encodeLocalNotificationPayload(Map<String, dynamic> data) {
+    final taskId = data['taskId'] as String?;
+    if (taskId != null && taskId.isNotEmpty) return 'task:$taskId';
+    final caseId = data['caseId'] as String?;
+    if (caseId != null && caseId.isNotEmpty) return 'case:$caseId';
+    return null;
   }
 
   // ---------------------------------------------------------------------------

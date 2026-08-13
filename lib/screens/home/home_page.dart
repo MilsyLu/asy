@@ -609,7 +609,7 @@ class _HomeHeader extends StatelessWidget {
     final todayCount = todayTasks.length;
     final myCount = todayTasks.where((t) => t.assignedUserId == user.id).length;
     final overdueCount = agenda.overdue.length;
-    final groupName = user.groupId != null ? catalog.groupName(user.groupId) : null;
+    final groupName = user.groupIds.isNotEmpty ? catalog.groupNames(user.groupIds) : null;
     final showOwnLine = groupName != null || user.isAdminOfAnyKind;
 
     return Column(

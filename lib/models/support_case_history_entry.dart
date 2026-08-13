@@ -10,6 +10,8 @@ class SupportCaseHistoryType {
   static const String priorityChanged = 'priority_changed';
   static const String assigneeChanged = 'assignee_changed';
   static const String attachmentAdded = 'attachment_added';
+  static const String tagsChanged = 'tags_changed';
+  static const String reminderChanged = 'reminder_changed';
 }
 
 /// A single entry in a support case's timeline — this is what "Seguimiento"

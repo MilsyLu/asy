@@ -61,7 +61,11 @@ class NotificationsPage extends StatelessWidget {
               if (!notification.isRead) {
                 repo.markAsRead(notification.id);
               }
-              openTaskFromNotification(notification.taskId);
+              if (notification.taskId != null) {
+                openTaskFromNotification(notification.taskId);
+              } else if (notification.caseId != null) {
+                openSupportCaseFromNotification(notification.caseId);
+              }
             },
             onDeleteNotification: (notification) {
               repo.deleteNotification(notification.id);

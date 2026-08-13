@@ -78,7 +78,8 @@ const onTaskUpdate = onDocumentUpdated("tasks/{taskId}", async (event) => {
         try {
           const groupMembersSnap = await db
             .collection("users")
-            .where("groupId", "==", groupId)
+            .where("empresaId", "==", empresaId)
+            .where("groupIds", "array-contains", groupId)
             .get();
 
           const memberIds = groupMembersSnap.docs

@@ -11,6 +11,7 @@ class NotificationModel {
   final String title;
   final String body;
   final String? taskId;
+  final String? caseId;
   final bool isRead;
   final DateTime? createdAt;
 
@@ -27,6 +28,7 @@ class NotificationModel {
     required this.title,
     required this.body,
     this.taskId,
+    this.caseId,
     this.isRead = false,
     this.createdAt,
     this.empresaId,
@@ -40,6 +42,7 @@ class NotificationModel {
       title: map['title'] as String? ?? '',
       body: map['body'] as String? ?? '',
       taskId: map['taskId'] as String?,
+      caseId: map['caseId'] as String?,
       isRead: map['isRead'] as bool? ?? false,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate(),
       empresaId: map['empresaId'] as String?,
@@ -57,6 +60,7 @@ class NotificationModel {
       'title': title,
       'body': body,
       'taskId': taskId,
+      'caseId': caseId,
       'isRead': isRead,
       'createdAt': withServerTimestamp
           ? FieldValue.serverTimestamp()
@@ -70,6 +74,7 @@ class NotificationModel {
     String? title,
     String? body,
     String? taskId,
+    String? caseId,
     bool? isRead,
   }) {
     return NotificationModel(
@@ -79,6 +84,7 @@ class NotificationModel {
       title: title ?? this.title,
       body: body ?? this.body,
       taskId: taskId ?? this.taskId,
+      caseId: caseId ?? this.caseId,
       isRead: isRead ?? this.isRead,
       createdAt: createdAt,
     );

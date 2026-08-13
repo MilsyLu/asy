@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/constants/support_case_constants.dart';
 import '../../core/responsive/app_spacing.dart';
 import '../../core/responsive/responsive.dart';
@@ -9,13 +10,19 @@ import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../models/support_case_model.dart';
+import '../../models/support_case_tag_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/support_case_repository.dart';
+import '../../widgets/confirm_dialog.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/responsive_sheet.dart';
 import '../../widgets/support_case_badges.dart';
 import 'support_case_detail_view.dart';
+import 'support_case_kanban_view.dart';
+import 'support_case_tags_sheet.dart';
+
+enum _ViewMode { tabla, kanban }
 
 enum _QuickFilter {
   todos,
@@ -106,6 +113,7 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
   String _query = '';
   _QuickFilter _filter = _QuickFilter.todos;
   _SortBy _sortBy = _SortBy.recientes;
+  _ViewMode _viewMode = _ViewMode.tabla;
   String? _selectedCaseId;
 
   @override
@@ -124,6 +132,7 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
             c.subject.toLowerCase().contains(q) ||
             c.description.toLowerCase().contains(q) ||
             c.status.toLowerCase().contains(q) ||
+            c.tags.any((t) => t.toLowerCase().contains(q)) ||
             'cs-${c.caseNumber.toString().padLeft(4, '0')}'.contains(q);
       }).toList();
     }
@@ -150,6 +159,14 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
       context,
       desktopMaxWidth: 480,
       contentBuilder: (sheetCtx) => _NewCaseForm(onCreated: () => Navigator.of(sheetCtx).pop()),
+    );
+  }
+
+  void _openManageTags(BuildContext context) {
+    showResponsiveSheet<void>(
+      context,
+      desktopMaxWidth: 420,
+      contentBuilder: (_) => const SupportCaseTagsSheet(),
     );
   }
 
@@ -184,11 +201,15 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
         final all = snapshot.data!;
         final filtered = _applyFiltersAndSort(all, myUid);
 
-        final list = _CaseList(
-          cases: filtered,
-          selectedCaseId: _selectedCaseId,
-          onTap: (id) => _openDetail(context, id),
-        );
+        final canDelete = auth.hasPermission(AppPermissions.manageSupportCases);
+        final list = (!isMobile && _viewMode == _ViewMode.kanban)
+            ? SupportCaseKanbanView(cases: filtered, onTap: (id) => _openDetail(context, id))
+            : _CaseList(
+                cases: filtered,
+                selectedCaseId: _selectedCaseId,
+                onTap: (id) => _openDetail(context, id),
+                canDelete: canDelete,
+              );
 
         final header = _CasesHeader(
           all: all,
@@ -199,6 +220,9 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
           sortBy: _sortBy,
           onSortChanged: (s) => setState(() => _sortBy = s),
           onNewCase: isMobile ? null : () => _openCreateForm(context),
+          onManageTags: canDelete ? () => _openManageTags(context) : null,
+          viewMode: isMobile ? null : _viewMode,
+          onViewModeChanged: (v) => setState(() => _viewMode = v),
         );
 
         if (isMobile) {
@@ -254,6 +278,9 @@ class _CasesHeader extends StatelessWidget {
     required this.sortBy,
     required this.onSortChanged,
     required this.onNewCase,
+    required this.onManageTags,
+    required this.viewMode,
+    required this.onViewModeChanged,
   });
 
   final List<SupportCaseModel> all;
@@ -264,6 +291,14 @@ class _CasesHeader extends StatelessWidget {
   final _SortBy sortBy;
   final ValueChanged<_SortBy> onSortChanged;
   final VoidCallback? onNewCase;
+
+  /// Null when the viewer lacks `manageSupportCases` — hides the button.
+  final VoidCallback? onManageTags;
+
+  /// Null on mobile — hides the Tabla/Kanban toggle (Kanban's 5 columns
+  /// don't fit a phone screen).
+  final _ViewMode? viewMode;
+  final ValueChanged<_ViewMode> onViewModeChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -297,6 +332,12 @@ class _CasesHeader extends StatelessWidget {
                   ),
                 ),
               ),
+              if (onManageTags != null)
+                IconButton(
+                  tooltip: 'Gestionar etiquetas',
+                  onPressed: onManageTags,
+                  icon: Icon(LucideIcons.tag, color: colors.primary, size: 20),
+                ),
               if (onNewCase != null)
                 ElevatedButton.icon(
                   onPressed: onNewCase,
@@ -344,6 +385,22 @@ class _CasesHeader extends StatelessWidget {
                   DropdownMenuItem(value: _SortBy.dias, child: Text('Días sin resolver')),
                 ],
               ),
+              if (viewMode != null) ...[
+                const SizedBox(width: 8),
+                SegmentedButton<_ViewMode>(
+                  segments: const [
+                    ButtonSegment(value: _ViewMode.tabla, label: Text('Tabla'), icon: Icon(LucideIcons.list, size: 15)),
+                    ButtonSegment(
+                        value: _ViewMode.kanban, label: Text('Kanban'), icon: Icon(LucideIcons.columns, size: 15)),
+                  ],
+                  selected: {viewMode!},
+                  onSelectionChanged: (s) => onViewModeChanged(s.first),
+                  style: const ButtonStyle(
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 8),
@@ -447,12 +504,39 @@ class _FilterChip extends StatelessWidget {
 // List
 // ---------------------------------------------------------------------------
 
+/// Shared by the table row and (in the future, if needed) any other quick
+/// delete entry point — same confirm+delete flow the detail view already
+/// has, just reachable without opening it first.
+Future<void> confirmDeleteSupportCase(BuildContext context, SupportCaseModel c) async {
+  final confirm = await showConfirmDialog(
+    context,
+    title: 'Eliminar caso',
+    message: '¿Eliminar el caso CS-${c.caseNumber.toString().padLeft(4, '0')} '
+        '(${c.clientName}) de forma permanente? Esta acción no se puede deshacer.',
+    confirmLabel: 'Eliminar',
+    destructive: true,
+  );
+  if (!confirm || !context.mounted) return;
+  try {
+    await context.read<SupportCaseRepository>().delete(c.id);
+    if (context.mounted) SnackbarUtils.showSuccess(context, 'Caso eliminado');
+  } catch (e) {
+    if (context.mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+  }
+}
+
 class _CaseList extends StatelessWidget {
-  const _CaseList({required this.cases, required this.selectedCaseId, required this.onTap});
+  const _CaseList({
+    required this.cases,
+    required this.selectedCaseId,
+    required this.onTap,
+    required this.canDelete,
+  });
 
   final List<SupportCaseModel> cases;
   final String? selectedCaseId;
   final void Function(String caseId) onTap;
+  final bool canDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -472,6 +556,7 @@ class _CaseList extends StatelessWidget {
           caseModel: c,
           selected: c.id == selectedCaseId,
           onTap: () => onTap(c.id),
+          onDelete: canDelete ? () => confirmDeleteSupportCase(context, c) : null,
         );
       },
     );
@@ -491,11 +576,19 @@ String _initialsFor(String name) {
 }
 
 class _CaseRow extends StatelessWidget {
-  const _CaseRow({required this.caseModel, required this.selected, required this.onTap});
+  const _CaseRow({
+    required this.caseModel,
+    required this.selected,
+    required this.onTap,
+    required this.onDelete,
+  });
 
   final SupportCaseModel caseModel;
   final bool selected;
   final VoidCallback onTap;
+
+  /// Null when the viewer lacks `manageSupportCases` — hides the icon.
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -583,6 +676,14 @@ class _CaseRow extends StatelessWidget {
                           ],
                           const SizedBox(width: 10),
                           DaysOpenBadge(days: c.daysOpen(), resolved: isResolved, dense: true),
+                          if (onDelete != null)
+                            IconButton(
+                              tooltip: 'Eliminar',
+                              iconSize: 16,
+                              visualDensity: VisualDensity.compact,
+                              icon: Icon(LucideIcons.trash2, color: colors.error),
+                              onPressed: onDelete,
+                            ),
                         ],
                       ),
                     ),
@@ -620,6 +721,7 @@ class _NewCaseFormState extends State<_NewCaseForm> {
   String _priority = SupportCasePriority.media;
   String? _assignedUserId;
   DateTime _reportedAt = DateTime.now();
+  final Set<String> _selectedTags = {};
   bool _isSaving = false;
 
   @override
@@ -658,6 +760,7 @@ class _NewCaseFormState extends State<_NewCaseForm> {
         subject: _subjectController.text.trim(),
         description: _descriptionController.text.trim(),
         priority: _priority,
+        tags: _selectedTags.toList(),
         assignedUserId: _assignedUserId,
         reportedAt: _reportedAt,
         createdBy: user.id,
@@ -760,6 +863,39 @@ class _NewCaseFormState extends State<_NewCaseForm> {
                   for (final u in catalog.users) DropdownMenuItem<String?>(value: u.id, child: Text(u.name)),
                 ],
                 onChanged: (v) => setState(() => _assignedUserId = v),
+              ),
+              const SizedBox(height: 16),
+              Text('Etiquetas', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+              const SizedBox(height: 6),
+              StreamBuilder<List<SupportCaseTagModel>>(
+                stream: context.read<SupportCaseRepository>().watchTags(),
+                builder: (context, snapshot) {
+                  final tags = snapshot.data ?? const [];
+                  if (tags.isEmpty) {
+                    return Text(
+                      'Sin etiquetas todavía.',
+                      style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                    );
+                  }
+                  return Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final tag in tags)
+                        FilterChip(
+                          label: Text(tag.name),
+                          selected: _selectedTags.contains(tag.name),
+                          onSelected: (v) => setState(() {
+                            if (v) {
+                              _selectedTags.add(tag.name);
+                            } else {
+                              _selectedTags.remove(tag.name);
+                            }
+                          }),
+                        ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 20),
               SizedBox(

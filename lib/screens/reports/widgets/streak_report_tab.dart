@@ -24,7 +24,7 @@ class StreakReportTab extends StatelessWidget {
     final colors = context.colors;
     final visibleUsers = auth.isSuperAdmin
         ? catalog.users
-        : catalog.users.where((u) => auth.managesGroup(u.groupId)).toList();
+        : catalog.users.where((u) => u.groupIds.any(auth.managesGroup)).toList();
     final users = List<AppUser>.from(visibleUsers)
       ..sort((a, b) => b.streakDays.compareTo(a.streakDays));
 
