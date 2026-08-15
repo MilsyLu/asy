@@ -287,6 +287,11 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
           'reminderSent': reminderSentToSave,
           'groupId': _groupId,
           'visibleToAllGroups': _visibleToAllGroups,
+          // Changing date/hour from this form fires onTaskUpdate exactly like
+          // the "Reprogramar" dialog does, so this path has to record who made
+          // the change too — otherwise the notification could name a person
+          // for only one of the two ways of moving a task.
+          'updatedBy': currentUserId,
         }.map((key, value) {
           if (key == 'reminderTime') {
             return MapEntry(key,

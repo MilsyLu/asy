@@ -34,6 +34,15 @@ class TaskModel {
   // task, or a task in the creator's own group).
   final String? createdBy;
 
+  /// Id of the person behind the most recent change to this task, so
+  /// `onTaskUpdate` can name them in the reschedule notification the same way
+  /// `onTaskCreate` names the creator via [createdBy].
+  ///
+  /// Null on every task written before this field existed, and on writes that
+  /// have no person behind them (the Google Sheets bridge) — the notification
+  /// falls back to impersonal wording there rather than inventing a name.
+  final String? updatedBy;
+
   /// The tenant ("empresa") this task belongs to. See `AppUser.empresaId`.
   final String? empresaId;
 
@@ -60,6 +69,7 @@ class TaskModel {
     this.deletedBy,
     this.deletedByName,
     this.createdBy,
+    this.updatedBy,
     this.empresaId,
   });
 
@@ -96,6 +106,7 @@ class TaskModel {
       deletedBy: map['deletedBy'] as String?,
       deletedByName: map['deletedByName'] as String?,
       createdBy: map['createdBy'] as String?,
+      updatedBy: map['updatedBy'] as String?,
       empresaId: map['empresaId'] as String?,
     );
   }
@@ -131,6 +142,7 @@ class TaskModel {
       'deletedBy': deletedBy,
       'deletedByName': deletedByName,
       'createdBy': createdBy,
+      'updatedBy': updatedBy,
       'empresaId': empresaId,
     };
   }
@@ -192,6 +204,7 @@ class TaskModel {
       deletedByName:
           clearDeletedByName == true ? null : (deletedByName ?? this.deletedByName),
       createdBy: createdBy,
+      updatedBy: updatedBy,
       empresaId: empresaId,
     );
   }

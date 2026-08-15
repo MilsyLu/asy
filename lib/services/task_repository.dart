@@ -296,6 +296,7 @@ class TaskRepository {
     required String newHour,
     required String rescheduledStatusId,
     required int currentRescheduledCount,
+    required String? rescheduledBy,
     DateTime? reminderTime,
     bool clearReminder = false,
   }) {
@@ -304,6 +305,12 @@ class TaskRepository {
       'hour': newHour,
       'statusId': rescheduledStatusId,
       'rescheduledCount': currentRescheduledCount + 1,
+      // Required (though nullable): this repository has no access to the
+      // signed-in user, so only the caller can supply it. Always written,
+      // even when null — leaving the field out would keep whatever previous
+      // value the document held, and the notification would then credit the
+      // wrong person for this reschedule.
+      'updatedBy': rescheduledBy,
       'reminderSent': false,
       'reminderTime': clearReminder
           ? null

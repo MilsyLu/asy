@@ -7,6 +7,7 @@ import '../../../core/utils/date_utils.dart';
 import '../../../core/utils/snackbar_utils.dart';
 import '../../../core/utils/validators.dart';
 import '../../../models/task_model.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/catalog_provider.dart';
 import '../../../services/task_repository.dart';
 import '../../../widgets/confirm_dialog.dart';
@@ -16,6 +17,9 @@ import '../../../widgets/confirm_dialog.dart';
 Future<void> showRescheduleDialog(BuildContext context, TaskModel task) async {
   final catalog = context.read<CatalogProvider>();
   final repo = context.read<TaskRepository>();
+  // Captured here, next to the other providers, so the write below records
+  // who rescheduled without reaching for a BuildContext after an await.
+  final currentUserId = context.read<AuthProvider>().appUser?.id;
 
   DateTime selectedDate = AppDateUtils.parseDateKey(task.date);
   String? selectedHour = catalog.availableHours.any((h) => h.hour == task.hour)
@@ -90,6 +94,7 @@ Future<void> showRescheduleDialog(BuildContext context, TaskModel task) async {
                           newHour: selectedHour!,
                           repo: repo,
                           catalog: catalog,
+                          currentUserId: currentUserId,
                         );
                       },
                 child: const Text('Reprogramar'),
@@ -113,6 +118,7 @@ Future<void> _confirmReschedule({
   required String newHour,
   required TaskRepository repo,
   required CatalogProvider catalog,
+  required String? currentUserId,
 }) async {
   final newDateKey = AppDateUtils.formatDateKey(newDate);
 
@@ -159,6 +165,7 @@ Future<void> _confirmReschedule({
       newHour: newHour,
       rescheduledStatusId: rescheduledStatusId,
       currentRescheduledCount: task.rescheduledCount,
+      rescheduledBy: currentUserId,
       reminderTime: reminderStillValid ? task.reminderTime : null,
       clearReminder: !reminderStillValid && task.reminderTime != null,
     );

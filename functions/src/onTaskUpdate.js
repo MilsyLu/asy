@@ -36,16 +36,18 @@ const onTaskUpdate = onDocumentUpdated("tasks/{taskId}", async (event) => {
   if (!dateChanged && !hourChanged) return;
   if (after.isDeleted) return;
 
-  const { assignedUserId, clientName, taskTypeId, groupId, hour, date, empresaId } = after;
+  const { assignedUserId, clientName, taskTypeId, groupId, hour, date, empresaId, updatedBy } =
+    after;
   if (!assignedUserId) return;
 
   console.log(`[FCM] Task rescheduled: ${taskId}`);
 
   const db = getFirestore();
-  const [taskTypeSnap, assignedUserSnap, groupDoc] = await Promise.all([
+  const [taskTypeSnap, assignedUserSnap, groupDoc, updatedBySnap] = await Promise.all([
     taskTypeId ? db.collection("taskTypes").doc(taskTypeId).get() : null,
     db.collection("users").doc(assignedUserId).get(),
     groupId ? db.collection("groups").doc(groupId).get() : null,
+    updatedBy ? db.collection("users").doc(updatedBy).get() : null,
   ]);
 
   const taskTypeName =
@@ -54,6 +56,13 @@ const onTaskUpdate = onDocumentUpdated("tasks/{taskId}", async (event) => {
     assignedUserSnap.exists ? assignedUserSnap.get("name") || "Sin nombre" : "Sin nombre";
   const groupName = groupDoc && groupDoc.exists ? groupDoc.get("name") || groupId : groupId;
 
+  // `updatedBy` is absent on tasks last written before the field existed, and
+  // on writes with nobody behind them (the Google Sheets bridge). Those keep
+  // the original impersonal wording rather than inventing a name, so a
+  // notification never credits someone who didn't do it.
+  const updatedByName =
+    updatedBySnap && updatedBySnap.exists ? updatedBySnap.get("name") || null : null;
+
   const basePayload = { taskId, groupId: groupId || "", assignedUserId };
   const pending = [];
 
@@ -61,7 +70,9 @@ const onTaskUpdate = onDocumentUpdated("tasks/{taskId}", async (event) => {
   pending.push(
     sendNotificationToUser(assignedUserId, {
       title: "🔄 Tarea reprogramada",
-      body: `${taskTypeName}\nCliente: ${clientName}\nNueva fecha: ${date} ${hour}`,
+      body:
+        (updatedByName ? `${updatedByName} reprogramó tu tarea\n` : "") +
+        `${taskTypeName}\nCliente: ${clientName}\nNueva fecha: ${date} ${hour}`,
       data: { ...basePayload, type: "task_reprogrammed_assigned" },
     }).then((count) => {
       console.log(`[FCM] Reschedule (assigned) notified: ${assignedUserId}`);
@@ -92,7 +103,9 @@ const onTaskUpdate = onDocumentUpdated("tasks/{taskId}", async (event) => {
             title: "🔄 Tarea del grupo reprogramada",
             body:
               `${taskTypeName}\nCliente: ${clientName}\n` +
-              `Encargado: ${assignedUserName}\nNueva fecha: ${date} ${hour}`,
+              `Encargado: ${assignedUserName}\n` +
+              (updatedByName ? `Reprogramada por: ${updatedByName}\n` : "") +
+              `Nueva fecha: ${date} ${hour}`,
             data: { ...basePayload, type: "task_reprogrammed_group" },
           });
 
@@ -118,9 +131,10 @@ const onTaskUpdate = onDocumentUpdated("tasks/{taskId}", async (event) => {
         );
         if (adminIds.length === 0) return;
 
+        const who = updatedByName || "Alguien";
         const body = groupId
-          ? `Una tarea del grupo ${groupName} fue reprogramada para ${date} ${hour}.`
-          : `Una tarea fue reprogramada para ${date} ${hour}.`;
+          ? `${who} reprogramó una tarea del grupo ${groupName} para ${date} ${hour}.`
+          : `${who} reprogramó una tarea para ${date} ${hour}.`;
 
         const count = await notifyAdminsOfTaskCreated(adminIds, {
           title: "Tarea reprogramada",
