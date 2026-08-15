@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/support_case_constants.dart';
+import '../../core/responsive/app_spacing.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../models/support_case_model.dart';
 import '../../providers/auth_provider.dart';
@@ -134,7 +135,7 @@ class _KanbanColumn extends StatelessWidget {
         return Container(
           decoration: BoxDecoration(
             color: highlighted ? color.withValues(alpha: 0.08) : colors.surface,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
             border: Border.all(color: highlighted ? color : colors.divider),
           ),
           padding: const EdgeInsets.all(8),

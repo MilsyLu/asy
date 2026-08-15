@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/responsive/app_spacing.dart';
 import '../../../core/theme/theme_colors.dart';
 import '../../../models/app_user.dart';
 import '../../../models/task_model.dart';
@@ -257,7 +258,7 @@ class _DetailStat extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: colors.background,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
@@ -287,7 +288,7 @@ class _TopProductiveRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
         border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
       ),
       child: Row(

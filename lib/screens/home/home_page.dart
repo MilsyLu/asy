@@ -732,7 +732,7 @@ class _NextTaskCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: colors.success.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
           border: Border.all(color: colors.success.withValues(alpha: 0.4), width: 1.5),
         ),
         child: Row(
@@ -771,7 +771,7 @@ class _NextTaskCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: colors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
         border: Border.all(color: colors.primary, width: 1.5),
       ),
       child: Column(
@@ -1013,7 +1013,7 @@ class _CounterCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
         border: Border(left: BorderSide(color: color, width: 3)),
       ),
       child: Row(
@@ -1289,14 +1289,14 @@ class _CompletedTodaySection extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: context.colors.surface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
         border: Border.all(color: context.colors.success.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           InkWell(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
             onTap: onToggle,
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -1340,7 +1340,7 @@ class _OverdueSection extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: colors.error.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
         border: Border.all(color: colors.error.withValues(alpha: 0.35)),
       ),
       child: Column(
@@ -1627,7 +1627,7 @@ class _DesktopHeaderCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
         border: Border.all(color: colors.divider),
       ),
       child: content,
@@ -1690,7 +1690,7 @@ class _NextTaskStrip extends StatelessWidget {
 
     return InkWell(
       onTap: () => showTaskDetailDialog(context, task),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -1838,7 +1838,7 @@ class _DesktopAgendaPanel extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
         border: Border.all(color: colors.divider),
       ),
       child: Column(
@@ -1980,14 +1980,14 @@ class _DesktopAgendaRowState extends State<_DesktopAgendaRow> {
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
         onTap: () => showTaskDetailDialog(context, task),
         child: Container(
           margin: const EdgeInsets.only(bottom: 6),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: _hovered ? colors.primary.withValues(alpha: 0.05) : colors.background,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
             border: Border(left: BorderSide(color: typeColor, width: 4)),
           ),
           child: Row(
@@ -2171,14 +2171,14 @@ class _DesktopCompletedTodaySection extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: context.colors.background,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
         border: Border.all(color: context.colors.success.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           InkWell(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
             onTap: onToggle,
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -2221,7 +2221,7 @@ class _DesktopOverdueSection extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: colors.error.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
         border: Border.all(color: colors.error.withValues(alpha: 0.35)),
       ),
       child: Column(

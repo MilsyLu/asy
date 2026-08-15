@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/responsive/app_spacing.dart';
 import '../core/theme/theme_colors.dart';
 import '../core/utils/report_metrics.dart';
 
@@ -52,7 +53,7 @@ class KpiCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Column(

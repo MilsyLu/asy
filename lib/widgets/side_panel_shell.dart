@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/responsive/app_spacing.dart';
 import '../core/theme/theme_colors.dart';
 
 /// Shared chrome for the always-visible admin-screen right panel pattern
@@ -22,7 +23,7 @@ class SidePanelShell extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
         border: Border.all(color: colors.primary.withValues(alpha: 0.3)),
         boxShadow: [
           BoxShadow(

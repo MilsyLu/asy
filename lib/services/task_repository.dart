@@ -237,6 +237,24 @@ class TaskRepository {
     return _tasksCollection.doc(taskId).delete();
   }
 
+  /// Permanently deletes several already-soft-deleted tasks at once — used
+  /// by Papelera's "Eliminar todas" (applies to whatever's currently
+  /// filtered/visible, not necessarily every trashed task ever). Firestore
+  /// batches cap at 500 writes, so [taskIds] is chunked defensively even
+  /// though Papelera realistically never holds that many at once.
+  Future<void> permanentlyDeleteTasks(List<String> taskIds) async {
+    const chunkSize = 400;
+    for (var i = 0; i < taskIds.length; i += chunkSize) {
+      final end = i + chunkSize > taskIds.length ? taskIds.length : i + chunkSize;
+      final chunk = taskIds.sublist(i, end);
+      final batch = _firestore.batch();
+      for (final id in chunk) {
+        batch.delete(_tasksCollection.doc(id));
+      }
+      await batch.commit();
+    }
+  }
+
   /// Stream of all soft-deleted tasks, ordered by deletion date (newest first).
   /// Requires composite index (empresaId ASC, isDeleted ASC, deletedAt DESC).
   Stream<List<TaskModel>> watchDeletedTasks() {

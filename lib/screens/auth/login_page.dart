@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/responsive/app_spacing.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../core/utils/validators.dart';
 import '../../providers/auth_provider.dart';
@@ -76,7 +77,7 @@ class _LoginPageState extends State<LoginPage> {
     Widget? suffixIcon,
   }) {
     final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
       borderSide: BorderSide(color: _kLoginPrimary.withValues(alpha: 0.25)),
     );
     return InputDecoration(
@@ -89,7 +90,7 @@ class _LoginPageState extends State<LoginPage> {
       border: border,
       enabledBorder: border,
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
         borderSide: const BorderSide(color: _kLoginPrimary, width: 2),
       ),
     );
@@ -194,7 +195,7 @@ class _LoginPageState extends State<LoginPage> {
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(vertical: 14),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
+                                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                                 ),
                               ),
                               child: _isLoading

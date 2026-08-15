@@ -112,6 +112,7 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
   final _searchController = TextEditingController();
   String _query = '';
   _QuickFilter _filter = _QuickFilter.todos;
+  String? _tagFilter;
   _SortBy _sortBy = _SortBy.recientes;
   _ViewMode _viewMode = _ViewMode.tabla;
   String? _selectedCaseId;
@@ -125,6 +126,9 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
   List<SupportCaseModel> _applyFiltersAndSort(List<SupportCaseModel> all, String? myUid) {
     final q = _query.trim().toLowerCase();
     var result = all.where((c) => _filter.matches(c, myUid)).toList();
+    if (_tagFilter != null) {
+      result = result.where((c) => c.tags.contains(_tagFilter)).toList();
+    }
     if (q.isNotEmpty) {
       result = result.where((c) {
         return c.clientName.toLowerCase().contains(q) ||
@@ -217,6 +221,8 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
           onQueryChanged: (v) => setState(() => _query = v),
           filter: _filter,
           onFilterChanged: (f) => setState(() => _filter = f),
+          tagFilter: _tagFilter,
+          onTagFilterChanged: (t) => setState(() => _tagFilter = t),
           sortBy: _sortBy,
           onSortChanged: (s) => setState(() => _sortBy = s),
           onNewCase: isMobile ? null : () => _openCreateForm(context),
@@ -275,6 +281,8 @@ class _CasesHeader extends StatelessWidget {
     required this.onQueryChanged,
     required this.filter,
     required this.onFilterChanged,
+    required this.tagFilter,
+    required this.onTagFilterChanged,
     required this.sortBy,
     required this.onSortChanged,
     required this.onNewCase,
@@ -288,6 +296,14 @@ class _CasesHeader extends StatelessWidget {
   final ValueChanged<String> onQueryChanged;
   final _QuickFilter filter;
   final ValueChanged<_QuickFilter> onFilterChanged;
+
+  /// Null = "todas las etiquetas". Options are derived from whatever tags
+  /// are actually applied to at least one case in [all] — no separate
+  /// Firestore read needed here, and it never offers a tag with zero
+  /// matching cases.
+  final String? tagFilter;
+  final ValueChanged<String?> onTagFilterChanged;
+
   final _SortBy sortBy;
   final ValueChanged<_SortBy> onSortChanged;
   final VoidCallback? onNewCase;
@@ -304,6 +320,7 @@ class _CasesHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final today = DateTime.now();
+    final availableTags = all.expand((c) => c.tags).toSet().toList()..sort();
     final open = all.where((c) => SupportCaseStatus.isOpen(c.status));
     final urgentes = open.where(
         (c) => c.priority == SupportCasePriority.alta || c.priority == SupportCasePriority.critica);
@@ -385,6 +402,27 @@ class _CasesHeader extends StatelessWidget {
                   DropdownMenuItem(value: _SortBy.dias, child: Text('Días sin resolver')),
                 ],
               ),
+              if (availableTags.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                DropdownButton<String?>(
+                  value: tagFilter,
+                  underline: const SizedBox.shrink(),
+                  hint: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(LucideIcons.tag, size: 14, color: colors.textSecondary),
+                      const SizedBox(width: 4),
+                      const Text('Etiqueta'),
+                    ],
+                  ),
+                  onChanged: onTagFilterChanged,
+                  items: [
+                    const DropdownMenuItem<String?>(value: null, child: Text('Todas las etiquetas')),
+                    for (final tag in availableTags)
+                      DropdownMenuItem<String?>(value: tag, child: Text(tag)),
+                  ],
+                ),
+              ],
               if (viewMode != null) ...[
                 const SizedBox(width: 8),
                 SegmentedButton<_ViewMode>(
@@ -601,11 +639,11 @@ class _CaseRow extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
       child: Container(
         decoration: BoxDecoration(
           color: selected ? colors.primary.withValues(alpha: 0.08) : colors.surface,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
           border: Border.all(color: selected ? colors.primary : priorityColor.withValues(alpha: 0.25)),
         ),
         child: LayoutBuilder(
@@ -870,6 +908,12 @@ class _NewCaseFormState extends State<_NewCaseForm> {
               StreamBuilder<List<SupportCaseTagModel>>(
                 stream: context.read<SupportCaseRepository>().watchTags(),
                 builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Text(
+                      'No se pudieron cargar las etiquetas.',
+                      style: TextStyle(color: colors.error, fontSize: 12),
+                    );
+                  }
                   final tags = snapshot.data ?? const [];
                   if (tags.isEmpty) {
                     return Text(

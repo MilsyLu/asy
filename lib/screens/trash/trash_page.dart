@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/responsive/app_spacing.dart';
 import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
@@ -31,6 +32,8 @@ class TrashPage extends StatefulWidget {
 
 class _TrashPageState extends State<TrashPage> {
   _TrashFilter _filter = _TrashFilter.all;
+  final _searchController = TextEditingController();
+  String _query = '';
 
   // Sprint 7.4.4: a single stream for the whole page lifetime — the filter
   // chips above only change client-side filtering of already-fetched data,
@@ -46,14 +49,27 @@ class _TrashPageState extends State<TrashPage> {
     _loadStopwatch = Stopwatch()..start();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   List<TaskModel> _applyFilter(List<TaskModel> tasks) {
-    if (_filter == _TrashFilter.all) return tasks;
-    final days = _filter == _TrashFilter.sevenDays ? 7 : 30;
-    final cutoff = DateTime.now().subtract(Duration(days: days));
-    return tasks.where((t) {
-      final deletedAt = t.deletedAt;
-      return deletedAt != null && deletedAt.isAfter(cutoff);
-    }).toList();
+    var result = tasks;
+    if (_filter != _TrashFilter.all) {
+      final days = _filter == _TrashFilter.sevenDays ? 7 : 30;
+      final cutoff = DateTime.now().subtract(Duration(days: days));
+      result = result.where((t) {
+        final deletedAt = t.deletedAt;
+        return deletedAt != null && deletedAt.isAfter(cutoff);
+      }).toList();
+    }
+    final query = _query.trim().toLowerCase();
+    if (query.isNotEmpty) {
+      result = result.where((t) => t.clientName.toLowerCase().contains(query)).toList();
+    }
+    return result;
   }
 
   Future<void> _restore(TaskModel task) async {
@@ -61,6 +77,32 @@ class _TrashPageState extends State<TrashPage> {
     try {
       await repo.restoreTask(task.id);
       if (mounted) SnackbarUtils.showSuccess(context, 'Tarea restaurada');
+    } catch (e) {
+      if (mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      }
+    }
+  }
+
+  Future<void> _deleteAll(List<TaskModel> tasks) async {
+    if (tasks.isEmpty) return;
+    final repo = context.read<TaskRepository>();
+    final confirm = await showConfirmDialog(
+      context,
+      title: 'Eliminar todas',
+      message: 'Esta acción no puede deshacerse.\n'
+          'Se eliminarán definitivamente las ${tasks.length} tareas que estás viendo '
+          '(según el filtro actual), no solo las que se ven en pantalla ahora mismo.',
+      confirmLabel: 'Eliminar todas',
+      destructive: true,
+      confirmForegroundColor: Colors.white,
+    );
+    if (!confirm || !mounted) return;
+    try {
+      await repo.permanentlyDeleteTasks(tasks.map((t) => t.id).toList());
+      if (mounted) {
+        SnackbarUtils.showSuccess(context, 'Tareas eliminadas definitivamente');
+      }
     } catch (e) {
       if (mounted) {
         SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
@@ -97,142 +139,166 @@ class _TrashPageState extends State<TrashPage> {
     final colors = context.colors;
     final catalog = context.watch<CatalogProvider>();
 
-    final body = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _FilterChip(
-                  label: 'Todas',
-                  selected: _filter == _TrashFilter.all,
-                  onTap: () => setState(() => _filter = _TrashFilter.all),
-                ),
-                const SizedBox(width: 8),
-                _FilterChip(
-                  label: 'Últimos 7 días',
-                  selected: _filter == _TrashFilter.sevenDays,
-                  onTap: () =>
-                      setState(() => _filter = _TrashFilter.sevenDays),
-                ),
-                const SizedBox(width: 8),
-                _FilterChip(
-                  label: 'Últimos 30 días',
-                  selected: _filter == _TrashFilter.thirtyDays,
-                  onTap: () =>
-                      setState(() => _filter = _TrashFilter.thirtyDays),
-                ),
-              ],
+    final body = StreamBuilder<List<TaskModel>>(
+      stream: _tasksStream,
+      builder: (context, snapshot) {
+        if (!_loadLogged && snapshot.connectionState != ConnectionState.waiting) {
+          _loadLogged = true;
+          debugPrint('[PERF] Papelera load: ${_loadStopwatch.elapsedMilliseconds}ms');
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const LoadingIndicator();
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    LucideIcons.alertCircle,
+                    color: colors.error,
+                    size: 40,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Error al cargar la papelera.\n'
+                    'Es posible que el índice de Firestore no esté desplegado.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: colors.textSecondary),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ),
-        Expanded(
-          child: StreamBuilder<List<TaskModel>>(
-              stream: _tasksStream,
-              builder: (context, snapshot) {
-                if (!_loadLogged && snapshot.connectionState != ConnectionState.waiting) {
-                  _loadLogged = true;
-                  debugPrint('[PERF] Papelera load: ${_loadStopwatch.elapsedMilliseconds}ms');
-                }
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const LoadingIndicator();
-                }
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
+          );
+        }
+        final tasks = _applyFilter(snapshot.data ?? []);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Text(
+                '${tasks.length} '
+                '${tasks.length == 1 ? 'tarea eliminada' : 'tareas eliminadas'}',
+                style: TextStyle(color: colors.textSecondary, fontSize: 13),
+              ),
+            ),
+            // Filters, search (fills the remaining width), and the
+            // destructive bulk action all on one row — the search bar and
+            // "Eliminar todas" sit side by side, not stacked.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Row(
+                children: [
+                  _FilterChip(
+                    label: 'Todas',
+                    selected: _filter == _TrashFilter.all,
+                    onTap: () => setState(() => _filter = _TrashFilter.all),
+                  ),
+                  const SizedBox(width: 8),
+                  _FilterChip(
+                    label: 'Últimos 7 días',
+                    selected: _filter == _TrashFilter.sevenDays,
+                    onTap: () =>
+                        setState(() => _filter = _TrashFilter.sevenDays),
+                  ),
+                  const SizedBox(width: 8),
+                  _FilterChip(
+                    label: 'Últimos 30 días',
+                    selected: _filter == _TrashFilter.thirtyDays,
+                    onTap: () =>
+                        setState(() => _filter = _TrashFilter.thirtyDays),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      style: TextStyle(color: colors.textPrimary, fontSize: 14),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        labelText: 'Buscar',
+                        hintText: 'Nombre del cliente',
+                        prefixIcon: Icon(LucideIcons.search, color: colors.primary, size: 18),
+                        suffixIcon: _searchController.text.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(LucideIcons.xCircle, size: 16),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _query = '');
+                                },
+                              ),
+                      ),
+                      onChanged: (v) => setState(() => _query = v),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  TextButton.icon(
+                    onPressed: tasks.isEmpty ? null : () => _deleteAll(tasks),
+                    style: TextButton.styleFrom(foregroundColor: colors.error),
+                    icon: const Icon(LucideIcons.trash2, size: 16),
+                    label: const Text('Eliminar todas'),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: tasks.isEmpty
+                  ? Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            LucideIcons.alertCircle,
-                            color: colors.error,
-                            size: 40,
+                            LucideIcons.trash2,
+                            color: colors.textSecondary,
+                            size: 52,
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 16),
                           Text(
-                            'Error al cargar la papelera.\n'
-                            'Es posible que el índice de Firestore no esté desplegado.',
-                            textAlign: TextAlign.center,
+                            _query.trim().isEmpty
+                                ? 'La papelera está vacía'
+                                : 'Ningún cliente coincide con "${_query.trim()}"',
+                            style: TextStyle(
+                              color: colors.textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            _query.trim().isEmpty
+                                ? 'Las tareas eliminadas aparecerán aquí.'
+                                : 'Probá con otro nombre o borrá la búsqueda.',
                             style: TextStyle(color: colors.textSecondary),
                           ),
                         ],
                       ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                      itemCount: tasks.length,
+                      itemBuilder: (context, i) => context.isMobile
+                          ? _TrashCard(
+                              task: tasks[i],
+                              catalog: catalog,
+                              onRestore: () => _restore(tasks[i]),
+                              onDelete: () => _permanentlyDelete(tasks[i]),
+                            )
+                          : _TrashRow(
+                              task: tasks[i],
+                              catalog: catalog,
+                              onRestore: () => _restore(tasks[i]),
+                              onDelete: () => _permanentlyDelete(tasks[i]),
+                            ),
                     ),
-                  );
-                }
-                final tasks = _applyFilter(snapshot.data ?? []);
-                if (tasks.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          LucideIcons.trash2,
-                          color: colors.textSecondary,
-                          size: 52,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'La papelera está vacía',
-                          style: TextStyle(
-                            color: colors.textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Las tareas eliminadas aparecerán aquí.',
-                          style: TextStyle(color: colors.textSecondary),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                      child: Text(
-                        '${tasks.length} '
-                        '${tasks.length == 1 ? 'tarea eliminada' : 'tareas eliminadas'}',
-                        style: TextStyle(
-                          color: colors.textSecondary,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                        itemCount: tasks.length,
-                        itemBuilder: (context, i) => context.isMobile
-                            ? _TrashCard(
-                                task: tasks[i],
-                                catalog: catalog,
-                                onRestore: () => _restore(tasks[i]),
-                                onDelete: () => _permanentlyDelete(tasks[i]),
-                              )
-                            : _TrashRow(
-                                task: tasks[i],
-                                catalog: catalog,
-                                onRestore: () => _restore(tasks[i]),
-                                onDelete: () => _permanentlyDelete(tasks[i]),
-                              ),
-                      ),
-                    ),
-                  ],
-                );
-              },
             ),
-          ),
-        ],
-      );
+          ],
+        );
+      },
+    );
 
     if (!widget.showAppBar) return body;
     return Scaffold(
@@ -526,7 +592,7 @@ class _TrashRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
         border: Border.all(color: colors.error.withValues(alpha: 0.25)),
       ),
       child: LayoutBuilder(

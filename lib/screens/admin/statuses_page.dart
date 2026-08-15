@@ -51,7 +51,7 @@ class _StatusesPageState extends State<StatusesPage> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
         border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
       ),
       child: Row(

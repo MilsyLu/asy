@@ -611,7 +611,7 @@ class _ClientTableRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 6),
       decoration: BoxDecoration(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
         border: Border.all(color: colors.primary.withValues(alpha: editing ? 0.45 : 0.15)),
       ),
       child: LayoutBuilder(
@@ -1109,7 +1109,7 @@ class _HistoryStatBox extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
         color: colors.background,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/responsive/app_spacing.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/report_metrics.dart';
@@ -112,13 +113,13 @@ class _ReportsPageState extends State<ReportsPage>
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: InkWell(
                   onTap: _pickRange,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                   child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     decoration: BoxDecoration(
                       color: colors.surface,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                       border: Border.all(color: colors.primary.withValues(alpha: 0.3)),
                     ),
                     child: Row(

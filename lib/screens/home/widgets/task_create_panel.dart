@@ -223,14 +223,16 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
 
       if (hasConflict) {
         if (!mounted) return;
-        await showInfoDialog(
+        final proceed = await showConfirmDialog(
           context,
           title: 'Horario duplicado',
           message:
               '${catalog.userName(_assignedUserId)} ya tiene otra tarea activa el '
               '${AppDateUtils.formatShortDate(_selectedDate)} a las $_selectedHour. '
-              'Puedes continuar: ambas tareas quedarán programadas.',
+              '¿Deseas continuar de todas formas? Ambas tareas quedarán programadas.',
+          confirmLabel: 'Continuar de todas formas',
         );
+        if (!proceed) return;
         if (!mounted) return;
       }
 

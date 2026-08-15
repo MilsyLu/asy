@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
+import '../../../core/responsive/app_spacing.dart';
 import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../widgets/responsive_sheet.dart';
@@ -342,7 +343,7 @@ Future<ReminderPickResult?> _pickCustomReminder(
                       style: TextButton.styleFrom(
                         foregroundColor: colors.textSecondary,
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.radiusMd)),
                       ),
                       onPressed: () => Navigator.pop(dialogCtx),
                       child: const Text('Cancelar', style: TextStyle(fontSize: 14)),
@@ -355,7 +356,7 @@ Future<ReminderPickResult?> _pickCustomReminder(
                         backgroundColor: colors.primary,
                         foregroundColor: colors.onPrimary,
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.radiusMd)),
                       ),
                       onPressed: () => Navigator.pop(dialogCtx, true),
                       child: const Text(

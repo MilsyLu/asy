@@ -15,6 +15,15 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+// Without this, a newly-deployed service worker sits "waiting" until every
+// tab/PWA session of chhecu.web.app is fully closed and reopened — on a
+// phone where the app is rarely closed outright, a click-to-open fix like
+// this one could otherwise never actually take effect for a real user, even
+// though it's live in production. skipWaiting + clients.claim makes every
+// deploy take over immediately for already-open sessions too.
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => event.waitUntil(clients.claim()));
+
 // Chrome auto-displays the push's `notification` payload for background
 // tabs on its own (independent of this handler) — the Cloud Functions
 // payload now carries `webpush.notification.icon` (see
@@ -34,24 +43,43 @@ messaging.onBackgroundMessage((payload) => {
 // it from the URL bar.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const target = (event.notification.data && event.notification.data.url)
-    || self.location.origin + '/';
+  const notifData = event.notification.data || {};
+  // Firebase's compat SDK auto-display path (see messaging.onBackgroundMessage
+  // above) has, across versions, sometimes nested the original payload under
+  // `FCM_MSG` instead of spreading it flat — checked as a fallback so a
+  // click still resolves the right target either way.
+  const target =
+    notifData.url ||
+    (notifData.FCM_MSG && notifData.FCM_MSG.data && notifData.FCM_MSG.data.url) ||
+    self.location.origin + '/';
+
+  console.log('[FCM] notificationclick, target =', target);
+
   event.waitUntil(
-    clients
-      .matchAll({ type: 'window', includeUncontrolled: true })
-      .then((windowClients) => {
+    (async () => {
+      // Reuse an already-open tab instead of opening a new one when
+      // possible — but this whole path is best-effort: `navigate()` on a
+      // background/discarded Android tab can silently reject, and if that
+      // happens with no fallback the click would otherwise just foreground
+      // Chrome without ever reaching CheCu. Any failure here falls through
+      // to the plain, reliable `clients.openWindow(target)` below instead.
+      try {
+        const windowClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
         for (const client of windowClients) {
+          if ('navigate' in client) {
+            const navigated = await client.navigate(target);
+            await (navigated || client).focus();
+            return;
+          }
           if ('focus' in client) {
-            // Reuse the already-open tab instead of opening a new one — but
-            // it also needs to actually load the new URL (the app doesn't
-            // poll for query-param changes), not just regain focus.
-            if ('navigate' in client) {
-              return client.navigate(target).then((c) => (c || client).focus());
-            }
-            return client.focus();
+            await client.focus();
+            return;
           }
         }
-        return clients.openWindow(target);
-      })
+      } catch (e) {
+        console.log('[FCM] notificationclick: reusing an open tab failed, opening a new one instead —', e);
+      }
+      await clients.openWindow(target);
+    })()
   );
 });

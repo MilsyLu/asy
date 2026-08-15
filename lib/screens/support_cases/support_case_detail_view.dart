@@ -11,6 +11,7 @@ import '../../core/utils/date_utils.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../models/support_case_history_entry.dart';
 import '../../models/support_case_model.dart';
+import '../../models/support_case_tag_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/storage_service.dart';
@@ -147,7 +148,13 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
     final repo = context.read<SupportCaseRepository>();
     final user = context.read<AuthProvider>().appUser;
     if (user == null) return;
-    final available = await repo.watchTags().first;
+    List<SupportCaseTagModel> available;
+    try {
+      available = await repo.watchTags().first;
+    } catch (e) {
+      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      return;
+    }
     if (!mounted) return;
     final selected = {...c.tags};
     final result = await showDialog<Set<String>>(
@@ -514,7 +521,7 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                     TextButton.icon(
                       onPressed: () => _editTags(c),
                       icon: const Icon(LucideIcons.tag, size: 15),
-                      label: const Text('Editar'),
+                      label: const Text('Etiquetar'),
                     ),
                   ],
                 ),

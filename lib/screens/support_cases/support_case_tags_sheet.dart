@@ -107,6 +107,13 @@ class _SupportCaseTagsSheetState extends State<SupportCaseTagsSheet> {
               child: StreamBuilder<List<SupportCaseTagModel>>(
                 stream: repo.watchTags(),
                 builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Text(
+                      'No se pudieron cargar las etiquetas: '
+                      '${SnackbarUtils.firebaseErrorMessage(snapshot.error!)}',
+                      style: TextStyle(color: colors.error, fontSize: 12),
+                    );
+                  }
                   if (!snapshot.hasData) {
                     return const Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),

@@ -22,7 +22,11 @@ import '../home/widgets/compact_task_card.dart' show taskStatusColor;
 const double _kSectionGap = 24;
 const double _kCardGap = 12;
 const double _kCardPadding = 16;
-const double _kCardRadius = 16;
+const double _kCardRadius = AppSpacing.radiusLg;
+
+/// Elements nested *inside* a card sit one step below `_kCardRadius`, so the
+/// nesting reads correctly instead of looking like two cards stacked.
+const double _kInnerRadius = AppSpacing.radiusMd;
 
 /// Compact row height used inside consolidated mobile cards.
 const double _kRowMinHeight = 40;
@@ -417,9 +421,9 @@ class _DashboardPageState extends State<DashboardPage> {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.pagePaddingDesktop,
-        AppSpacing.lg,
+        AppSpacing.md,
         AppSpacing.pagePaddingDesktop,
-        AppSpacing.xxl,
+        AppSpacing.lg,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -430,57 +434,10 @@ class _DashboardPageState extends State<DashboardPage> {
             rangeIndex: _rangeIndex,
             onRangeChanged: (i) => setState(() => _rangeIndex = i),
           ),
-          const SizedBox(height: AppSpacing.xl),
-
-          // ── Row 1: 4 KPI cards ─────────────────────────────────────────
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _KpiCard(
-                    icon: LucideIcons.clipboardList,
-                    title: 'Total tareas',
-                    count: s.kpis.total,
-                    linkLabel: 'Ver tareas →',
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: _KpiCard(
-                    icon: LucideIcons.checkCircle2,
-                    title: 'Completadas',
-                    count: s.kpis.completed,
-                    accentColor: colors.success,
-                    linkLabel: 'Ver completadas →',
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: _KpiCard(
-                    icon: LucideIcons.clock,
-                    title: 'Pendientes',
-                    count: s.kpis.pending,
-                    accentColor: colors.statusPending,
-                    linkLabel: 'Ver pendientes →',
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: _KpiCard(
-                    icon: LucideIcons.calendarDays,
-                    title: 'Reprogramadas',
-                    count: s.kpis.rescheduled,
-                    accentColor: colors.statusRescheduled,
-                    linkLabel: 'Ver reprogramadas →',
-                  ),
-                ),
-              ],
-            ),
-          ),
           const SizedBox(height: AppSpacing.md),
 
-          // ── Row 2: Atención requerida (flex 2) + Cumplimiento (flex 1) ─
+          // ── Row 1: KPI group card (Total/Completadas/Pendientes, ~67%)
+          // + Cumplimiento general filling the row's full height (~33%) ──
           IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -489,55 +446,43 @@ class _DashboardPageState extends State<DashboardPage> {
                   flex: 2,
                   child: _DashboardCard(
                     showShadow: true,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        _SectionTitle('⚠️ Atención requerida', fontSize: 16),
-                        const SizedBox(height: AppSpacing.md),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _AttentionCompactCard(
-                                item: _AttentionItem(
-                                  emoji: '🔴',
-                                  color: colors.error,
-                                  count: s.overdueTasks.length,
-                                  singular: 'Tarea vencida',
-                                  plural: 'Tareas vencidas',
-                                  onTap: () => _showOverdueTasksSheet(
-                                      context, s.catalog, s.overdueTasks),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            Expanded(
-                              child: _AttentionCompactCard(
-                                item: _AttentionItem(
-                                  emoji: '🟠',
-                                  color: colors.statusPending,
-                                  count: s.upcomingTasks.length,
-                                  singular: 'Próxima 24h',
-                                  plural: 'Próximas 24h',
-                                  onTap: () => _showUpcomingTasksSheet(
-                                      context, s.catalog, s.upcomingTasks),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            Expanded(
-                              child: _AttentionCompactCard(
-                                item: _AttentionItem(
-                                  emoji: '🔵',
-                                  color: colors.statusRescheduled,
-                                  count: s.inactiveUsers.length,
-                                  singular: 'Usuario inactivo',
-                                  plural: 'Usuarios inactivos',
-                                  onTap: () => _showInactiveUsersSheet(
-                                      context, s.catalog, s.inactiveUsers),
-                                ),
-                              ),
-                            ),
-                          ],
+                        Expanded(
+                          child: _KpiSubBlock(
+                            icon: LucideIcons.clipboardList,
+                            title: 'Total tareas',
+                            count: s.kpis.total,
+                            linkLabel: 'Ver tareas →',
+                          ),
+                        ),
+                        Container(
+                          width: 1,
+                          height: 56,
+                          color: colors.divider,
+                        ),
+                        Expanded(
+                          child: _KpiSubBlock(
+                            icon: LucideIcons.checkCircle2,
+                            title: 'Completadas',
+                            count: s.kpis.completed,
+                            accentColor: colors.success,
+                            linkLabel: 'Ver completadas →',
+                          ),
+                        ),
+                        Container(
+                          width: 1,
+                          height: 56,
+                          color: colors.divider,
+                        ),
+                        Expanded(
+                          child: _KpiSubBlock(
+                            icon: LucideIcons.clock,
+                            title: 'Pendientes',
+                            count: s.kpis.pending,
+                            accentColor: colors.statusPending,
+                            linkLabel: 'Ver pendientes →',
+                          ),
                         ),
                       ],
                     ),
@@ -551,7 +496,154 @@ class _DashboardPageState extends State<DashboardPage> {
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: AppSpacing.sm),
+
+          // ── Row 2: Atención requerida (flex 2) + resumen ejecutivo en
+          // grilla 2×2 (flex 1) — antes una fila horizontal aparte, ahora
+          // compactada acá para ganar una fila entera de alto ──────────
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: _DashboardCard(
+                    showShadow: true,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _SectionTitle('⚠️ Atención requerida', fontSize: 16),
+                        const SizedBox(height: AppSpacing.sm),
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _AttentionCompactCard(
+                                  item: _AttentionItem(
+                                    emoji: '🔴',
+                                    color: colors.error,
+                                    count: s.overdueTasks.length,
+                                    singular: 'Tarea vencida',
+                                    plural: 'Tareas vencidas',
+                                    onTap: () => _showOverdueTasksSheet(
+                                        context, s.catalog, s.overdueTasks),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: _AttentionCompactCard(
+                                  item: _AttentionItem(
+                                    emoji: '🟠',
+                                    color: colors.statusPending,
+                                    count: s.upcomingTasks.length,
+                                    singular: 'Próxima 24h',
+                                    plural: 'Próximas 24h',
+                                    onTap: () => _showUpcomingTasksSheet(
+                                        context, s.catalog, s.upcomingTasks),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: _AttentionCompactCard(
+                                  item: _AttentionItem(
+                                    emoji: '🔵',
+                                    color: colors.statusRescheduled,
+                                    count: s.inactiveUsers.length,
+                                    singular: 'Usuario inactivo',
+                                    plural: 'Usuarios inactivos',
+                                    onTap: () => _showInactiveUsersSheet(
+                                        context, s.catalog, s.inactiveUsers),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  flex: 1,
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              child: _DashboardCard(
+                                showShadow: true,
+                                padding: AppSpacing.sm,
+                                child: _ExecutiveHorizontalItem(
+                                  icon: LucideIcons.trophy,
+                                  label: 'Mejor colaborador',
+                                  value: s.topUser?.name ?? 'Sin datos todavía',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: _DashboardCard(
+                                showShadow: true,
+                                padding: AppSpacing.sm,
+                                child: _ExecutiveHorizontalItem(
+                                  icon: LucideIcons.users,
+                                  label: 'Mejor equipo',
+                                  value: s.bestGroup == null
+                                      ? 'Sin datos todavía'
+                                      : '${s.catalog.groupName(s.bestGroup!.groupId)} · ${s.bestGroup!.percent}%',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Expanded(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              child: _DashboardCard(
+                                showShadow: true,
+                                padding: AppSpacing.sm,
+                                child: _ExecutiveHorizontalItem(
+                                  icon: LucideIcons.star,
+                                  label: 'Cliente destacado',
+                                  value: s.topClient == null
+                                      ? 'Sin datos todavía'
+                                      : '${s.topClient!.name} · ${s.topClient!.count}',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: _DashboardCard(
+                                showShadow: true,
+                                padding: AppSpacing.sm,
+                                child: _ExecutiveHorizontalItem(
+                                  icon: LucideIcons.flame,
+                                  label: 'Mejor racha',
+                                  value: s.streakUser == null
+                                      ? 'Sin datos todavía'
+                                      : '${s.streakUser!.name} · ${s.streakUser!.streakDays} días',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
 
           // ── Row 3: distribución + cumplimiento por equipo + tendencia ────
           IntrinsicHeight(
@@ -597,79 +689,6 @@ class _DashboardPageState extends State<DashboardPage> {
                         const SizedBox(height: AppSpacing.md),
                         _TrendChart(entries: s.dailyTrend),
                       ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-
-          // ── Row 4: resumen ejecutivo horizontal ────────────────────────
-          _DashboardCard(
-            showShadow: true,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                    child: _ExecutiveHorizontalItem(
-                      icon: LucideIcons.trophy,
-                      label: 'Mejor colaborador',
-                      value: s.topUser?.name ??
-                          'No hay suficiente información todavía.',
-                    ),
-                  ),
-                ),
-                Container(
-                  width: 1,
-                  height: 48,
-                  color: colors.primary.withValues(alpha: 0.15),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                    child: _ExecutiveHorizontalItem(
-                      icon: LucideIcons.users,
-                      label: 'Mejor equipo',
-                      value: s.bestGroup == null
-                          ? 'No hay suficiente información todavía.'
-                          : '${s.catalog.groupName(s.bestGroup!.groupId)} · ${s.bestGroup!.percent}%',
-                    ),
-                  ),
-                ),
-                Container(
-                  width: 1,
-                  height: 48,
-                  color: colors.primary.withValues(alpha: 0.15),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                    child: _ExecutiveHorizontalItem(
-                      icon: LucideIcons.star,
-                      label: 'Cliente destacado',
-                      value: s.topClient == null
-                          ? 'No hay suficiente información todavía.'
-                          : '${s.topClient!.name} · ${s.topClient!.count}',
-                    ),
-                  ),
-                ),
-                Container(
-                  width: 1,
-                  height: 48,
-                  color: colors.primary.withValues(alpha: 0.15),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                    child: _ExecutiveHorizontalItem(
-                      icon: LucideIcons.flame,
-                      label: 'Mejor racha',
-                      value: s.streakUser == null
-                          ? 'No hay suficiente información todavía.'
-                          : '${s.streakUser!.name} · ${s.streakUser!.streakDays} días',
                     ),
                   ),
                 ),
@@ -902,6 +921,76 @@ class _KpiCardState extends State<_KpiCard> {
   }
 }
 
+/// A single metric (icon/title/count/link), without its own card shell —
+/// three of these sit side by side inside one shared `_DashboardCard` in
+/// desktop Row 1's left column (Total tareas / Completadas / Pendientes),
+/// separated by thin dividers, instead of each being its own full card.
+class _KpiSubBlock extends StatelessWidget {
+  const _KpiSubBlock({
+    required this.icon,
+    required this.title,
+    required this.count,
+    this.accentColor,
+    this.linkLabel,
+  });
+
+  final IconData icon;
+  final String title;
+  final int count;
+  final Color? accentColor;
+  final String? linkLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final accent = accentColor ?? colors.primary;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(AppSpacing.xs),
+          ),
+          child: Icon(icon, color: accent, size: 16),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: colors.textSecondary,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.2,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '$count',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: colors.textPrimary,
+            fontSize: 30,
+            fontWeight: FontWeight.bold,
+            height: 1.05,
+          ),
+        ),
+        if (linkLabel != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            linkLabel!,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: accent, fontSize: 11, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 /// Standalone compliance card: percentage headline + labelled progress bar.
 /// Shown on tablet (below KPI grid) and desktop Row 2 right slot.
 class _ComplianceCard extends StatelessWidget {
@@ -1020,12 +1109,13 @@ class _AttentionCompactCardState extends State<_AttentionCompactCard> {
           child: Padding(
             padding: const EdgeInsets.all(_kCardPadding),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Text(widget.item.emoji, style: const TextStyle(fontSize: 22)),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   '${widget.item.count}',
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                     color: widget.item.color,
                     fontSize: 32,
@@ -1036,6 +1126,7 @@ class _AttentionCompactCardState extends State<_AttentionCompactCard> {
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   widget.item.count == 1 ? widget.item.singular : widget.item.plural,
+                  textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -1143,17 +1234,22 @@ class _SectionTitle extends StatelessWidget {
 /// [showShadow] adds a subtle elevation shadow — enabled on desktop/tablet,
 /// omitted on mobile to preserve the unchanged mobile experience.
 class _DashboardCard extends StatelessWidget {
-  const _DashboardCard({required this.child, this.showShadow = false});
+  const _DashboardCard({
+    required this.child,
+    this.showShadow = false,
+    this.padding = _kCardPadding,
+  });
 
   final Widget child;
   final bool showShadow;
+  final double padding;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(_kCardPadding),
+      padding: EdgeInsets.all(padding),
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(_kCardRadius),
@@ -1330,7 +1426,7 @@ class _AttentionRow extends StatelessWidget {
     final colors = context.colors;
     return InkWell(
       onTap: item.onTap,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(_kInnerRadius),
       child: Container(
         constraints: const BoxConstraints(minHeight: _kRowMinHeight),
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1886,7 +1982,7 @@ class _DetailCard extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: colors.background,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(_kInnerRadius),
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Column(

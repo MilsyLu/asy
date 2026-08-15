@@ -162,6 +162,14 @@
         { "fieldPath": "empresaId", "order": "ASCENDING" },
         { "fieldPath": "groupIds", "arrayConfig": "CONTAINS" }
       ]
+    },
+    {
+      "collectionGroup": "supportCaseTags",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "empresaId", "order": "ASCENDING" },
+        { "fieldPath": "name", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
