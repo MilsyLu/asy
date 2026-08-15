@@ -192,6 +192,71 @@
         .catch(function(err) {
           console.error('[WEB_FCM] SW registration FAILED:', err);
         });
+
+      // Handles a click on a background push notification.
+      //
+      // Two senders end up here, and the Firebase one is the one that matters:
+      //
+      // 1. The Firebase SW SDK. On click it looks for an already-open tab
+      //    *matching only by host*, calls focus() on it — deliberately without
+      //    navigating — and posts the payload with
+      //    messageType 'notification-clicked'. Flutter never sees that message:
+      //    firebase_messaging_web does not implement `onMessageOpenedApp` at
+      //    all (checked in 3.10.10 — it only wires `onMessage`), so
+      //    NotificationService's listener for it is dead code on web. Without
+      //    the branch below, clicking a notification focuses the window and
+      //    then nothing else happens, which is exactly the bug this fixes.
+      //
+      // 2. firebase-messaging-sw.js's own handler, for any notification not
+      //    shown through FCM (the SDK's listener calls
+      //    stopImmediatePropagation, so it never runs for FCM ones).
+      //
+      // Either way the destination carries ?openTask= / ?openCase=, which
+      // main_shell.dart reads on startup and strips afterwards.
+      navigator.serviceWorker.addEventListener('message', function (event) {
+        var payload = event.data || {};
+
+        var link = null;
+        if (payload.isFirebaseMessaging && payload.messageType === 'notification-clicked') {
+          link =
+            (payload.fcmOptions && payload.fcmOptions.link) ||
+            (payload.data && payload.data.url);
+        } else if (payload.type === 'checu-notification-click') {
+          link = payload.url;
+        }
+        if (!link) return;
+
+        // Same-origin guard: never follow a URL handed in by a message that
+        // points anywhere other than this app.
+        var destination;
+        try {
+          destination = new URL(link, window.location.origin);
+        } catch (e) {
+          return;
+        }
+        if (destination.origin !== window.location.origin) return;
+
+        // Hand it to the already-running app when possible. The tab is open
+        // and Flutter is live, so navigating would reload the entire app in
+        // front of the user just to open one dialog — which is exactly the
+        // visible flash this avoids.
+        if (typeof window.__checuOnNotificationClick === 'function') {
+          console.log('[WEB_FCM] notification click — handing to the running app:', destination.href);
+          window.__checuOnNotificationClick(destination.href);
+          return;
+        }
+
+        // Flutter has not registered its handler yet: leave the destination
+        // where it will pick it up on startup, and only navigate if it never
+        // does (app failed to boot, handler never installed).
+        console.log('[WEB_FCM] notification click — app not ready, buffering:', destination.href);
+        window.__checuNotificationClick = destination.href;
+        setTimeout(function () {
+          if (window.__checuNotificationClick === destination.href) {
+            window.location.href = destination.href;
+          }
+        }, 3000);
+      });
     }
   </script>
   <script src="flutter_bootstrap.js" async></script>

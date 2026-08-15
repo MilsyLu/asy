@@ -68,7 +68,9 @@ const onTaskCreate = onDocumentCreated("tasks/{taskId}", async (event) => {
     pending.push(
       sendNotificationToUser(assignedUserId, {
         title: "📋 Nueva tarea asignada",
-        body: `${taskTypeName}\nCliente: ${clientName}\nHora: ${hour}`,
+        body:
+          `${createdByName} te asignó una tarea\n` +
+          `${taskTypeName}\nCliente: ${clientName}\nHora: ${hour}`,
         data: { ...basePayload, type: "task_created_assigned" },
       }).then((count) => {
         console.log(`[FCM] Assigned notified: ${assignedUserId}`);
@@ -115,16 +117,17 @@ const onTaskCreate = onDocumentCreated("tasks/{taskId}", async (event) => {
   }
 
   // --- Administradores: visibilidad global (Sprint 7.4.7 Objetivo D) ---
-  // Every super_admin, plus every admin_equipo who manages this task's
-  // team (permissions system) — except the creator, independent of whether
-  // they're also the assignedUserId or a group member, since this
-  // notification serves a different purpose (oversight) than the
-  // operational "Encargado"/"Grupo" ones above.
+  // Every super_admin, plus every admin_equipo who manages this task's team
+  // (permissions system) — except anyone who already heard about this exact
+  // task through a more specific channel above: the creator (it was their own
+  // action) and the assigned worker (their "te asignó una tarea" notification
+  // already implies the task was created). An admin who is also the encargado
+  // used to get both, which read as the same event announced twice.
   pending.push(
     (async () => {
       try {
         const adminIds = (await getAdminIdsForTask(db, empresaId, groupId)).filter(
-          (id) => id !== createdBy
+          (id) => id !== createdBy && id !== assignedUserId
         );
 
         if (adminIds.length === 0) return;

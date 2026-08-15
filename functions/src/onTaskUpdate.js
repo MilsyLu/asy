@@ -109,7 +109,13 @@ const onTaskUpdate = onDocumentUpdated("tasks/{taskId}", async (event) => {
   pending.push(
     (async () => {
       try {
-        const adminIds = await getAdminIdsForTask(db, empresaId, groupId);
+        // Same rule as onTaskCreate: skip the assigned worker, who already got
+        // the specific "Tarea reprogramada" notification above. Without this
+        // filter an admin who is also the encargado got the same reschedule
+        // announced twice.
+        const adminIds = (await getAdminIdsForTask(db, empresaId, groupId)).filter(
+          (id) => id !== assignedUserId
+        );
         if (adminIds.length === 0) return;
 
         const body = groupId

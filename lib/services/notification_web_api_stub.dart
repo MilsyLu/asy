@@ -4,6 +4,8 @@
 
 String get webNotificationPermission => 'denied';
 
+void setNotificationClickHandler(void Function(String url) handler) {}
+
 void showWebNotification(
   String title,
   Map<String, dynamic> opts, {

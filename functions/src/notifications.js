@@ -159,18 +159,18 @@ async function sendNotificationToUser(userId, { title, body, data = {} }) {
       `[FCM_TIMING]\nsending_push\ntaskId=${data.taskId || "n/a"}\nuserId=${userId}\ntimestamp=${Date.now()}`
     );
 
-    // Tap-to-open: web/firebase-messaging-sw.js's notificationclick handler
-    // reads data.url to know where to send the user. Only added to the FCM
-    // payload (not to `data` itself, which is also what recordNotification
-    // above already persisted) — the in-app notification-center tap path
-    // doesn't need it, it already has taskId/caseId directly. A task takes
-    // priority if a message somehow carried both (never happens today).
-    let pushData = data;
+    // Tap-to-open destination. A task takes priority if a message somehow
+    // carried both (never happens today). Only added to the FCM payload (not
+    // to `data` itself, which recordNotification above already persisted) —
+    // the in-app notification-center tap path doesn't need it, it already has
+    // taskId/caseId directly.
+    let clickUrl = null;
     if (data.taskId) {
-      pushData = { ...data, url: `${APP_ORIGIN}/?openTask=${data.taskId}` };
+      clickUrl = `${APP_ORIGIN}/?openTask=${data.taskId}`;
     } else if (data.caseId) {
-      pushData = { ...data, url: `${APP_ORIGIN}/?openCase=${data.caseId}` };
+      clickUrl = `${APP_ORIGIN}/?openCase=${data.caseId}`;
     }
+    const pushData = clickUrl ? { ...data, url: clickUrl } : data;
 
     const [response] = await Promise.all([
       getMessaging().sendEachForMulticast({
@@ -190,6 +190,18 @@ async function sendNotificationToUser(userId, { title, body, data = {} }) {
             icon: "/icons/Icon-192.png",
             badge: "/icons/Icon-192.png",
           },
+          // `fcmOptions.link` is the ONLY thing that makes a web push click
+          // navigate anywhere. The Firebase SW SDK registers its own
+          // `notificationclick` listener when `firebase.messaging()` is
+          // called, and that listener starts with
+          // `event.stopImmediatePropagation()` — so any handler the app
+          // registers afterwards (see web/firebase-messaging-sw.js) never
+          // runs at all. The SDK's handler then looks for the destination in
+          // `fcmOptions.link` (or `notification.click_action`) and does
+          // nothing when both are absent. Sending the URL only in `data.url`,
+          // as this function did before, meant every click on a background
+          // push was silently a no-op.
+          ...(clickUrl ? { fcmOptions: { link: clickUrl } } : {}),
         },
       }),
       recordPromise,

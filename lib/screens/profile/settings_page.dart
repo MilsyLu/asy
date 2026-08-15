@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -8,8 +9,12 @@ import '../../core/responsive/app_spacing.dart';
 import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/theme/theme_manager.dart';
+import '../../core/utils/snackbar_utils.dart';
 import '../../models/app_user.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/notification_service.dart';
+import '../../services/notification_web_api_stub.dart'
+    if (dart.library.js_interop) '../../services/notification_web_api.dart';
 import '../../services/user_repository.dart';
 
 /// "Configuración" screen (Sprint 19 UX redesign): modern two-column
@@ -264,6 +269,8 @@ class _NotificationsSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const _PushStatusRow(),
+          const SizedBox(height: AppSpacing.md),
           _NotifRow(
             icon: LucideIcons.bellRing,
             label: 'Todas las notificaciones',
@@ -303,6 +310,228 @@ class _NotificationsSection extends StatelessWidget {
             'elijas "No recibir notificaciones push".',
             style: TextStyle(color: context.colors.textSecondary, fontSize: 11),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shows whether *this browser* will actually display push banners, which the
+/// mode options below cannot reveal: a user can have "Todas las
+/// notificaciones" selected and still see nothing, because the browser
+/// permission is a separate gate the server knows nothing about (the Cloud
+/// Function reports a successful send either way). The "Probar" button fires a
+/// purely local banner — if it appears, the browser is fine and the problem is
+/// delivery; if it doesn't, the block is here.
+class _PushStatusRow extends StatefulWidget {
+  const _PushStatusRow();
+
+  @override
+  State<_PushStatusRow> createState() => _PushStatusRowState();
+}
+
+class _PushStatusRowState extends State<_PushStatusRow> {
+  late String _permission = kIsWeb ? webNotificationPermission : 'granted';
+  bool _requesting = false;
+
+  /// null = still checking. Whether the token this browser currently holds is
+  /// actually one of the tokens stored on the user profile. They drift apart
+  /// silently: the browser can mint a new token (service-worker update, cache
+  /// clear) while the profile keeps only the older, now-dead ones — and the
+  /// server still reports a successful send to those dead endpoints, so
+  /// nothing anywhere reveals the mismatch.
+  bool? _deviceRegistered;
+
+  /// Set by [_enable] so the card reflects the registration immediately.
+  bool _justRegistered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (kIsWeb && _permission == 'granted') _checkRegistration();
+  }
+
+  Future<void> _checkRegistration() async {
+    // Read the profile before awaiting, so the comparison never reaches across
+    // an async gap for its BuildContext.
+    final registered = context.read<AuthProvider>().appUser?.fcmTokens ?? const <String>[];
+    try {
+      final token = await NotificationService.instance.getToken();
+      if (!mounted) return;
+      setState(() {
+        _deviceRegistered = token != null && registered.contains(token);
+      });
+    } catch (_) {
+      if (mounted) setState(() => _deviceRegistered = false);
+    }
+  }
+
+  Future<void> _enable() async {
+    setState(() => _requesting = true);
+    // Captured before any await so nothing reaches for a BuildContext across
+    // an async gap.
+    final users = context.read<UserRepository>();
+    final user = context.read<AuthProvider>().appUser;
+    try {
+      await NotificationService.instance.requestPermissions();
+
+      // Drop the old token — both the browser's cached copy and the profile's
+      // record of it. Re-registering without this is a no-op in the exact
+      // situation this button exists for: a token FCM has already marked
+      // "not registered" comes back byte-identical from the cache, so the
+      // device keeps looking registered and keeps receiving nothing.
+      final staleToken = await NotificationService.instance.getToken();
+      if (staleToken != null && user != null) {
+        await users.removeFcmToken(user.id, staleToken);
+      }
+      await NotificationService.instance.deleteToken();
+
+      // Registering the token here rather than waiting for AuthProvider's
+      // own listener: that one only re-runs on a `users/{uid}` snapshot, so
+      // without this the device would stay tokenless until something else
+      // happened to touch the profile document.
+      final token = await NotificationService.instance.getToken();
+      if (token != null && user != null) {
+        await users.addFcmToken(user.id, token, callerEmpresaId: user.empresaId);
+        // Trust the write we just made rather than re-reading the profile:
+        // the `users/{uid}` snapshot that carries the new token hasn't
+        // necessarily arrived yet, and re-checking here would briefly (and
+        // wrongly) report the device as still unregistered.
+        _justRegistered = true;
+      }
+    } catch (e) {
+      if (mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _requesting = false;
+          _permission = kIsWeb ? webNotificationPermission : 'granted';
+          if (_justRegistered) _deviceRegistered = true;
+        });
+        if (!_justRegistered) await _checkRegistration();
+      }
+    }
+  }
+
+  void _test() {
+    if (!kIsWeb) return;
+    showWebNotification('CheCu', {
+      'body': 'Si ves esta ventana, tu navegador sí puede mostrar notificaciones.',
+      'icon': '/icons/Icon-192.png',
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final granted = _permission == 'granted';
+    final blocked = _permission == 'denied';
+
+    // When the browser permission is granted, the interesting question is no
+    // longer "can this browser show banners" but "will the server's pushes
+    // actually reach it" — which is the token-registration check.
+    final (Color tone, IconData icon, String label, String hint) = granted
+        ? switch (_deviceRegistered) {
+            null => (
+                colors.textSecondary,
+                LucideIcons.loader,
+                'Comprobando este dispositivo…',
+                'Verificando si este navegador está registrado para recibir '
+                    'notificaciones.',
+              ),
+            true => (
+                colors.success,
+                LucideIcons.checkCircle2,
+                'Activas y registradas en este dispositivo',
+                'Este navegador está registrado y puede mostrar notificaciones. '
+                    'Si aun así no las ves, revisa que Windows no tenga activado '
+                    '"No molestar" o el asistente de concentración.',
+              ),
+            false => (
+                colors.statusPending,
+                LucideIcons.alertTriangle,
+                'Este dispositivo no está registrado',
+                'Tu navegador puede mostrar notificaciones, pero no está en la '
+                    'lista de dispositivos que reciben los avisos: por eso no te '
+                    'llegan. Toca "Registrar este dispositivo" para corregirlo.',
+              ),
+          }
+        : blocked
+            ? (
+                colors.error,
+                LucideIcons.bellOff,
+                'Bloqueadas por el navegador',
+                'Tu navegador tiene bloqueadas las notificaciones de este sitio. '
+                    'Toca el candado junto a la dirección web, entra en '
+                    '"Notificaciones" y cámbialo a "Permitir".',
+              )
+            : (
+                colors.statusPending,
+                LucideIcons.bellPlus,
+                'Sin activar en este dispositivo',
+                'Este dispositivo todavía no pidió permiso para mostrar '
+                    'notificaciones.',
+              );
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        border: Border.all(color: tone.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: tone),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(hint, style: TextStyle(color: colors.textSecondary, fontSize: 11)),
+          if (kIsWeb) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: [
+                if (!blocked)
+                  FilledButton.icon(
+                    onPressed: _requesting ? null : _enable,
+                    icon: _requesting
+                        ? const SizedBox(
+                            height: 12,
+                            width: 12,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(LucideIcons.bellPlus, size: 14),
+                    label: Text(
+                      granted ? 'Registrar este dispositivo' : 'Activar',
+                    ),
+                  ),
+                if (granted)
+                  OutlinedButton.icon(
+                    onPressed: _test,
+                    icon: const Icon(LucideIcons.send, size: 14),
+                    label: const Text('Probar'),
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );

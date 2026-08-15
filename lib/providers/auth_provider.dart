@@ -43,6 +43,11 @@ class AuthProvider extends ChangeNotifier {
   StreamSubscription<User?>? _authSub;
   StreamSubscription<AppUser?>? _userSub;
   StreamSubscription<EmpresaModel?>? _empresaSub;
+
+  /// Guards against re-running per-user setup on every profile snapshot —
+  /// see the comments at their call sites in [_onAuthChanged].
+  String? _fcmRegisteredForUid;
+  String? _watchedEmpresaId;
   Timer? _dayRolloverTimer;
 
   User? firebaseUser;
@@ -104,6 +109,12 @@ class AuthProvider extends ChangeNotifier {
     firebaseUser = user;
     _userSub?.cancel();
     _empresaSub?.cancel();
+    // Reset the once-per-user guards along with the subscriptions they pair
+    // with, so signing in as somebody else re-registers their token and
+    // re-watches their empresa instead of inheriting the previous session's.
+    _empresaSub = null;
+    _fcmRegisteredForUid = null;
+    _watchedEmpresaId = null;
 
     if (user == null) {
       appUser = null;
@@ -163,7 +174,20 @@ class AuthProvider extends ChangeNotifier {
       isLoading = false;
       notifyListeners();
       if (profile != null) {
-        _registerFcmToken(profile.id, profile.empresaId);
+        // Both of these used to run on *every* `users/{uid}` snapshot, which
+        // was self-sustaining work: registering the token queries Firestore
+        // and opens a transaction, and when that transaction writes, the
+        // write produces another snapshot, which registers again. Even the
+        // no-op path (token already stored) cost a getToken() call, a query
+        // and a transaction per snapshot, and re-created the empresa listener
+        // from scratch each time. Both are per-user facts, so they now run
+        // once per signed-in user; token rotation is already covered
+        // separately by the permanent onTokenRefresh subscription installed
+        // inside _registerFcmToken.
+        if (_fcmRegisteredForUid != profile.id) {
+          _fcmRegisteredForUid = profile.id;
+          _registerFcmToken(profile.id, profile.empresaId);
+        }
         _watchEmpresaStatus(profile.empresaId);
       }
     });
@@ -175,7 +199,14 @@ class AuthProvider extends ChangeNotifier {
   /// signed out immediately with a clear reason instead of silently hitting
   /// permission-denied errors on their next Firestore call.
   void _watchEmpresaStatus(String? empresaId) {
+    // Called on every user-doc snapshot, but the empresa a user belongs to
+    // essentially never changes mid-session — so re-subscribing each time
+    // just tore down a healthy Firestore listener and paid for a fresh
+    // initial snapshot, over and over.
+    if (empresaId == _watchedEmpresaId && _empresaSub != null) return;
+    _watchedEmpresaId = empresaId;
     _empresaSub?.cancel();
+    _empresaSub = null;
     if (empresaId == null) return;
     _empresaSub = _empresaRepository.watchEmpresa(empresaId).listen((empresa) async {
       if (empresa != null && !empresa.activo) {

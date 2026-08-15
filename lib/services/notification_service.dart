@@ -145,7 +145,26 @@ class NotificationService {
 
     // --- Opened-notification handling (Sprint 7.1 Parts 6-7) ---
     // App was backgrounded and the user tapped the push to bring it forward.
+    // NOTE: this stream never fires on web — `firebase_messaging_web` (3.10.10)
+    // implements `onMessage` only and has no `onMessageOpenedApp` at all. The
+    // web equivalent is the hook installed just below; this listener is kept
+    // for Android/iOS, where it is the real entry point.
     FirebaseMessaging.onMessageOpenedApp.listen(handleOpenedNotification);
+
+    if (kIsWeb) {
+      // Web counterpart of onMessageOpenedApp: web/index.html catches the
+      // Firebase SW SDK's 'notification-clicked' message and calls this with
+      // the destination URL. Opening the detail in place matters — the SDK
+      // focuses this very tab without navigating, so reloading the app just to
+      // read a query parameter would flash the whole UI in front of the user.
+      setNotificationClickHandler((url) {
+        final params = Uri.parse(url).queryParameters;
+        final taskId = params['openTask'];
+        final caseId = params['openCase'];
+        debugPrint('[WEB_FCM] notification click -> openTask=$taskId openCase=$caseId');
+        openNotificationFromData({'taskId': ?taskId, 'caseId': ?caseId});
+      });
+    }
 
     // App was terminated and got launched by tapping the push; FCM buffers
     // that one message for retrieval right after startup.
@@ -280,6 +299,27 @@ class NotificationService {
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+
+  /// Discards the cached FCM token so the next [getToken] mints a brand new
+  /// one, re-subscribing to the browser's Push API in the process.
+  ///
+  /// This is the only way out of a specific dead end: when a push subscription
+  /// dies (service-worker replacement, partial site-data clear) FCM starts
+  /// answering `messaging/registration-token-not-registered` for that token,
+  /// but [getToken] keeps handing back the very same dead string from its
+  /// IndexedDB cache. The server then deletes the token as invalid, the client
+  /// re-registers the identical dead token, and the loop never ends — the
+  /// device looks correctly registered while receiving nothing.
+  Future<void> deleteToken() async {
+    try {
+      await _messaging.deleteToken();
+      debugPrint('[WEB_FCM_DIAG] deleteToken() OK — next getToken() will mint a new one');
+    } catch (e) {
+      // Non-fatal: if there was nothing cached to delete, getToken() below
+      // still does the right thing.
+      debugPrint('[WEB_FCM_DIAG] deleteToken() failed (continuing): $e');
+    }
+  }
 
   /// Returns the current FCM token, or null if unavailable. On web the
   /// [_vapidKey] is required by the browser Push API; on Android/iOS it is

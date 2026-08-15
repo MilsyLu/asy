@@ -36,11 +36,19 @@ messaging.onBackgroundMessage((payload) => {
   console.log('[FCM] Background message received (auto-displayed by the browser):', payload);
 });
 
-// The Cloud Functions layer (functions/src/notifications.js) sets
-// data.url = "<origin>/?openTask=<taskId>" (or "?openCase=<caseId>" for
-// Casos de Soporte) on every business push. The app reads that query param
-// at startup (main_shell.dart) and opens the task/case detail, then strips
-// it from the URL bar.
+// IMPORTANT: this listener does NOT run for pushes sent through FCM.
+//
+// `firebase.messaging()` above installs the SDK's own `notificationclick`
+// listener, and that one begins with `event.stopImmediatePropagation()` for
+// any notification it recognises as its own — which silently prevents every
+// listener registered after it, including this one, from ever executing.
+// Clicks on FCM notifications are therefore handled entirely by the SDK,
+// which navigates to `webpush.fcmOptions.link` (set in
+// functions/src/notifications.js). That is the setting to change if the
+// destination is ever wrong; editing the code below will have no effect.
+//
+// This handler is kept only for notifications this worker might display
+// itself in the future, outside the FCM path.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const notifData = event.notification.data || {};
@@ -57,28 +65,43 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     (async () => {
-      // Reuse an already-open tab instead of opening a new one when
-      // possible — but this whole path is best-effort: `navigate()` on a
-      // background/discarded Android tab can silently reject, and if that
-      // happens with no fallback the click would otherwise just foreground
-      // Chrome without ever reaching CheCu. Any failure here falls through
-      // to the plain, reliable `clients.openWindow(target)` below instead.
+      // This worker is registered at `/firebase-cloud-messaging-push-scope`
+      // (see web/index.html) while the app itself lives at `/`, so it
+      // controls no window clients at all. That rules out `client.navigate()`
+      // — the spec has it reject with TypeError for any client this worker
+      // doesn't control, which here means *every* client, on every click.
+      //
+      // `focus()` and `postMessage()` carry no such restriction, so the tab is
+      // brought forward here and then told where to go; index.html listens for
+      // this message and performs the navigation from the page side, where it
+      // is an ordinary same-origin navigation. `openWindow` stays as the
+      // fallback for when no CheCu tab is open at all.
       try {
         const windowClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
-        for (const client of windowClients) {
-          if ('navigate' in client) {
-            const navigated = await client.navigate(target);
-            await (navigated || client).focus();
+        const existing = windowClients.find((c) => c.url.startsWith(self.location.origin));
+        if (existing) {
+          // focus() resolves successfully even when the browser declines to
+          // act on it — restoring a *minimized* Chrome window on Windows is
+          // the case that silently does nothing, which is precisely the
+          // symptom this handler exists to fix. So the result is verified
+          // rather than trusted: if the tab did not actually come forward,
+          // fall through to openWindow, which does raise the browser
+          // reliably (at the cost of a second tab).
+          const focused = (await existing.focus()) || existing;
+          if (focused.visibilityState === 'visible') {
+            focused.postMessage({ type: 'checu-notification-click', url: target });
+            console.log('[FCM] notificationclick: focused existing tab and sent it', target);
             return;
           }
-          if ('focus' in client) {
-            await client.focus();
-            return;
-          }
+          console.log(
+            '[FCM] notificationclick: focus() did not surface the tab (visibilityState=' +
+              focused.visibilityState + ') — falling back to openWindow'
+          );
         }
       } catch (e) {
-        console.log('[FCM] notificationclick: reusing an open tab failed, opening a new one instead —', e);
+        console.log('[FCM] notificationclick: focusing an open tab failed, opening a new one —', e);
       }
+      console.log('[FCM] notificationclick: opening a new window at', target);
       await clients.openWindow(target);
     })()
   );
