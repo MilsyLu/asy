@@ -269,8 +269,10 @@ class _NotificationsSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Spacing belongs inside _PushStatusRow: it renders nothing in the
+          // healthy case, and a SizedBox out here would leave a gap with
+          // nothing above it to separate.
           const _PushStatusRow(),
-          const SizedBox(height: AppSpacing.md),
           _NotifRow(
             icon: LucideIcons.bellRing,
             label: 'Todas las notificaciones',
@@ -316,13 +318,16 @@ class _NotificationsSection extends StatelessWidget {
   }
 }
 
-/// Shows whether *this browser* will actually display push banners, which the
-/// mode options below cannot reveal: a user can have "Todas las
-/// notificaciones" selected and still see nothing, because the browser
-/// permission is a separate gate the server knows nothing about (the Cloud
-/// Function reports a successful send either way). The "Probar" button fires a
-/// purely local banner — if it appears, the browser is fine and the problem is
-/// delivery; if it doesn't, the block is here.
+/// Surfaces the browser's notification permission — but only when the user
+/// actually has something to do about it.
+///
+/// Deliberately renders nothing in the healthy case. An always-visible status
+/// panel (with "test" and "re-register" buttons) reads as "this might be
+/// broken" every time someone opens Configuración, which is a worse message
+/// than the rare problem it guards against. A dead push subscription now
+/// repairs itself on the next load (see AuthProvider._registerFcmToken), so
+/// the only thing left worth showing is the one failure the app genuinely
+/// cannot fix on its own: a permission the browser has blocked.
 class _PushStatusRow extends StatefulWidget {
   const _PushStatusRow();
 
@@ -334,71 +339,10 @@ class _PushStatusRowState extends State<_PushStatusRow> {
   late String _permission = kIsWeb ? webNotificationPermission : 'granted';
   bool _requesting = false;
 
-  /// null = still checking. Whether the token this browser currently holds is
-  /// actually one of the tokens stored on the user profile. They drift apart
-  /// silently: the browser can mint a new token (service-worker update, cache
-  /// clear) while the profile keeps only the older, now-dead ones — and the
-  /// server still reports a successful send to those dead endpoints, so
-  /// nothing anywhere reveals the mismatch.
-  bool? _deviceRegistered;
-
-  /// Set by [_enable] so the card reflects the registration immediately.
-  bool _justRegistered = false;
-
-  @override
-  void initState() {
-    super.initState();
-    if (kIsWeb && _permission == 'granted') _checkRegistration();
-  }
-
-  Future<void> _checkRegistration() async {
-    // Read the profile before awaiting, so the comparison never reaches across
-    // an async gap for its BuildContext.
-    final registered = context.read<AuthProvider>().appUser?.fcmTokens ?? const <String>[];
-    try {
-      final token = await NotificationService.instance.getToken();
-      if (!mounted) return;
-      setState(() {
-        _deviceRegistered = token != null && registered.contains(token);
-      });
-    } catch (_) {
-      if (mounted) setState(() => _deviceRegistered = false);
-    }
-  }
-
   Future<void> _enable() async {
     setState(() => _requesting = true);
-    // Captured before any await so nothing reaches for a BuildContext across
-    // an async gap.
-    final users = context.read<UserRepository>();
-    final user = context.read<AuthProvider>().appUser;
     try {
       await NotificationService.instance.requestPermissions();
-
-      // Drop the old token — both the browser's cached copy and the profile's
-      // record of it. Re-registering without this is a no-op in the exact
-      // situation this button exists for: a token FCM has already marked
-      // "not registered" comes back byte-identical from the cache, so the
-      // device keeps looking registered and keeps receiving nothing.
-      final staleToken = await NotificationService.instance.getToken();
-      if (staleToken != null && user != null) {
-        await users.removeFcmToken(user.id, staleToken);
-      }
-      await NotificationService.instance.deleteToken();
-
-      // Registering the token here rather than waiting for AuthProvider's
-      // own listener: that one only re-runs on a `users/{uid}` snapshot, so
-      // without this the device would stay tokenless until something else
-      // happened to touch the profile document.
-      final token = await NotificationService.instance.getToken();
-      if (token != null && user != null) {
-        await users.addFcmToken(user.id, token, callerEmpresaId: user.empresaId);
-        // Trust the write we just made rather than re-reading the profile:
-        // the `users/{uid}` snapshot that carries the new token hasn't
-        // necessarily arrived yet, and re-checking here would briefly (and
-        // wrongly) report the device as still unregistered.
-        _justRegistered = true;
-      }
     } catch (e) {
       if (mounted) {
         SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
@@ -408,90 +352,40 @@ class _PushStatusRowState extends State<_PushStatusRow> {
         setState(() {
           _requesting = false;
           _permission = kIsWeb ? webNotificationPermission : 'granted';
-          if (_justRegistered) _deviceRegistered = true;
         });
-        if (!_justRegistered) await _checkRegistration();
       }
     }
   }
 
-  void _test() {
-    if (!kIsWeb) return;
-    showWebNotification('CheCu', {
-      'body': 'Si ves esta ventana, tu navegador sí puede mostrar notificaciones.',
-      'icon': '/icons/Icon-192.png',
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
+    // Everything working, or a platform where the browser gate does not apply:
+    // say nothing at all.
+    if (!kIsWeb || _permission == 'granted') return const SizedBox.shrink();
+
     final colors = context.colors;
-    final granted = _permission == 'granted';
     final blocked = _permission == 'denied';
 
-    // When the browser permission is granted, the interesting question is no
-    // longer "can this browser show banners" but "will the server's pushes
-    // actually reach it" — which is the token-registration check.
-    final (Color tone, IconData icon, String label, String hint) = granted
-        ? switch (_deviceRegistered) {
-            null => (
-                colors.textSecondary,
-                LucideIcons.loader,
-                'Comprobando este dispositivo…',
-                'Verificando si este navegador está registrado para recibir '
-                    'notificaciones.',
-              ),
-            true => (
-                colors.success,
-                LucideIcons.checkCircle2,
-                'Activas y registradas en este dispositivo',
-                'Este navegador está registrado y puede mostrar notificaciones. '
-                    'Si aun así no las ves, revisa que Windows no tenga activado '
-                    '"No molestar" o el asistente de concentración.',
-              ),
-            false => (
-                colors.statusPending,
-                LucideIcons.alertTriangle,
-                'Este dispositivo no está registrado',
-                'Tu navegador puede mostrar notificaciones, pero no está en la '
-                    'lista de dispositivos que reciben los avisos: por eso no te '
-                    'llegan. Toca "Registrar este dispositivo" para corregirlo.',
-              ),
-          }
-        : blocked
-            ? (
-                colors.error,
-                LucideIcons.bellOff,
-                'Bloqueadas por el navegador',
-                'Tu navegador tiene bloqueadas las notificaciones de este sitio. '
-                    'Toca el candado junto a la dirección web, entra en '
-                    '"Notificaciones" y cámbialo a "Permitir".',
-              )
-            : (
-                colors.statusPending,
-                LucideIcons.bellPlus,
-                'Sin activar en este dispositivo',
-                'Este dispositivo todavía no pidió permiso para mostrar '
-                    'notificaciones.',
-              );
-
     return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: tone.withValues(alpha: 0.08),
+        color: colors.statusPending.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-        border: Border.all(color: tone.withValues(alpha: 0.35)),
+        border: Border.all(color: colors.statusPending.withValues(alpha: 0.35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 16, color: tone),
+              Icon(LucideIcons.bellOff, size: 16, color: colors.statusPending),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
-                  label,
+                  blocked
+                      ? 'Tu navegador tiene bloqueadas las notificaciones'
+                      : 'Activa las notificaciones en este dispositivo',
                   style: TextStyle(
                     color: colors.textPrimary,
                     fontWeight: FontWeight.w600,
@@ -502,34 +396,28 @@ class _PushStatusRowState extends State<_PushStatusRow> {
             ],
           ),
           const SizedBox(height: AppSpacing.xs),
-          Text(hint, style: TextStyle(color: colors.textSecondary, fontSize: 11)),
-          if (kIsWeb) ...[
+          Text(
+            blocked
+                // Nothing in the app can lift this: the permission lives in the
+                // browser, so the only useful thing to offer is the way there.
+                ? 'Toca el candado junto a la dirección web, entra en '
+                    '"Notificaciones" y cámbialo a "Permitir".'
+                : 'Sin este permiso no verás los avisos de tareas nuevas '
+                    'mientras trabajas en otra ventana.',
+            style: TextStyle(color: colors.textSecondary, fontSize: 11),
+          ),
+          if (!blocked) ...[
             const SizedBox(height: AppSpacing.sm),
-            Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
-              children: [
-                if (!blocked)
-                  FilledButton.icon(
-                    onPressed: _requesting ? null : _enable,
-                    icon: _requesting
-                        ? const SizedBox(
-                            height: 12,
-                            width: 12,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(LucideIcons.bellPlus, size: 14),
-                    label: Text(
-                      granted ? 'Registrar este dispositivo' : 'Activar',
-                    ),
-                  ),
-                if (granted)
-                  OutlinedButton.icon(
-                    onPressed: _test,
-                    icon: const Icon(LucideIcons.send, size: 14),
-                    label: const Text('Probar'),
-                  ),
-              ],
+            FilledButton.icon(
+              onPressed: _requesting ? null : _enable,
+              icon: _requesting
+                  ? const SizedBox(
+                      height: 12,
+                      width: 12,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(LucideIcons.bellPlus, size: 14),
+              label: const Text('Activar'),
             ),
           ],
         ],
@@ -537,6 +425,7 @@ class _PushStatusRowState extends State<_PushStatusRow> {
     );
   }
 }
+
 
 class _NotifRow extends StatelessWidget {
   const _NotifRow({

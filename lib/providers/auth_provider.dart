@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/app_user.dart';
 import '../models/empresa_model.dart';
@@ -186,7 +187,7 @@ class AuthProvider extends ChangeNotifier {
         // inside _registerFcmToken.
         if (_fcmRegisteredForUid != profile.id) {
           _fcmRegisteredForUid = profile.id;
-          _registerFcmToken(profile.id, profile.empresaId);
+          _registerFcmToken(profile.id, profile.empresaId, profile.fcmTokens);
         }
         _watchEmpresaStatus(profile.empresaId);
       }
@@ -221,17 +222,60 @@ class AuthProvider extends ChangeNotifier {
     deactivationMessage = null;
   }
 
-  Future<void> _registerFcmToken(String uid, String? empresaId) async {
+  /// Key under which the last token this device successfully registered is
+  /// remembered, so [_registerFcmToken] can recognise a token the server has
+  /// since rejected. Scoped per user: two accounts on one browser each get
+  /// their own record.
+  static String _lastTokenKey(String uid) => 'fcm_last_registered_token_$uid';
+
+  Future<void> _registerFcmToken(
+    String uid,
+    String? empresaId,
+    List<String> knownTokens,
+  ) async {
     debugPrint('[WEB_FCM_DIAG] _registerFcmToken() ENTRY uid=$uid');
     try {
       debugPrint('[WEB_FCM_DIAG] _registerFcmToken(): calling getToken()...');
-      final token = await NotificationService.instance.getToken();
+      var token = await NotificationService.instance.getToken();
       debugPrint(
         '[WEB_FCM_DIAG] _registerFcmToken(): getToken() returned '
         '${token == null ? "NULL — addFcmToken() will NOT be called" : "token(len=${token.length}) — calling addFcmToken()"}',
       );
+
+      // Self-healing for a dead push subscription.
+      //
+      // When a subscription dies, FCM answers registration-token-not-registered
+      // and the server drops that token from the profile — but getToken() keeps
+      // returning the very same string from its IndexedDB cache, so the client
+      // re-registers the identical dead token and the pair loops forever, with
+      // the device looking correctly registered while receiving nothing.
+      //
+      // The giveaway is precise: the token is missing from the profile *and*
+      // this device remembers having registered exactly it. A device that
+      // simply never registered before is also missing from the profile, which
+      // is why the remembered value — not the absence alone — is what triggers
+      // the reset. deleteToken() is the only thing that makes the next
+      // getToken() mint a genuinely new subscription.
+      final prefs = await SharedPreferences.getInstance();
+      final rememberedToken = prefs.getString(_lastTokenKey(uid));
+      if (token != null &&
+          !knownTokens.contains(token) &&
+          rememberedToken == token) {
+        debugPrint(
+          '[WEB_FCM_DIAG] _registerFcmToken(): token registrado antes pero '
+          'ausente del perfil — el servidor lo rechazo. Renovando.',
+        );
+        await NotificationService.instance.deleteToken();
+        token = await NotificationService.instance.getToken();
+        debugPrint(
+          '[WEB_FCM_DIAG] _registerFcmToken(): token renovado '
+          '${token == null ? "NULL" : "(len=${token.length})"}',
+        );
+      }
+
       if (token != null) {
         await _userRepository.addFcmToken(uid, token, callerEmpresaId: empresaId);
+        await prefs.setString(_lastTokenKey(uid), token);
         debugPrint('[WEB_FCM_DIAG] _registerFcmToken(): addFcmToken() returned');
       }
       // Sprint 7.4.3 Parte 1: this only swaps the handler reference — the
@@ -239,9 +283,14 @@ class AuthProvider extends ChangeNotifier {
       // inside NotificationService.initialize(). Re-running this method on
       // every `users/{uid}` snapshot (not just login) no longer accumulates
       // a new listener each time.
-      NotificationService.instance.setTokenRefreshHandler((newToken) {
+      NotificationService.instance.setTokenRefreshHandler((newToken) async {
         debugPrint('[WEB_FCM_DIAG] onTokenRefresh: new token (len=${newToken.length}), calling addFcmToken(uid=$uid)');
-        _userRepository.addFcmToken(uid, newToken, callerEmpresaId: empresaId);
+        await _userRepository.addFcmToken(uid, newToken, callerEmpresaId: empresaId);
+        // Keep the remembered value in step with what is actually registered,
+        // or the next startup would compare against a stale token and either
+        // heal when it shouldn't or miss a real rejection.
+        await (await SharedPreferences.getInstance())
+            .setString(_lastTokenKey(uid), newToken);
       });
     } catch (e, st) {
       debugPrint(
