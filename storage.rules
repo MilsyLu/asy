@@ -12,8 +12,22 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    // Read from the ID token, NOT via a cross-service firestore.get().
+    //
+    // The Firestore version of this function denied every supportCases upload
+    // from the day the feature shipped: 23 cases and not one attachment ever
+    // stored, while profile_photos (whose rule makes no such call) uploaded
+    // fine the whole time. Simulating the rule with that read forced to
+    // succeed returns ALLOW, so the rule logic was never the problem — the
+    // cross-service call was. `functions/src/syncEmpresaClaim.js` keeps this
+    // claim in step with `users/{uid}.empresaId`.
+    //
+    // A token issued before the claim existed simply lacks it, and the
+    // comparison below fails closed. The client forces one token refresh at
+    // startup when the claim is missing (AuthProvider), so nobody has to sign
+    // out and back in.
     function myEmpresaId() {
-      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.empresaId;
+      return request.auth.token.empresaId;
     }
 
     // Pre-existing path (StorageService.uploadProfilePhoto/deleteProfilePhoto)

@@ -14,6 +14,7 @@ const { extractPrinterConfigFromImages } = require("./src/extractPrinterConfigFr
 const { checkSupportCaseReminders } = require("./src/checkSupportCaseReminders");
 const { checkSupportCaseCustomReminders } = require("./src/checkSupportCaseCustomReminders");
 const { createTeamAsScopedAdmin } = require("./src/createTeamAsScopedAdmin");
+const { syncEmpresaClaim } = require("./src/syncEmpresaClaim");
 
 exports.onTaskCreate = onTaskCreate;
 exports.onTaskUpdate = onTaskUpdate;
@@ -27,3 +28,4 @@ exports.extractPrinterConfigFromImages = extractPrinterConfigFromImages;
 exports.checkSupportCaseReminders = checkSupportCaseReminders;
 exports.checkSupportCaseCustomReminders = checkSupportCaseCustomReminders;
 exports.createTeamAsScopedAdmin = createTeamAsScopedAdmin;
+exports.syncEmpresaClaim = syncEmpresaClaim;

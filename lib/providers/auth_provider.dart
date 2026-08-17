@@ -188,10 +188,36 @@ class AuthProvider extends ChangeNotifier {
         if (_fcmRegisteredForUid != profile.id) {
           _fcmRegisteredForUid = profile.id;
           _registerFcmToken(profile.id, profile.empresaId, profile.fcmTokens);
+          _ensureEmpresaClaim(profile.empresaId);
         }
         _watchEmpresaStatus(profile.empresaId);
       }
     });
+  }
+
+  /// Makes sure this session's ID token actually carries the `empresaId`
+  /// claim that `storage.rules` checks before allowing an attachment upload.
+  ///
+  /// Firebase refreshes ID tokens roughly hourly, so a claim set by
+  /// `syncEmpresaClaim` would eventually arrive on its own — but "eventually"
+  /// means a user who signed in before the claim existed keeps getting upload
+  /// failures until then, with nothing on screen explaining why. Forcing one
+  /// refresh when the claim is missing or stale closes that window without
+  /// making anyone sign out. Runs once per signed-in user, and only actually
+  /// hits the network when there is a mismatch to fix.
+  Future<void> _ensureEmpresaClaim(String? empresaId) async {
+    final user = _authService.currentUser;
+    if (user == null) return;
+    try {
+      final result = await user.getIdTokenResult();
+      if (result.claims?['empresaId'] == empresaId) return;
+      debugPrint('[CLAIMS] empresaId ausente o desactualizado en el token — refrescando');
+      await user.getIdToken(true);
+    } catch (e) {
+      // Non-fatal: everything except attachment uploads works without this,
+      // and the hourly refresh will pick the claim up anyway.
+      debugPrint('[CLAIMS] no se pudo refrescar el token: $e');
+    }
   }
 
   /// Mirrors the individual-account force-signout above, one level up: if

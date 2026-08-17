@@ -97,8 +97,18 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
             authorId: user.id,
             authorName: user.name,
           );
-    } catch (_) {
-      if (mounted) SnackbarUtils.showError(context, 'No se pudo subir el archivo.');
+    } catch (e) {
+      // Surfacing the underlying cause rather than a flat "no se pudo":
+      // Storage failures are all indistinguishable otherwise (permission
+      // denied, CORS, quota, wrong bucket), and swallowing the error left the
+      // only copy of that information in a console nobody reads.
+      debugPrint('[STORAGE] Falló la subida del adjunto: $e');
+      if (mounted) {
+        SnackbarUtils.showError(
+          context,
+          'No se pudo subir el archivo: ${SnackbarUtils.firebaseErrorMessage(e)}',
+        );
+      }
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
