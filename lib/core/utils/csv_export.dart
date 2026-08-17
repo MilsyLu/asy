@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:csv/csv.dart';
+// Aliased: csv 8 exports a top-level instance also called `csv`, which the
+// local variable below would otherwise shadow.
+import 'package:csv/csv.dart' as csv_lib;
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -14,13 +16,20 @@ Future<void> exportAndShareCsv({
   required String fileName,
   required List<List<dynamic>> rows,
 }) async {
-  final csv = const ListToCsvConverter().convert(rows);
+  final csv = csv_lib.csv.encode(rows);
 
   if (kIsWeb) {
     final bytes = const Utf8Encoder().convert(csv);
-    await Share.shareXFiles(
-      [XFile.fromData(bytes, name: fileName, mimeType: 'text/csv;charset=utf-8')],
-      text: fileName,
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [
+          XFile.fromData(bytes, name: fileName, mimeType: 'text/csv;charset=utf-8'),
+        ],
+        // XFile.fromData carries no filename on its own, so the browser would
+        // otherwise save the export under a generated name.
+        fileNameOverrides: [fileName],
+        text: fileName,
+      ),
     );
     return;
   }
@@ -28,5 +37,7 @@ Future<void> exportAndShareCsv({
   final dir = await getTemporaryDirectory();
   final file = File('${dir.path}/$fileName');
   await file.writeAsString(csv);
-  await Share.shareXFiles([XFile(file.path)], text: fileName);
+  await SharePlus.instance.share(
+    ShareParams(files: [XFile(file.path)], text: fileName),
+  );
 }

@@ -1772,7 +1772,7 @@ class _TrendChart extends StatelessWidget {
                       }
                       final date = AppDateUtils.parseDateKey(entries[index].key);
                       return SideTitleWidget(
-                        axisSide: meta.axisSide,
+                        meta: meta,
                         child: Text(
                           AppDateUtils.formatDayMonth(date),
                           style: TextStyle(color: colors.textSecondary, fontSize: 10),
@@ -1788,7 +1788,7 @@ class _TrendChart extends StatelessWidget {
                     interval: yInterval,
                     maxIncluded: false,
                     getTitlesWidget: (value, meta) => SideTitleWidget(
-                      axisSide: meta.axisSide,
+                      meta: meta,
                       child: Text(
                         value.toInt().toString(),
                         style:

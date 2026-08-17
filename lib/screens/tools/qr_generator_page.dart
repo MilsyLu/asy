@@ -102,15 +102,18 @@ class _QrGeneratorPageState extends State<QrGeneratorPage> {
       final bytes = imageData.buffer.asUint8List();
       final fileName = _fileName();
       if (kIsWeb) {
-        // Direct browser download straight to Descargas — Share.shareXFiles
-        // on web opens the OS's native "Compartir" dialog when the Web
-        // Share API with files is available (e.g. Windows/Edge), which
-        // isn't what a "Descargar imagen" button should do.
+        // Direct browser download straight to Descargas — sharing on web
+        // opens the OS's native "Compartir" dialog when the Web Share API
+        // with files is available (e.g. Windows/Edge), which isn't what a
+        // "Descargar imagen" button should do.
         downloadBytes(bytes, fileName, 'image/png');
       } else {
-        await Share.shareXFiles(
-          [XFile.fromData(bytes, name: fileName, mimeType: 'image/png')],
-          text: fileName,
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile.fromData(bytes, name: fileName, mimeType: 'image/png')],
+            fileNameOverrides: [fileName],
+            text: fileName,
+          ),
         );
       }
     } catch (_) {
