@@ -148,13 +148,14 @@ GroupCompliance? bestGroupCompliance(List<GroupCompliance> groups) {
 
 /// The client (name+phone) with the most tasks in [tasks] (Sprint 6.2 Part
 /// 5, "⭐ Cliente más atendido").
-({String name, String phone, int count})? mostAttendedClient(
+({String? clientId, String name, String phone, int count})? mostAttendedClient(
   List<TaskModel> tasks,
   TaskCatalog catalog,
 ) {
   if (tasks.isEmpty) return null;
   final cancelledId = catalog.cancelledStatusId;
-  final counts = <String, ({String name, String phone, int count})>{};
+  final counts =
+      <String, ({String? clientId, String name, String phone, int count})>{};
   for (final t in tasks) {
     // A cancelled visit is not attention the client received.
     if (t.statusId == cancelledId) continue;
@@ -166,6 +167,10 @@ GroupCompliance? bestGroupCompliance(List<GroupCompliance> groups) {
     final key = t.clientId ?? '${t.clientName}|${t.clientPhone}';
     final existing = counts[key];
     counts[key] = (
+      // Carried out so callers can filter tasks back down to this client
+      // without re-deriving the key — and without falling back to matching on
+      // the typed name, which is the split this grouping exists to avoid.
+      clientId: t.clientId,
       name: t.clientName,
       phone: t.clientPhone,
       count: (existing?.count ?? 0) + 1,

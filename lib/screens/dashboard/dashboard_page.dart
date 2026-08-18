@@ -80,7 +80,7 @@ class _Snapshot {
   final AppUser? topUser;
   final List<GroupCompliance> groupCompliance;
   final GroupCompliance? bestGroup;
-  final ({String name, String phone, int count})? topClient;
+  final ({String? clientId, String name, String phone, int count})? topClient;
   final AppUser? streakUser;
   final Map<String, int> statusDistribution;
   final List<MapEntry<String, int>> dailyTrend;
@@ -214,6 +214,94 @@ class _DashboardPageState extends State<DashboardPage> {
       return;
     }
     setState(() => _applyRange(index));
+  }
+
+  /// The four headline facts of "Resumen ejecutivo".
+  ///
+  /// Spelled out in full inside each layout before this existed — twice as a
+  /// stacked list and once as the desktop card grid — so any change of wording
+  /// or wiring had to be made three times, and could be made in only two by
+  /// accident. The desktop grid still supplies its own icons; the facts come
+  /// from here.
+  ///
+  /// Three of them open the tasks behind the number. "Mejor racha" does not:
+  /// it counts consecutive days of signing in, not tasks, so there is no list
+  /// it could honestly lead to, and a row that opens something unrelated is
+  /// worse than one that opens nothing.
+  List<_ExecutiveItem> _executiveItems(BuildContext context, _Snapshot s) {
+    final colors = context.colors;
+    final topUser = s.topUser;
+    final bestGroup = s.bestGroup;
+    final topClient = s.topClient;
+    final streak = s.streakUser;
+
+    return [
+      _ExecutiveItem(
+        label: 'Mejor colaborador',
+        value: topUser?.name ?? 'Sin datos todavía',
+        onTap: topUser == null
+            ? null
+            : () => _showTaskListSheet(
+                context,
+                s.catalog,
+                _liveTasks,
+                title: 'Tareas de ${topUser.name}',
+                emptyMessage: 'Sin tareas en este periodo.',
+                accent: colors.primary,
+                where: (t) => t.assignedUserId == topUser.id,
+              ),
+      ),
+      _ExecutiveItem(
+        label: 'Mejor equipo',
+        value: bestGroup == null
+            ? 'Sin datos todavía'
+            : '${s.catalog.groupName(bestGroup.groupId)} · ${bestGroup.percent}%',
+        onTap: bestGroup == null
+            ? null
+            : () => _showTaskListSheet(
+                context,
+                s.catalog,
+                _liveTasks,
+                title: 'Tareas de ${s.catalog.groupName(bestGroup.groupId)}',
+                emptyMessage: 'Sin tareas en este periodo.',
+                accent: colors.success,
+                where: (t) => t.groupId == bestGroup.groupId,
+              ),
+      ),
+      _ExecutiveItem(
+        label: 'Cliente destacado',
+        value: topClient == null
+            ? 'Sin datos todavía'
+            : '${topClient.name} · ${topClient.count} '
+                  '${topClient.count == 1 ? 'tarea' : 'tareas'}',
+        onTap: topClient == null
+            ? null
+            : () => _showTaskListSheet(
+                context,
+                s.catalog,
+                _liveTasks,
+                title: 'Tareas de ${topClient.name}',
+                emptyMessage: 'Sin tareas en este periodo.',
+                accent: colors.primary,
+                // Mirrors mostAttendedClient exactly — same grouping key, and
+                // cancelled left out — so the length of this list matches the
+                // count printed on the row that opened it.
+                where: (t) =>
+                    t.statusId != s.catalog.cancelledStatusId &&
+                    (topClient.clientId != null
+                        ? t.clientId == topClient.clientId
+                        : t.clientId == null &&
+                              t.clientName == topClient.name &&
+                              t.clientPhone == topClient.phone),
+              ),
+      ),
+      _ExecutiveItem(
+        label: 'Mejor racha',
+        value: streak == null
+            ? 'Sin datos todavía'
+            : '${streak.name} · ${streak.streakDays} días',
+      ),
+    ];
   }
 
   /// What the header and the empty state call the current period.
@@ -379,32 +467,7 @@ class _DashboardPageState extends State<DashboardPage> {
         _SectionTitle('🏆 Resumen ejecutivo'),
         const SizedBox(height: _kCardGap),
         _DashboardCard(
-          child: _ExecutiveSummaryList(
-            items: [
-              _ExecutiveItem(
-                label: 'Mejor colaborador',
-                value: s.topUser?.name ?? 'Sin datos',
-              ),
-              _ExecutiveItem(
-                label: 'Mejor equipo',
-                value: s.bestGroup == null
-                    ? 'Sin datos'
-                    : '${s.catalog.groupName(s.bestGroup!.groupId)} · ${s.bestGroup!.percent}%',
-              ),
-              _ExecutiveItem(
-                label: 'Cliente destacado',
-                value: s.topClient == null
-                    ? 'Sin datos'
-                    : '${s.topClient!.name} · ${s.topClient!.count}',
-              ),
-              _ExecutiveItem(
-                label: 'Mejor racha',
-                value: s.streakUser == null
-                    ? 'Sin datos'
-                    : '${s.streakUser!.name} · ${s.streakUser!.streakDays} días',
-              ),
-            ],
-          ),
+          child: _ExecutiveSummaryList(items: _executiveItems(context, s)),
         ),
         const SizedBox(height: _kSectionGap),
         _SectionTitle('Distribución de estados'),
@@ -450,14 +513,14 @@ class _DashboardPageState extends State<DashboardPage> {
             title: 'Total tareas',
             count: s.kpis.total,
             linkLabel: 'Ver tareas →',
-            onTap: () => _showTasksByStatusSheet(
+            onTap: () => _showTaskListSheet(
               context,
               s.catalog,
               _liveTasks,
               title: 'Todas las tareas',
               emptyMessage: 'No hay tareas en este periodo.',
               accent: colors.primary,
-              statusId: null,
+              where: (_) => true,
             ),
           ),
           right: _KpiCard(
@@ -466,7 +529,7 @@ class _DashboardPageState extends State<DashboardPage> {
             count: s.kpis.completed,
             accentColor: colors.success,
             linkLabel: 'Ver completadas →',
-            onTap: () => _showTasksByStatusSheet(
+            onTap: () => _showTaskListSheet(
               context,
               s.catalog,
               _liveTasks,
@@ -474,7 +537,7 @@ class _DashboardPageState extends State<DashboardPage> {
               emptyMessage:
                   'Todavía no hay tareas completadas en este periodo.',
               accent: colors.success,
-              statusId: s.catalog.completedStatusId,
+              where: (t) => t.statusId == s.catalog.completedStatusId,
             ),
           ),
         ),
@@ -486,14 +549,14 @@ class _DashboardPageState extends State<DashboardPage> {
             count: s.kpis.pending,
             accentColor: colors.statusPending,
             linkLabel: 'Ver pendientes →',
-            onTap: () => _showTasksByStatusSheet(
+            onTap: () => _showTaskListSheet(
               context,
               s.catalog,
               _liveTasks,
               title: 'Pendientes',
               emptyMessage: 'No queda ninguna tarea pendiente.',
               accent: colors.statusPending,
-              statusId: s.catalog.pendingStatusId,
+              where: (t) => t.statusId == s.catalog.pendingStatusId,
             ),
           ),
           right: _KpiCard(
@@ -502,14 +565,14 @@ class _DashboardPageState extends State<DashboardPage> {
             count: s.kpis.rescheduled,
             accentColor: colors.statusRescheduled,
             linkLabel: 'Ver reprogramadas →',
-            onTap: () => _showTasksByStatusSheet(
+            onTap: () => _showTaskListSheet(
               context,
               s.catalog,
               _liveTasks,
               title: 'Reprogramadas',
               emptyMessage: 'No hay tareas reprogramadas en este periodo.',
               accent: colors.statusRescheduled,
-              statusId: s.catalog.rescheduledStatusId,
+              where: (t) => t.statusId == s.catalog.rescheduledStatusId,
             ),
           ),
         ),
@@ -560,32 +623,7 @@ class _DashboardPageState extends State<DashboardPage> {
         const SizedBox(height: _kCardGap),
         _DashboardCard(
           showShadow: true,
-          child: _ExecutiveSummaryList(
-            items: [
-              _ExecutiveItem(
-                label: 'Mejor colaborador',
-                value: s.topUser?.name ?? 'Sin datos',
-              ),
-              _ExecutiveItem(
-                label: 'Mejor equipo',
-                value: s.bestGroup == null
-                    ? 'Sin datos'
-                    : '${s.catalog.groupName(s.bestGroup!.groupId)} · ${s.bestGroup!.percent}%',
-              ),
-              _ExecutiveItem(
-                label: 'Cliente destacado',
-                value: s.topClient == null
-                    ? 'Sin datos'
-                    : '${s.topClient!.name} · ${s.topClient!.count}',
-              ),
-              _ExecutiveItem(
-                label: 'Mejor racha',
-                value: s.streakUser == null
-                    ? 'Sin datos'
-                    : '${s.streakUser!.name} · ${s.streakUser!.streakDays} días',
-              ),
-            ],
-          ),
+          child: _ExecutiveSummaryList(items: _executiveItems(context, s)),
         ),
         const SizedBox(height: _kSectionGap),
         _SectionTitle('Distribución de estados  ·  Cumplimiento por equipo'),
@@ -619,6 +657,7 @@ class _DashboardPageState extends State<DashboardPage> {
   // Full grid redesign: header + 4 content rows visible at 1920×1080.
   Widget _buildDesktopBody(BuildContext context, _Snapshot s, AppUser user) {
     final colors = context.colors;
+    final ejecutivos = _executiveItems(context, s);
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.pagePaddingDesktop,
@@ -655,14 +694,14 @@ class _DashboardPageState extends State<DashboardPage> {
                             title: 'Total tareas',
                             count: s.kpis.total,
                             linkLabel: 'Ver tareas →',
-                            onTap: () => _showTasksByStatusSheet(
+                            onTap: () => _showTaskListSheet(
                               context,
                               s.catalog,
                               _liveTasks,
                               title: 'Todas las tareas',
                               emptyMessage: 'No hay tareas en este periodo.',
                               accent: colors.primary,
-                              statusId: null,
+                              where: (_) => true,
                             ),
                           ),
                         ),
@@ -674,7 +713,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             count: s.kpis.completed,
                             accentColor: colors.success,
                             linkLabel: 'Ver completadas →',
-                            onTap: () => _showTasksByStatusSheet(
+                            onTap: () => _showTaskListSheet(
                               context,
                               s.catalog,
                               _liveTasks,
@@ -682,7 +721,8 @@ class _DashboardPageState extends State<DashboardPage> {
                               emptyMessage:
                                   'Todavía no hay tareas completadas en este periodo.',
                               accent: colors.success,
-                              statusId: s.catalog.completedStatusId,
+                              where: (t) =>
+                                  t.statusId == s.catalog.completedStatusId,
                             ),
                           ),
                         ),
@@ -694,14 +734,15 @@ class _DashboardPageState extends State<DashboardPage> {
                             count: s.kpis.pending,
                             accentColor: colors.statusPending,
                             linkLabel: 'Ver pendientes →',
-                            onTap: () => _showTasksByStatusSheet(
+                            onTap: () => _showTaskListSheet(
                               context,
                               s.catalog,
                               _liveTasks,
                               title: 'Pendientes',
                               emptyMessage: 'No queda ninguna tarea pendiente.',
                               accent: colors.statusPending,
-                              statusId: s.catalog.pendingStatusId,
+                              where: (t) =>
+                                  t.statusId == s.catalog.pendingStatusId,
                             ),
                           ),
                         ),
@@ -807,8 +848,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                 padding: AppSpacing.sm,
                                 child: _ExecutiveHorizontalItem(
                                   icon: LucideIcons.trophy,
-                                  label: 'Mejor colaborador',
-                                  value: s.topUser?.name ?? 'Sin datos todavía',
+                                  item: ejecutivos[0],
                                 ),
                               ),
                             ),
@@ -819,10 +859,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                 padding: AppSpacing.sm,
                                 child: _ExecutiveHorizontalItem(
                                   icon: LucideIcons.users,
-                                  label: 'Mejor equipo',
-                                  value: s.bestGroup == null
-                                      ? 'Sin datos todavía'
-                                      : '${s.catalog.groupName(s.bestGroup!.groupId)} · ${s.bestGroup!.percent}%',
+                                  item: ejecutivos[1],
                                 ),
                               ),
                             ),
@@ -840,10 +877,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                 padding: AppSpacing.sm,
                                 child: _ExecutiveHorizontalItem(
                                   icon: LucideIcons.star,
-                                  label: 'Cliente destacado',
-                                  value: s.topClient == null
-                                      ? 'Sin datos todavía'
-                                      : '${s.topClient!.name} · ${s.topClient!.count}',
+                                  item: ejecutivos[2],
                                 ),
                               ),
                             ),
@@ -854,10 +888,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                 padding: AppSpacing.sm,
                                 child: _ExecutiveHorizontalItem(
                                   icon: LucideIcons.flame,
-                                  label: 'Mejor racha',
-                                  value: s.streakUser == null
-                                      ? 'Sin datos todavía'
-                                      : '${s.streakUser!.name} · ${s.streakUser!.streakDays} días',
+                                  item: ejecutivos[3],
                                 ),
                               ),
                             ),
@@ -1403,20 +1434,19 @@ class _AttentionCompactCardState extends State<_AttentionCompactCard> {
 /// Desktop Row 4 executive summary item — icon badge + label + value.
 /// Displays up to 2 lines so the "no data" message always fits.
 class _ExecutiveHorizontalItem extends StatelessWidget {
-  const _ExecutiveHorizontalItem({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
+  const _ExecutiveHorizontalItem({required this.icon, required this.item});
 
   final IconData icon;
-  final String label;
-  final String value;
+
+  /// Same four facts the stacked layouts show — see
+  /// `_DashboardPageState._executiveItems`. Only the icon is the desktop
+  /// grid's own.
+  final _ExecutiveItem item;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return Row(
+    final content = Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Container(
@@ -1435,7 +1465,7 @@ class _ExecutiveHorizontalItem extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                label,
+                item.label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -1447,7 +1477,7 @@ class _ExecutiveHorizontalItem extends StatelessWidget {
               ),
               const SizedBox(height: 3),
               Text(
-                value,
+                item.value,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -1459,7 +1489,20 @@ class _ExecutiveHorizontalItem extends StatelessWidget {
             ],
           ),
         ),
+        if (item.onTap != null)
+          Icon(LucideIcons.chevronRight, size: 16, color: colors.textSecondary),
       ],
+    );
+
+    if (item.onTap == null) return content;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: item.onTap,
+        behavior: HitTestBehavior.opaque,
+        child: content,
+      ),
     );
   }
 }
@@ -1740,10 +1783,18 @@ class _AttentionRow extends StatelessWidget {
 }
 
 class _ExecutiveItem {
-  const _ExecutiveItem({required this.label, required this.value});
+  const _ExecutiveItem({required this.label, required this.value, this.onTap});
 
   final String label;
   final String value;
+
+  /// Opens the tasks behind this headline, when there are any to open.
+  ///
+  /// Null on "Mejor racha" on purpose: a streak counts consecutive days of
+  /// signing in, not tasks, so there is no list it could honestly lead to.
+  /// Making it clickable to match its neighbours would be inventing a meaning
+  /// the number does not have.
+  final VoidCallback? onTap;
 }
 
 class _ExecutiveSummaryList extends StatelessWidget {
@@ -1773,7 +1824,7 @@ class _ExecutiveRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return Column(
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1788,17 +1839,42 @@ class _ExecutiveRow extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Text(
-          item.value,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: colors.textPrimary,
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-          ),
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                item.value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (item.onTap != null) ...[
+              const SizedBox(width: 4),
+              Icon(
+                LucideIcons.chevronRight,
+                size: 15,
+                color: colors.textSecondary,
+              ),
+            ],
+          ],
         ),
       ],
+    );
+
+    if (item.onTap == null) return content;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: item.onTap,
+        behavior: HitTestBehavior.opaque,
+        child: content,
+      ),
     );
   }
 }
@@ -1836,6 +1912,11 @@ class _StatusDistributionChart extends StatelessWidget {
                     PieChartSectionData(
                       value: e.value.toDouble(),
                       title: '${e.value}',
+                      // A slice worth a couple of percent is thinner than its
+                      // own number, so the label spilled over its edges. The
+                      // legend underneath already spells out every count, so
+                      // hiding it here loses nothing.
+                      showTitle: e.value / total >= 0.05,
                       color: taskStatusColor(colors, e.key),
                       radius: 56,
                       titleStyle: TextStyle(
@@ -2440,7 +2521,7 @@ void _showUpcomingTasksSheet(
   );
 }
 
-/// The list behind a KPI card.
+/// A filtered slice of the period, opened from a card that summarises it.
 ///
 /// Those cards carried a "Ver tareas →" label with nothing behind it, on a
 /// card that lit up on hover — it looked clickable, promised a destination
@@ -2448,14 +2529,14 @@ void _showUpcomingTasksSheet(
 ///
 /// Reads [_LiveTasks.historical], the exact slice the card counted, so the
 /// number on the card and the length of this list cannot disagree.
-void _showTasksByStatusSheet(
+void _showTaskListSheet(
   BuildContext context,
   CatalogProvider catalog,
   ValueListenable<_LiveTasks> liveTasks, {
   required String title,
   required String emptyMessage,
   required Color accent,
-  String? statusId,
+  required bool Function(TaskModel) where,
 }) {
   showResponsiveSheet(
     context,
@@ -2464,9 +2545,7 @@ void _showTasksByStatusSheet(
     contentBuilder: (_) => ValueListenableBuilder<_LiveTasks>(
       valueListenable: liveTasks,
       builder: (_, live, _) {
-        final tasks = statusId == null
-            ? live.historical
-            : live.historical.where((t) => t.statusId == statusId).toList();
+        final tasks = live.historical.where(where).toList();
         return _DetailSheet(
           title: '$title (${tasks.length})',
           itemCount: tasks.length,
