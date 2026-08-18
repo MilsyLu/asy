@@ -16,6 +16,7 @@ import '../../services/task_repository.dart';
 import '../../widgets/kpi_card.dart';
 import '../../widgets/loading_indicator.dart';
 import 'report_excel.dart';
+import 'report_pdf.dart';
 import 'report_exports.dart';
 import 'widgets/groups_report_tab.dart';
 import 'widgets/performance_report_tab.dart';
@@ -249,6 +250,29 @@ class _ReportsPageState extends State<ReportsPage>
                             ),
                       icon: const Icon(LucideIcons.fileSpreadsheet, size: 16),
                       label: const Text('Excel'),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: ordenadas.isEmpty
+                          ? null
+                          : () => _runExport(
+                              'PDF',
+                              () => exportReportPdf(
+                                tasks: ordenadas,
+                                catalog: catalog,
+                                start: _range.start,
+                                end: _range.end,
+                                generatedBy: currentUser.name,
+                                activeFilters: _filters.describe(
+                                  groupName: catalog.groupName,
+                                  userName: catalog.userName,
+                                  statusName: catalog.statusName,
+                                  taskTypeName: catalog.taskTypeName,
+                                ),
+                              ),
+                            ),
+                      icon: const Icon(LucideIcons.fileText, size: 16),
+                      label: const Text('PDF'),
                     ),
                     const SizedBox(width: 8),
                     OutlinedButton.icon(

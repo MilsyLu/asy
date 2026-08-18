@@ -3,6 +3,7 @@ import 'package:excel/excel.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/excel_export.dart';
+import '../../core/utils/file_delivery.dart';
 import '../../core/utils/excel_tables.dart';
 import '../../core/utils/report_metrics.dart';
 import '../../models/app_user.dart';
@@ -58,7 +59,8 @@ Future<void> exportReportExcel({
   // Resumen is left as plain cells on purpose: it is a cover page of
   // label/value pairs, not a list, and a filter dropdown over "Periodo" and
   // "Generado por" would be noise.
-  return shareExcelBytes(
+  return deliverFile(
+    mimeType: FileMime.xlsx,
     fileName:
         'reporte_checu_${AppDateUtils.formatDateKey(start)}_a_${AppDateUtils.formatDateKey(end)}.xlsx',
     bytes: addExcelTables(bytes, tablas),

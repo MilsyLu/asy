@@ -1,15 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
 
 // Aliased: csv 8 exports a top-level instance also called `csv`, which the
 // local variable below would otherwise shadow.
 import 'package:csv/csv.dart' as csv_lib;
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
-import '../../services/download_bytes_web_stub.dart'
-    if (dart.library.js_interop) '../../services/download_bytes_web.dart';
+import 'file_delivery.dart';
 
 /// Converts [rows] to CSV and delivers it to the user: a plain browser
 /// download on web, the native share sheet on mobile.
@@ -39,15 +35,5 @@ Future<void> exportAndShareCsv({
   final csv = csv_lib.excel.encode(rows);
   final bytes = Uint8List.fromList(const Utf8Encoder().convert(csv));
 
-  if (kIsWeb) {
-    downloadBytes(bytes, fileName, 'text/csv;charset=utf-8');
-    return;
-  }
-
-  final dir = await getTemporaryDirectory();
-  final file = File('${dir.path}/$fileName');
-  await file.writeAsBytes(bytes);
-  await SharePlus.instance.share(
-    ShareParams(files: [XFile(file.path)], text: fileName),
-  );
+  return deliverFile(fileName: fileName, bytes: bytes, mimeType: FileMime.csv);
 }
