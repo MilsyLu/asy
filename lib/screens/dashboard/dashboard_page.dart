@@ -1883,6 +1883,15 @@ void _showUpcomingTasksSheet(
   );
 }
 
+/// Reads the idle time as a phrase instead of a bare number, so the row says
+/// something a person can act on at a glance.
+String _textoInactividad(int? dias) {
+  if (dias == null) return 'nunca completó una tarea';
+  if (dias == 0) return 'hoy completó una';
+  if (dias == 1) return 'hace 1 día';
+  return 'hace $dias días';
+}
+
 void _showInactiveUsersSheet(
   BuildContext context,
   CatalogProvider catalog,
@@ -1903,7 +1912,7 @@ void _showInactiveUsersSheet(
           color: context.colors.statusRescheduled,
           lines: [
             'Equipo: ${catalog.groupNames(stat.user.groupIds)}',
-            'Completadas (7 días): ${stat.completedLast7Days}',
+            'Sin completar tareas: ${_textoInactividad(stat.daysSinceLastCompleted)}',
             'Último acceso: ${AppDateUtils.formatDateTimeOrDash(stat.user.lastLogin)}',
           ],
         );

@@ -174,4 +174,48 @@ void main() {
       expect(r.map((s) => s.user.name).toList(), ['luis']);
     });
   });
+
+  group('días sin completar (reemplaza la etiqueta que siempre decía 0)', () {
+    test('cuenta los días desde la última completada', () {
+      final r = computeInactiveUsers(
+        [tarea(usuario: 'ana', estado: 'completada', completadaEn: ahora.subtract(const Duration(days: 20)))],
+        [persona('ana')],
+        _Catalogo(),
+        ahora,
+      );
+      expect(r.single.daysSinceLastCompleted, 20);
+    });
+
+    test('toma la MÁS reciente cuando hay varias', () {
+      final r = computeInactiveUsers(
+        [
+          tarea(id: 'a', usuario: 'ana', estado: 'completada', completadaEn: ahora.subtract(const Duration(days: 40))),
+          tarea(id: 'b', usuario: 'ana', estado: 'completada', completadaEn: ahora.subtract(const Duration(days: 12))),
+        ],
+        [persona('ana')],
+        _Catalogo(),
+        ahora,
+      );
+      expect(r.single.daysSinceLastCompleted, 12);
+    });
+
+    test('quien nunca completó nada queda en null, no en 0', () {
+      // La diferencia importa: 0 diría "completó hoy", que es lo contrario.
+      final r = computeInactiveUsers([], [persona('ana')], _Catalogo(), ahora);
+      expect(r.single.daysSinceLastCompleted, isNull);
+    });
+
+    test('ordena de peor a mejor, con los que nunca completaron primero', () {
+      final r = computeInactiveUsers(
+        [
+          tarea(id: 'a', usuario: 'ana', estado: 'completada', completadaEn: ahora.subtract(const Duration(days: 10))),
+          tarea(id: 'b', usuario: 'beto', estado: 'completada', completadaEn: ahora.subtract(const Duration(days: 45))),
+        ],
+        [persona('ana'), persona('beto'), persona('nunca')],
+        _Catalogo(),
+        ahora,
+      );
+      expect(r.map((s) => s.user.name).toList(), ['nunca', 'beto', 'ana']);
+    });
+  });
 }

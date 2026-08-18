@@ -201,10 +201,17 @@ List<TaskModel> computeUpcomingTasks(List<TaskModel> tasks, DateTime now) {
 /// An [AppUser] paired with how many tasks they completed in the trailing
 /// 7-day window (Sprint 6.3, "👤 Sin actividad").
 class InactiveUserStat {
-  const InactiveUserStat({required this.user, required this.completedLast7Days});
+  const InactiveUserStat({required this.user, required this.daysSinceLastCompleted});
 
   final AppUser user;
-  final int completedLast7Days;
+
+  /// Whole days since this user last completed anything, or null when they
+  /// never have. Replaces an earlier `completedLast7Days`, which could only
+  /// ever be 0 — the list is *defined* as users with zero completions in the
+  /// window, so showing that count told the reader nothing. How long someone
+  /// has been idle does vary, and it is what separates "was off two days
+  /// extra" from "has not worked in two months".
+  final int? daysSinceLastCompleted;
 }
 
 /// Users with zero completed tasks in the 7 days before [now] (Sprint 6.3,
@@ -221,15 +228,41 @@ List<InactiveUserStat> computeInactiveUsers(
 ) {
   final completedId = catalog.completedStatusId;
   final since = now.subtract(const Duration(days: 7));
-  final completedCounts = <String, int>{};
+
+  // Two passes over the same loop: who worked inside the window (which
+  // decides membership), and when each person last finished anything at all
+  // (which is what the list actually reports).
+  final activos = <String>{};
+  final ultimaCompletada = <String, DateTime>{};
   for (final t in tasks) {
     if (t.statusId != completedId) continue;
     final completedAt = t.completedAt ?? t.scheduledDateTime;
-    if (completedAt.isBefore(since)) continue;
-    completedCounts[t.assignedUserId] = (completedCounts[t.assignedUserId] ?? 0) + 1;
+    if (!completedAt.isBefore(since)) activos.add(t.assignedUserId);
+
+    final previa = ultimaCompletada[t.assignedUserId];
+    if (previa == null || completedAt.isAfter(previa)) {
+      ultimaCompletada[t.assignedUserId] = completedAt;
+    }
   }
-  return allUsers
-      .where((u) => (completedCounts[u.id] ?? 0) == 0)
-      .map((u) => InactiveUserStat(user: u, completedLast7Days: 0))
-      .toList();
+
+  final inactivos = allUsers.where((u) => !activos.contains(u.id)).map((u) {
+    final ultima = ultimaCompletada[u.id];
+    return InactiveUserStat(
+      user: u,
+      daysSinceLastCompleted: ultima == null ? null : now.difference(ultima).inDays,
+    );
+  }).toList();
+
+  // Peor primero: quien nunca completó nada encabeza, después de mayor a
+  // menor inactividad. Una lista para priorizar no debería empezar por el
+  // caso más leve.
+  inactivos.sort((a, b) {
+    final da = a.daysSinceLastCompleted;
+    final db = b.daysSinceLastCompleted;
+    if (da == null && db == null) return 0;
+    if (da == null) return -1;
+    if (db == null) return 1;
+    return db.compareTo(da);
+  });
+  return inactivos;
 }
