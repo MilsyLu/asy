@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../core/constants/app_constants.dart';
+import '../core/utils/report_metrics.dart' show TaskCatalog;
 import '../models/app_user.dart';
 import '../models/available_hour_model.dart';
 import '../models/client_model.dart';
@@ -15,7 +16,7 @@ import '../services/user_repository.dart';
 /// Holds the small, frequently-referenced "catalog" collections
 /// (groups, taskTypes, statuses, availableHours, users, clients) so any
 /// screen can resolve IDs to human-readable names without re-subscribing.
-class CatalogProvider extends ChangeNotifier {
+class CatalogProvider extends ChangeNotifier implements TaskCatalog {
   CatalogProvider({
     required String empresaId,
     CatalogRepository? repository,
@@ -113,6 +114,7 @@ class CatalogProvider extends ChangeNotifier {
     return null;
   }
 
+  @override
   String statusName(String? id) => statusById(id)?.name ?? '-';
 
   /// Finds the status document whose name matches one of the well-known
@@ -131,6 +133,7 @@ class CatalogProvider extends ChangeNotifier {
     return null;
   }
 
+  @override
   AppUser? userById(String? id) {
     if (id == null) return null;
     for (final u in users) {
@@ -170,12 +173,15 @@ class CatalogProvider extends ChangeNotifier {
 
   /// Returns the id of the "Pendiente" status, falling back to the
   /// first status by `order` if no match is found.
+  @override
   String? get pendingStatusId =>
       statusByName(AppStatusNames.pendiente)?.id ??
       (statuses.isNotEmpty ? statuses.first.id : null);
 
+  @override
   String? get completedStatusId => statusByName(AppStatusNames.completada)?.id;
 
+  @override
   String? get rescheduledStatusId =>
       statusByName(AppStatusNames.reprogramada)?.id;
 

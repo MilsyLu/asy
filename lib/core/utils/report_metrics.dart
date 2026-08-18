@@ -1,6 +1,28 @@
 import '../../models/app_user.dart';
 import '../../models/task_model.dart';
-import '../../providers/catalog_provider.dart';
+
+/// The slice of the catalog these calculations actually need.
+///
+/// `CatalogProvider` satisfies this already — it declares `implements
+/// TaskCatalog` and every member below was public on it before this existed,
+/// so no screen changed. The point is the other direction: `CatalogProvider`
+/// opens Firestore streams in its constructor, which made every metric here
+/// impossible to unit-test even though all of them are pure functions over a
+/// task list. Depending on five members instead of the whole provider lets a
+/// test supply a plain object.
+abstract class TaskCatalog {
+  /// Status ids, resolved by name — null when the empresa has not created
+  /// that status yet, which is why every caller treats them as optional.
+  String? get completedStatusId;
+  String? get pendingStatusId;
+  String? get rescheduledStatusId;
+
+  /// Display name for a status id, or '-' when unknown.
+  String statusName(String? id);
+
+  /// The user behind an id, or null if they were deleted.
+  AppUser? userById(String? id);
+}
 
 /// Aggregate task KPIs (Total/Completadas/Pendientes/Reprogramadas/
 /// Cumplimiento %) for an already-loaded, visibility-filtered task list.
@@ -24,7 +46,7 @@ class TaskKpis {
   int get compliancePercent => total == 0 ? 0 : (completed * 100 / total).round();
 }
 
-TaskKpis computeTaskKpis(List<TaskModel> tasks, CatalogProvider catalog) {
+TaskKpis computeTaskKpis(List<TaskModel> tasks, TaskCatalog catalog) {
   final completedId = catalog.completedStatusId;
   final pendingId = catalog.pendingStatusId;
   final rescheduledId = catalog.rescheduledStatusId;
@@ -38,7 +60,7 @@ TaskKpis computeTaskKpis(List<TaskModel> tasks, CatalogProvider catalog) {
 
 /// The user with the most completed tasks in [tasks] (Sprint 6.2 Part 5,
 /// "🏆 Usuario con más tareas completadas").
-AppUser? topUserByCompleted(List<TaskModel> tasks, CatalogProvider catalog) {
+AppUser? topUserByCompleted(List<TaskModel> tasks, TaskCatalog catalog) {
   final completedId = catalog.completedStatusId;
   final counts = <String, int>{};
   for (final t in tasks) {
@@ -68,7 +90,7 @@ class GroupCompliance {
   int get percent => assigned == 0 ? 0 : (completed * 100 / assigned).round();
 }
 
-List<GroupCompliance> computeGroupCompliance(List<TaskModel> tasks, CatalogProvider catalog) {
+List<GroupCompliance> computeGroupCompliance(List<TaskModel> tasks, TaskCatalog catalog) {
   final completedId = catalog.completedStatusId;
   final assigned = <String?, int>{};
   final completed = <String?, int>{};
@@ -115,7 +137,7 @@ AppUser? bestActiveStreak(List<AppUser> users) {
 
 /// Task counts per status name (Sprint 6.2 Part 6, "Distribución de
 /// estados").
-Map<String, int> computeStatusDistribution(List<TaskModel> tasks, CatalogProvider catalog) {
+Map<String, int> computeStatusDistribution(List<TaskModel> tasks, TaskCatalog catalog) {
   final counts = <String, int>{};
   for (final t in tasks) {
     final name = catalog.statusName(t.statusId);
@@ -153,7 +175,7 @@ List<MapEntry<String, int>> computeDailyTrend(
 /// so the most urgent items appear at the top of the detail sheet.
 List<TaskModel> computeOverdueTasks(
   List<TaskModel> tasks,
-  CatalogProvider catalog,
+  TaskCatalog catalog,
   DateTime now,
 ) {
   final completedId = catalog.completedStatusId;
@@ -194,7 +216,7 @@ class InactiveUserStat {
 List<InactiveUserStat> computeInactiveUsers(
   List<TaskModel> tasks,
   List<AppUser> allUsers,
-  CatalogProvider catalog,
+  TaskCatalog catalog,
   DateTime now,
 ) {
   final completedId = catalog.completedStatusId;
