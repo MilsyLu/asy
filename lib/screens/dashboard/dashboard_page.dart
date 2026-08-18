@@ -2051,6 +2051,10 @@ class _GroupComplianceChart extends StatelessWidget {
   }
 }
 
+/// One decimal, with the comma Spanish uses — `toStringAsFixed` always
+/// writes a point.
+String _conComa(double value) => value.toStringAsFixed(1).replaceAll('.', ',');
+
 /// Part 6.3: daily task count line chart for "Tendencia de tareas".
 class _TrendChart extends StatelessWidget {
   const _TrendChart({required this.entries});
@@ -2081,9 +2085,9 @@ class _TrendChart extends StatelessWidget {
       for (var i = 0; i < entries.length; i++)
         FlSpot(i.toDouble(), entries[i].value.toDouble()),
     ];
-    final maxCount = entries
-        .map((e) => e.value)
-        .fold<int>(0, (m, v) => v > m ? v : m);
+    final maxEntry = entries.reduce((a, b) => b.value > a.value ? b : a);
+    final maxCount = maxEntry.value;
+    final total = entries.fold<int>(0, (sum, e) => sum + e.value);
 
     final yInterval = _niceYInterval(maxCount);
     final topTick = maxCount == 0
@@ -2099,6 +2103,21 @@ class _TrendChart extends StatelessWidget {
           'al ${AppDateUtils.formatShortDate(AppDateUtils.parseDateKey(entries.last.key))}',
           style: TextStyle(color: colors.textSecondary, fontSize: 12),
         ),
+        const SizedBox(height: 4),
+        // The two numbers somebody actually takes away from a trend line, in
+        // words, so they do not have to be read off the curve by eye.
+        Text(
+          total == 0
+              ? 'Sin tareas en el periodo.'
+              : 'Promedio ${_conComa(total / entries.length)} tareas/día  ·  '
+                    'Máximo $maxCount el '
+                    '${AppDateUtils.formatDayMonth(AppDateUtils.parseDateKey(maxEntry.key))}',
+          style: TextStyle(
+            color: colors.textPrimary,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         const SizedBox(height: 12),
         SizedBox(
           height: 150,
@@ -2106,8 +2125,37 @@ class _TrendChart extends StatelessWidget {
             LineChartData(
               minY: 0,
               maxY: maxY,
-              lineTouchData: const LineTouchData(enabled: false),
-              gridData: const FlGridData(show: true, drawVerticalLine: false),
+              // Was switched off, which left no way at all to learn what a
+              // day was worth: 30 days across a few hundred pixels, no dots,
+              // no labels per point. The shape was all you got.
+              lineTouchData: LineTouchData(
+                touchTooltipData: LineTouchTooltipData(
+                  getTooltipColor: (_) => colors.textPrimary,
+                  getTooltipItems: (touched) => [
+                    for (final spot in touched)
+                      LineTooltipItem(
+                        '${AppDateUtils.formatDayMonth(AppDateUtils.parseDateKey(entries[spot.x.round()].key))}\n'
+                        '${spot.y.toInt()} '
+                        '${spot.y.toInt() == 1 ? 'tarea' : 'tareas'}',
+                        TextStyle(
+                          color: colors.surface,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              // Pinned to the same interval as the axis labels. On its own
+              // fl_chart picked its own spacing, so the only visible reference
+              // line landed on 5 while the axis read 0, 2, 4, 6 — a line
+              // marking a number that appeared nowhere, easily mistaken for a
+              // target.
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                horizontalInterval: yInterval,
+              ),
               borderData: FlBorderData(show: false),
               titlesData: FlTitlesData(
                 topTitles: const AxisTitles(
@@ -2171,10 +2219,25 @@ class _TrendChart extends StatelessWidget {
               lineBarsData: [
                 LineChartBarData(
                   spots: spots,
-                  isCurved: true,
+                  // Straight segments, not a spline. These are whole tasks
+                  // counted per day: a curve rounds 0-3-1-0 into hills that
+                  // pass through values no day ever had, and overshoots the
+                  // peaks it is supposed to report.
+                  isCurved: false,
                   color: colors.primary,
                   barWidth: 3,
-                  dotData: const FlDotData(show: false),
+                  dotData: FlDotData(
+                    // One dot per day is the only thing marking where a day
+                    // begins; past ~45 days they merge into a rope and the
+                    // line reads better bare.
+                    show: entries.length <= 45,
+                    getDotPainter: (spot, percent, bar, index) =>
+                        FlDotCirclePainter(
+                          radius: 2.5,
+                          color: colors.primary,
+                          strokeWidth: 0,
+                        ),
+                  ),
                   belowBarData: BarAreaData(
                     show: true,
                     color: colors.primary.withValues(alpha: 0.15),
