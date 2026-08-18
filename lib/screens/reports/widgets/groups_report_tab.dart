@@ -45,7 +45,9 @@ class GroupsReportTab extends StatelessWidget {
     }
 
     final entries = stats.entries.toList()
-      ..sort((a, b) => catalog.groupName(a.key).compareTo(catalog.groupName(b.key)));
+      ..sort(
+        (a, b) => catalog.groupName(a.key).compareTo(catalog.groupName(b.key)),
+      );
 
     _Highlight? mostAssigned;
     _Highlight? mostCompleted;
@@ -55,7 +57,9 @@ class GroupsReportTab extends StatelessWidget {
     for (final e in entries) {
       final name = catalog.groupName(e.key);
       final s = e.value;
-      final performance = s.assigned == 0 ? 0 : (s.completed * 100 ~/ s.assigned);
+      final performance = s.assigned == 0
+          ? 0
+          : (s.completed * 100 ~/ s.assigned);
 
       if (mostAssigned == null || s.assigned > mostAssigned.value) {
         mostAssigned = _Highlight(name, s.assigned);
@@ -75,8 +79,12 @@ class GroupsReportTab extends StatelessWidget {
     // already-computed `entries` — no new query, no logic change to `stats`.
     final ranked = entries.toList()
       ..sort((a, b) {
-        final perfA = a.value.assigned == 0 ? 0 : (a.value.completed * 100 ~/ a.value.assigned);
-        final perfB = b.value.assigned == 0 ? 0 : (b.value.completed * 100 ~/ b.value.assigned);
+        final perfA = a.value.assigned == 0
+            ? 0
+            : (a.value.completed * 100 ~/ a.value.assigned);
+        final perfB = b.value.assigned == 0
+            ? 0
+            : (b.value.completed * 100 ~/ b.value.assigned);
         return perfB.compareTo(perfA);
       });
 
@@ -122,11 +130,19 @@ class GroupsReportTab extends StatelessWidget {
         const SizedBox(height: 20),
         Text(
           'Ranking de equipos · Cumplimiento',
-          style: TextStyle(color: colors.textPrimary, fontSize: 14, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            color: colors.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         const SizedBox(height: 10),
         for (var i = 0; i < ranked.length; i++)
-          _GroupRankRow(position: i + 1, name: catalog.groupName(ranked[i].key), stats: ranked[i].value),
+          _GroupRankRow(
+            position: i + 1,
+            name: catalog.groupName(ranked[i].key),
+            stats: ranked[i].value,
+          ),
         const SizedBox(height: 20),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -141,16 +157,20 @@ class GroupsReportTab extends StatelessWidget {
             ],
             rows: [
               for (final e in entries)
-                DataRow(cells: [
-                  DataCell(Text(catalog.groupName(e.key))),
-                  DataCell(Text('${e.value.assigned}')),
-                  DataCell(Text('${e.value.completed}')),
-                  DataCell(Text('${e.value.pending}')),
-                  DataCell(Text('${e.value.rescheduled}')),
-                  DataCell(Text(
-                    '${e.value.assigned == 0 ? 0 : e.value.completed * 100 ~/ e.value.assigned}%',
-                  )),
-                ]),
+                DataRow(
+                  cells: [
+                    DataCell(Text(catalog.groupName(e.key))),
+                    DataCell(Text('${e.value.assigned}')),
+                    DataCell(Text('${e.value.completed}')),
+                    DataCell(Text('${e.value.pending}')),
+                    DataCell(Text('${e.value.rescheduled}')),
+                    DataCell(
+                      Text(
+                        '${e.value.assigned == 0 ? 0 : e.value.completed * 100 ~/ e.value.assigned}%',
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         ),
@@ -160,7 +180,11 @@ class GroupsReportTab extends StatelessWidget {
 }
 
 class _GroupRankRow extends StatelessWidget {
-  const _GroupRankRow({required this.position, required this.name, required this.stats});
+  const _GroupRankRow({
+    required this.position,
+    required this.name,
+    required this.stats,
+  });
 
   final int position;
   final String name;
@@ -169,7 +193,9 @@ class _GroupRankRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final performance = stats.assigned == 0 ? 0 : (stats.completed * 100 ~/ stats.assigned);
+    final performance = stats.assigned == 0
+        ? 0
+        : (stats.completed * 100 ~/ stats.assigned);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -185,20 +211,31 @@ class _GroupRankRow extends StatelessWidget {
             backgroundColor: colors.background,
             child: Text(
               '$position',
-              style: TextStyle(color: colors.primary, fontWeight: FontWeight.bold, fontSize: 12),
+              style: TextStyle(
+                color: colors.primary,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               name,
-              style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
           Text(
             '$performance% · ${stats.rescheduled} reprog.',
-            style: TextStyle(color: colors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: colors.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -274,7 +311,11 @@ class _HighlightCard extends StatelessWidget {
           ),
           Text(
             '${highlight.value}$suffix',
-            style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: color,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),

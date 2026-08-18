@@ -30,7 +30,9 @@ class StatusReportTab extends StatelessWidget {
       );
     }
 
-    final installationTypeId = catalog.taskTypeByName(AppTaskTypeNames.instalacion)?.id;
+    final installationTypeId = catalog
+        .taskTypeByName(AppTaskTypeNames.instalacion)
+        ?.id;
     final pendingId = catalog.pendingStatusId;
     final completedId = catalog.completedStatusId;
     final rescheduledId = catalog.rescheduledStatusId;
@@ -44,7 +46,11 @@ class StatusReportTab extends StatelessWidget {
       _Metric(
         'Instaladas',
         tasks
-            .where((t) => t.statusId == completedId && t.taskTypeId == installationTypeId)
+            .where(
+              (t) =>
+                  t.statusId == completedId &&
+                  t.taskTypeId == installationTypeId,
+            )
             .length,
         colors.success,
       ),

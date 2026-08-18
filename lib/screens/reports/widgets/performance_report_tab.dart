@@ -41,7 +41,9 @@ class PerformanceReportTab extends StatelessWidget {
     }
 
     final entries = stats.entries.toList()
-      ..sort((a, b) => catalog.userName(a.key).compareTo(catalog.userName(b.key)));
+      ..sort(
+        (a, b) => catalog.userName(a.key).compareTo(catalog.userName(b.key)),
+      );
 
     _Highlight? mostCompleted;
     _Highlight? leastCompleted;
@@ -75,7 +77,9 @@ class PerformanceReportTab extends StatelessWidget {
       ..sort((a, b) {
         final byCompleted = b.value.completed.compareTo(a.value.completed);
         if (byCompleted != 0) return byCompleted;
-        final byRescheduled = a.value.rescheduled.compareTo(b.value.rescheduled);
+        final byRescheduled = a.value.rescheduled.compareTo(
+          b.value.rescheduled,
+        );
         if (byRescheduled != 0) return byRescheduled;
         return b.value.compliance.compareTo(a.value.compliance);
       });
@@ -157,8 +161,11 @@ class PerformanceReportTab extends StatelessWidget {
             rows: [
               for (final e in entries)
                 DataRow(
-                  onSelectChanged: (_) =>
-                      _showUserDetailSheet(context, catalog.userById(e.key), e.value),
+                  onSelectChanged: (_) => _showUserDetailSheet(
+                    context,
+                    catalog.userById(e.key),
+                    e.value,
+                  ),
                   cells: [
                     DataCell(Text(catalog.userName(e.key))),
                     DataCell(Text('${e.value.assigned}')),
@@ -178,7 +185,11 @@ class PerformanceReportTab extends StatelessWidget {
 /// stats for the selected range, reusing already-loaded data — no new
 /// fields, no extra query. Racha actual / mejor racha come straight from
 /// [AppUser.streakDays] / [AppUser.maxStreakDays].
-void _showUserDetailSheet(BuildContext context, AppUser? user, _UserStats stats) {
+void _showUserDetailSheet(
+  BuildContext context,
+  AppUser? user,
+  _UserStats stats,
+) {
   final name = user?.name ?? 'Sin asignar';
 
   showResponsiveSheet(
@@ -215,9 +226,21 @@ void _showUserDetailSheet(BuildContext context, AppUser? user, _UserStats stats)
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  _DetailStat(label: 'Asignadas', value: '${stats.assigned}', color: colors.primary),
-                  _DetailStat(label: 'Completadas', value: '${stats.completed}', color: colors.success),
-                  _DetailStat(label: 'Reprogramadas', value: '${stats.rescheduled}', color: colors.error),
+                  _DetailStat(
+                    label: 'Asignadas',
+                    value: '${stats.assigned}',
+                    color: colors.primary,
+                  ),
+                  _DetailStat(
+                    label: 'Completadas',
+                    value: '${stats.completed}',
+                    color: colors.success,
+                  ),
+                  _DetailStat(
+                    label: 'Reprogramadas',
+                    value: '${stats.rescheduled}',
+                    color: colors.error,
+                  ),
                   _DetailStat(
                     label: 'Cumplimiento',
                     value: '${stats.compliance}%',
@@ -244,7 +267,11 @@ void _showUserDetailSheet(BuildContext context, AppUser? user, _UserStats stats)
 }
 
 class _DetailStat extends StatelessWidget {
-  const _DetailStat({required this.label, required this.value, required this.color});
+  const _DetailStat({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   final String label;
   final String value;
@@ -264,9 +291,19 @@ class _DetailStat extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(color: colors.textSecondary, fontSize: 11)),
+          Text(
+            label,
+            style: TextStyle(color: colors.textSecondary, fontSize: 11),
+          ),
           const SizedBox(height: 4),
-          Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
@@ -274,7 +311,11 @@ class _DetailStat extends StatelessWidget {
 }
 
 class _TopProductiveRow extends StatelessWidget {
-  const _TopProductiveRow({required this.medal, required this.name, required this.stats});
+  const _TopProductiveRow({
+    required this.medal,
+    required this.name,
+    required this.stats,
+  });
 
   final String medal;
   final String name;
@@ -298,13 +339,20 @@ class _TopProductiveRow extends StatelessWidget {
           Expanded(
             child: Text(
               name,
-              style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
           Text(
             '${stats.completed} completadas',
-            style: TextStyle(color: colors.success, fontSize: 12, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: colors.success,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -379,7 +427,11 @@ class _HighlightCard extends StatelessWidget {
           ),
           Text(
             '${highlight.value}',
-            style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: color,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),

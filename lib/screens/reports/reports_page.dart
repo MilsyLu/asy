@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/responsive/app_spacing.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
+import '../../core/utils/report_filters.dart';
 import '../../core/utils/report_metrics.dart';
 import '../../core/utils/task_visibility.dart';
 import '../../models/task_model.dart';
@@ -13,12 +14,64 @@ import '../../providers/catalog_provider.dart';
 import '../../services/task_repository.dart';
 import '../../widgets/kpi_card.dart';
 import '../../widgets/loading_indicator.dart';
+import 'report_exports.dart';
 import 'widgets/groups_report_tab.dart';
 import 'widgets/performance_report_tab.dart';
+import 'widgets/report_filter_bar.dart';
 import 'widgets/status_report_tab.dart';
 import 'widgets/streak_report_tab.dart';
 import 'widgets/tasks_report_tab.dart';
 import 'widgets/top_clients_report_tab.dart';
+
+/// The period button, sized by whoever lays it out.
+class _DateRangeButton extends StatelessWidget {
+  const _DateRangeButton({required this.range, required this.onTap});
+
+  final DateTimeRange range;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+      child: Container(
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+          border: Border.all(color: colors.primary.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(LucideIcons.calendarRange, color: colors.primary, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${AppDateUtils.formatShortDate(range.start)} - '
+                '${AppDateUtils.formatShortDate(range.end)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            Icon(
+              LucideIcons.chevronDown,
+              color: colors.textSecondary,
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 /// Admin-only "Reportes" tab: 6 reports over a configurable date range.
 class ReportsPage extends StatefulWidget {
@@ -33,14 +86,23 @@ class _ReportsPageState extends State<ReportsPage>
   late final TabController _tabController;
   late DateTimeRange _range;
 
+  /// Applies to every tab and to the exports, not just the Tareas table: a
+  /// report is almost always about a slice — one team, the cancelled ones —
+  /// and having the summary above describe everything while the table below
+  /// describes a subset is the kind of mismatch people quote in meetings.
+  ReportFilters _filters = const ReportFilters();
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 6, vsync: this);
     final now = DateTime.now();
     _range = DateTimeRange(
-      start: DateTime(now.year, now.month, now.day)
-          .subtract(const Duration(days: 30)),
+      start: DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(const Duration(days: 30)),
       end: DateTime(now.year, now.month, now.day),
     );
   }
@@ -85,9 +147,12 @@ class _ReportsPageState extends State<ReportsPage>
       body: StreamBuilder<List<TaskModel>>(
         stream: repo.watchTasksInRange(_range.start, _range.end),
         builder: (context, snapshot) {
-          if (!loadLogged && snapshot.connectionState != ConnectionState.waiting) {
+          if (!loadLogged &&
+              snapshot.connectionState != ConnectionState.waiting) {
             loadLogged = true;
-            debugPrint('[PERF] Reportes load: ${loadStopwatch.elapsedMilliseconds}ms');
+            debugPrint(
+              '[PERF] Reportes load: ${loadStopwatch.elapsedMilliseconds}ms',
+            );
           }
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const LoadingIndicator();
@@ -99,52 +164,60 @@ class _ReportsPageState extends State<ReportsPage>
             );
           }
 
-          final tasks = (snapshot.data ?? [])
-              .where((t) => isTaskVisibleToUser(
-                    task: t,
-                    user: currentUser,
-                  ))
+          // Two lists on purpose: `visible` feeds the filter bar its options
+          // and the "de 44" denominator, `tasks` is what everything else uses.
+          final visible = (snapshot.data ?? [])
+              .where((t) => isTaskVisibleToUser(task: t, user: currentUser))
               .toList();
+          final tasks = _filters.apply(visible);
+
+          final ordenadas = sortedForReport(tasks);
 
           return Column(
             children: [
+              const SizedBox(height: 12),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: InkWell(
-                  onTap: _pickRange,
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: colors.surface,
-                      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                      border: Border.all(color: colors.primary.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(LucideIcons.calendarRange, color: colors.primary, size: 18),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            '${AppDateUtils.formatShortDate(_range.start)} - '
-                            '${AppDateUtils.formatShortDate(_range.end)}',
-                            style: TextStyle(
-                              color: colors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        Icon(LucideIcons.chevronDown, color: colors.textSecondary, size: 18),
-                      ],
-                    ),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: ReportFilterBar(
+                  filters: _filters,
+                  onChanged: (f) => setState(() => _filters = f),
+                  tasks: visible,
+                  catalog: catalog,
+                  matchCount: tasks.length,
+                  dateSelector: _DateRangeButton(
+                    range: _range,
+                    onTap: _pickRange,
                   ),
                 ),
               ),
               const SizedBox(height: 12),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: KpiSummaryRow(kpis: computeTaskKpis(tasks, catalog)),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: KpiSummaryRow(
+                        kpis: computeTaskKpis(tasks, catalog),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Moved up out of the Tareas tab: it exports the filtered
+                    // list the whole screen is showing, which has nothing to do
+                    // with which tab happens to be open.
+                    OutlinedButton.icon(
+                      onPressed: ordenadas.isEmpty
+                          ? null
+                          : () => exportTasksCsv(
+                              tasks: ordenadas,
+                              catalog: catalog,
+                              start: _range.start,
+                              end: _range.end,
+                            ),
+                      icon: const Icon(LucideIcons.download, size: 16),
+                      label: const Text('CSV'),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 8),
               TabBar(
@@ -167,7 +240,7 @@ class _ReportsPageState extends State<ReportsPage>
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    TasksReportTab(tasks: tasks, range: _range),
+                    TasksReportTab(tasks: ordenadas),
                     StatusReportTab(tasks: tasks),
                     PerformanceReportTab(tasks: tasks),
                     GroupsReportTab(tasks: tasks),

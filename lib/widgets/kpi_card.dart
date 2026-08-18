@@ -16,31 +16,69 @@ class KpiSummaryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          KpiCard(label: 'Tareas', value: '${kpis.total}', color: colors.primary),
-          const SizedBox(width: 8),
-          KpiCard(label: 'Completadas', value: '${kpis.completed}', color: colors.success),
-          const SizedBox(width: 8),
-          KpiCard(label: 'Pendientes', value: '${kpis.pending}', color: colors.statusPending),
-          const SizedBox(width: 8),
-          KpiCard(
-            label: 'Reprogramadas',
-            value: '${kpis.rescheduled}',
-            color: colors.statusRescheduled,
-          ),
-          const SizedBox(width: 8),
-          KpiCard(label: 'Cumplimiento', value: '${kpis.compliancePercent}%', color: colors.success),
-        ],
+    final cards = [
+      KpiCard(label: 'Tareas', value: '${kpis.total}', color: colors.primary),
+      KpiCard(
+        label: 'Completadas',
+        value: '${kpis.completed}',
+        color: colors.success,
       ),
+      KpiCard(
+        label: 'Pendientes',
+        value: '${kpis.pending}',
+        color: colors.statusPending,
+      ),
+      KpiCard(
+        label: 'Reprogramadas',
+        value: '${kpis.rescheduled}',
+        color: colors.statusRescheduled,
+      ),
+      KpiCard(
+        label: 'Cumplimiento',
+        value: '${kpis.compliancePercent}%',
+        color: colors.success,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Five cards need roughly this much before they stop being readable.
+        // Above it they share the row evenly instead of huddling on the left
+        // with the rest of the width unused; below it the row scrolls, which
+        // is what it always did.
+        if (constraints.maxWidth >= 620) {
+          return Row(
+            children: [
+              for (var i = 0; i < cards.length; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                Expanded(child: cards[i]),
+              ],
+            ],
+          );
+        }
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (var i = 0; i < cards.length; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                cards[i],
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }
 
 class KpiCard extends StatelessWidget {
-  const KpiCard({super.key, required this.label, required this.value, required this.color});
+  const KpiCard({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   final String label;
   final String value;
@@ -59,11 +97,18 @@ class KpiCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(color: colors.textSecondary, fontSize: 11)),
+          Text(
+            label,
+            style: TextStyle(color: colors.textSecondary, fontSize: 11),
+          ),
           const SizedBox(height: 2),
           Text(
             value,
-            style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: color,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),

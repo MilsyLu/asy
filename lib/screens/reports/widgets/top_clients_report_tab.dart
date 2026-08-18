@@ -29,7 +29,9 @@ class TopClientsReportTab extends StatelessWidget {
     }
 
     final completedId = catalog.completedStatusId;
-    final installationTypeId = catalog.taskTypeByName(AppTaskTypeNames.instalacion)?.id;
+    final installationTypeId = catalog
+        .taskTypeByName(AppTaskTypeNames.instalacion)
+        ?.id;
 
     // Built once from every task in range (not just completed installations)
     // so the Part 4 summary cards can report total/reprogramaciones too.
@@ -39,9 +41,14 @@ class TopClientsReportTab extends StatelessWidget {
       // linked to one; fall back to the old text-key for legacy/unlinked
       // tasks — see the Clientes feature's plan doc.
       final key = t.clientId ?? '${t.clientName}|${t.clientPhone}';
-      final s = fullStats.putIfAbsent(key, () => _ClientStats(t.clientName, t.clientPhone));
+      final s = fullStats.putIfAbsent(
+        key,
+        () => _ClientStats(t.clientName, t.clientPhone),
+      );
       s.totalTasks++;
-      if (t.statusId == completedId && t.taskTypeId == installationTypeId) s.installations++;
+      if (t.statusId == completedId && t.taskTypeId == installationTypeId) {
+        s.installations++;
+      }
       s.rescheduled += t.rescheduledCount;
     }
 
@@ -49,11 +56,15 @@ class TopClientsReportTab extends StatelessWidget {
     _ClientStats? mostInstallations;
     _ClientStats? mostRescheduled;
     for (final s in fullStats.values) {
-      if (mostTasks == null || s.totalTasks > mostTasks.totalTasks) mostTasks = s;
-      if (mostInstallations == null || s.installations > mostInstallations.installations) {
+      if (mostTasks == null || s.totalTasks > mostTasks.totalTasks) {
+        mostTasks = s;
+      }
+      if (mostInstallations == null ||
+          s.installations > mostInstallations.installations) {
         mostInstallations = s;
       }
-      if (mostRescheduled == null || s.rescheduled > mostRescheduled.rescheduled) {
+      if (mostRescheduled == null ||
+          s.rescheduled > mostRescheduled.rescheduled) {
         mostRescheduled = s;
       }
     }
@@ -78,7 +89,8 @@ class TopClientsReportTab extends StatelessWidget {
                 suffix: ' tareas',
                 color: colors.primary,
               ),
-            if (mostInstallations != null && mostInstallations.installations > 0)
+            if (mostInstallations != null &&
+                mostInstallations.installations > 0)
               _ClientSummaryCard(
                 icon: LucideIcons.award,
                 label: 'Más instalaciones',
@@ -101,7 +113,11 @@ class TopClientsReportTab extends StatelessWidget {
         const SizedBox(height: 20),
         Text(
           'Ranking por instalaciones',
-          style: TextStyle(color: colors.textPrimary, fontSize: 14, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            color: colors.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         const SizedBox(height: 10),
         if (top10.isEmpty)
@@ -119,24 +135,37 @@ class TopClientsReportTab extends StatelessWidget {
               decoration: BoxDecoration(
                 color: colors.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
+                border: Border.all(
+                  color: colors.primary.withValues(alpha: 0.2),
+                ),
               ),
               child: ListTile(
                 leading: CircleAvatar(
                   backgroundColor: colors.background,
                   child: Text(
                     '${i + 1}',
-                    style: TextStyle(color: colors.primary, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: colors.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-                title: Text(top10[i].clientName, style: TextStyle(color: colors.textPrimary)),
+                title: Text(
+                  top10[i].clientName,
+                  style: TextStyle(color: colors.textPrimary),
+                ),
                 subtitle: Text(
                   top10[i].clientPhone,
                   style: TextStyle(color: colors.textSecondary, fontSize: 12),
                 ),
                 trailing: Text(
-                  top10[i].installations == 1 ? '1 instalación' : '${top10[i].installations} instalaciones',
-                  style: TextStyle(color: colors.primary, fontWeight: FontWeight.w600),
+                  top10[i].installations == 1
+                      ? '1 instalación'
+                      : '${top10[i].installations} instalaciones',
+                  style: TextStyle(
+                    color: colors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -182,7 +211,10 @@ class _ClientSummaryCard extends StatelessWidget {
               Icon(icon, color: color, size: 16),
               const SizedBox(width: 6),
               Expanded(
-                child: Text(label, style: TextStyle(color: colors.textSecondary, fontSize: 11)),
+                child: Text(
+                  label,
+                  style: TextStyle(color: colors.textSecondary, fontSize: 11),
+                ),
               ),
             ],
           ),
@@ -191,11 +223,19 @@ class _ClientSummaryCard extends StatelessWidget {
             stats.clientName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: colors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: colors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           Text(
             '$value$suffix',
-            style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: color,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
