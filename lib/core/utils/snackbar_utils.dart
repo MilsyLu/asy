@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import '../theme/theme_colors.dart';
 
@@ -87,35 +88,90 @@ class SnackbarUtils {
     });
   }
 
-  /// Maps common Firebase error codes to friendly Spanish messages.
+  /// Maps an error to a friendly Spanish message.
+  ///
+  /// When the code has no wording of its own, the message still carries the
+  /// raw code. The previous version collapsed everything it did not
+  /// recognise into a flat "ocurrió un error inesperado", and since it only
+  /// knew *sign-in* codes, that was almost everything: a Storage rejection
+  /// and a Firestore missing-index both surfaced as the same sentence. That
+  /// is how a broken attachment upload stayed invisible for two weeks.
+  /// Showing the code costs the user nothing and turns "no anda" into
+  /// something answerable.
   static String firebaseErrorMessage(Object error) {
-    final message = error.toString();
-    if (message.contains('user-not-found') ||
-        message.contains('wrong-password') ||
-        message.contains('invalid-credential')) {
+    final code = _errorCode(error);
+    final friendly = _friendlyMessage(code, error.toString());
+    if (friendly != null) return friendly;
+
+    final label = _errorLabel(error, code);
+    return label == null
+        ? 'Ocurrió un error inesperado. Intenta nuevamente'
+        : 'Ocurrió un error inesperado ($label). Intenta nuevamente';
+  }
+
+  /// The bare code (`permission-denied`, `unauthorized`, …), whether the
+  /// error is a real [FirebaseException] or something that merely printed one
+  /// — plugins and `Future` wrappers often hand over a plain string.
+  static String? _errorCode(Object error) {
+    if (error is FirebaseException) return error.code;
+    final match = RegExp(r'\[([a-z_]+)/([a-z0-9\-]+)\]').firstMatch(error.toString());
+    return match?.group(2);
+  }
+
+  /// `firebase_storage/unauthorized` when the plugin is known, else the code.
+  static String? _errorLabel(Object error, String? code) {
+    if (error is FirebaseException) return '${error.plugin}/${error.code}';
+    final match = RegExp(r'\[([a-z_]+)/([a-z0-9\-]+)\]').firstMatch(error.toString());
+    if (match != null) return '${match.group(1)}/${match.group(2)}';
+    return code;
+  }
+
+  /// Wording for the failures a user can actually do something about.
+  /// [raw] keeps the old substring behaviour working for errors that never
+  /// expose a parseable code.
+  static String? _friendlyMessage(String? code, String raw) {
+    bool is_(String c) => code == c || raw.contains(c);
+
+    // ── Sesión ────────────────────────────────────────────────────────────
+    if (is_('user-not-found') || is_('wrong-password') || is_('invalid-credential')) {
       return 'Email o contraseña incorrectos';
     }
-    if (message.contains('invalid-email')) {
-      return 'El formato del email no es válido';
-    }
-    if (message.contains('user-disabled')) {
-      return 'Esta cuenta ha sido deshabilitada';
-    }
-    if (message.contains('too-many-requests')) {
-      return 'Demasiados intentos. Intenta más tarde';
-    }
-    if (message.contains('network-request-failed')) {
-      return 'Error de conexión. Revisa tu internet';
-    }
-    if (message.contains('email-already-in-use')) {
-      return 'Ese email ya está registrado';
-    }
-    if (message.contains('requires-recent-login')) {
+    if (is_('invalid-email')) return 'El formato del email no es válido';
+    if (is_('user-disabled')) return 'Esta cuenta ha sido deshabilitada';
+    if (is_('too-many-requests')) return 'Demasiados intentos. Intenta más tarde';
+    if (is_('email-already-in-use')) return 'Ese email ya está registrado';
+    if (is_('weak-password')) return 'La contraseña es demasiado débil';
+    if (is_('requires-recent-login')) {
       return 'Debes iniciar sesión nuevamente para continuar';
     }
-    if (message.contains('permission-denied')) {
+
+    // ── Conexión ──────────────────────────────────────────────────────────
+    if (is_('network-request-failed') || is_('unavailable') || is_('retry-limit-exceeded')) {
+      return 'Error de conexión. Revisa tu internet';
+    }
+    if (is_('deadline-exceeded')) return 'La operación tardó demasiado. Intenta de nuevo';
+
+    // ── Permisos (Firestore dice permission-denied, Storage unauthorized) ──
+    if (is_('permission-denied') || is_('unauthorized')) {
       return 'No tienes permisos para realizar esta acción';
     }
-    return 'Ocurrió un error inesperado. Intenta nuevamente';
+    if (is_('unauthenticated')) return 'Tu sesión expiró. Inicia sesión nuevamente';
+
+    // ── Datos ─────────────────────────────────────────────────────────────
+    if (is_('not-found') || is_('object-not-found')) {
+      return 'No se encontró lo que buscabas';
+    }
+    if (is_('already-exists')) return 'Ese registro ya existe';
+    if (is_('failed-precondition')) {
+      // En Firestore esto casi siempre es un índice compuesto que falta —
+      // invisible para el usuario y difícil de adivinar sin el texto.
+      return 'La consulta no se pudo completar. Avisa al administrador';
+    }
+
+    // ── Almacenamiento ────────────────────────────────────────────────────
+    if (is_('quota-exceeded')) return 'Se agotó el espacio de almacenamiento';
+    if (is_('canceled')) return 'La operación fue cancelada';
+
+    return null;
   }
 }
