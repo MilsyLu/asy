@@ -126,4 +126,14 @@ class AppConstants {
   /// preference: Login and the app boot/splash hand-off in [TaskFlowApp].
   static const Color brandBackground = Color(0xFFF5F1E8);
   static const Color brandPrimary = Color(0xFF1A234A);
+
+  /// Where "Crear cuenta" on the login screen goes. CheCu has no self-service
+  /// sign-up — accounts are provisioned by an administrator — so the button is
+  /// a sales enquiry, not a registration form: it opens WhatsApp with the
+  /// message below already written.
+  ///
+  /// Digits only, country code first, as wa.me requires (57 = Colombia).
+  static const String salesWhatsAppNumber = '573127802648';
+  static const String salesWhatsAppMessage =
+      'Hola, estoy interesado en adquirir CheCu.';
 }

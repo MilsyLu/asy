@@ -145,6 +145,26 @@ class SnackbarUtils {
       return 'Debes iniciar sesión nuevamente para continuar';
     }
 
+    // ── Ingreso con Google ────────────────────────────────────────────────
+    // These three are configuration faults, not user mistakes, so the wording
+    // points at the administrator instead of asking the user to try again —
+    // retrying will fail identically until somebody changes a setting.
+    if (is_('operation-not-allowed')) {
+      return 'El ingreso con Google no está habilitado. Avisa al administrador';
+    }
+    if (is_('unauthorized-domain')) {
+      return 'Este sitio no está autorizado para ingresar con Google. '
+          'Avisa al administrador';
+    }
+    if (is_('popup-blocked')) {
+      return 'El navegador bloqueó la ventana de Google. Permite las ventanas '
+          'emergentes para este sitio e intenta de nuevo';
+    }
+    if (is_('account-exists-with-different-credential')) {
+      return 'Ese correo ya tiene una cuenta en CheCu con contraseña. '
+          'Ingresa con tu correo y contraseña';
+    }
+
     // ── Conexión ──────────────────────────────────────────────────────────
     if (is_('network-request-failed') || is_('unavailable') || is_('retry-limit-exceeded')) {
       return 'Error de conexión. Revisa tu internet';

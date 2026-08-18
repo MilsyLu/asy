@@ -350,6 +350,12 @@ class AuthProvider extends ChangeNotifier {
     return _authService.signIn(email: email, password: password);
   }
 
+  /// Entry via Google, restricted to accounts an administrator provisioned —
+  /// see [AuthService.signInWithGoogle]. Throws
+  /// [AccountNotProvisionedException] when Google authenticates somebody
+  /// CheCu does not know.
+  Future<void> signInWithGoogle() => _authService.signInWithGoogle();
+
   Future<void> sendPasswordReset(String email) {
     return _authService.sendPasswordResetEmail(email);
   }

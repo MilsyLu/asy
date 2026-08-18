@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../core/constants/app_constants.dart';
 import '../core/constants/firestore_paths.dart';
@@ -45,6 +46,103 @@ class AuthService {
   }
 
   Future<void> signOut() => _auth.signOut();
+
+  /// Signs in with Google, but only for people an administrator already
+  /// provisioned — the button on the login screen is a faster way *in*, never
+  /// a way to sign *up*.
+  ///
+  /// Google itself will happily authenticate any Google account on earth, and
+  /// Firebase will happily mint an Auth user for it. Neither of them knows
+  /// anything about CheCu's tenants. Without the check below, a stranger who
+  /// found the login URL would end up with a real Auth account, no
+  /// `users/{uid}` profile, no empresa and no claim — locked out of every
+  /// document by the security rules (that part holds), but stranded on a login
+  /// screen that just bounces them back with no explanation, and leaving an
+  /// orphan account behind in the project every time.
+  ///
+  /// So the credential is treated as a *claim of identity*, and CheCu's own
+  /// records decide whether it grants entry: either a `users/{uid}` profile
+  /// (an ordinary member of an empresa) or `platformOwners/{uid}` (Michel, who
+  /// by design has no user profile at all — checking only `users` would lock
+  /// him out of his own platform console). Anything else is rejected, and an
+  /// account this popup just created is deleted again on the way out so the
+  /// attempt leaves nothing behind.
+  Future<void> signInWithGoogle() async {
+    final provider = GoogleAuthProvider()
+      // Without this, Google silently reuses whatever session the browser
+      // already has, so somebody on a shared computer can never reach the
+      // account chooser to pick a different one.
+      ..setCustomParameters({'prompt': 'select_account'});
+
+    final credential = kIsWeb
+        ? await _auth.signInWithPopup(provider)
+        : await _auth.signInWithProvider(provider);
+
+    final user = credential.user;
+    if (user == null) {
+      await _auth.signOut();
+      throw const AccountNotProvisionedException(null);
+    }
+
+    final provisioned = await _isProvisioned(user.uid);
+    if (!provisioned) {
+      // Only delete what this very popup brought into existence. An existing
+      // account that momentarily fails the check (a profile mid-deletion, say)
+      // must survive — signing out is enough to keep it out.
+      if (credential.additionalUserInfo?.isNewUser ?? false) {
+        try {
+          await user.delete();
+        } catch (_) {
+          // Best effort. The account is harmless either way: it owns no
+          // profile, so every rule in firestore.rules denies it.
+        }
+      }
+      await _auth.signOut();
+      throw AccountNotProvisionedException(user.email);
+    }
+
+    // Deliberately not called for platform owners: `refreshLoginAndStreak`
+    // writes with `SetOptions(merge: true)`, which on an account that has no
+    // `users/{uid}` document would *create* one — inventing a half-formed
+    // tenant profile for somebody who is not a tenant user at all.
+    if (await _hasUserProfile(user.uid)) {
+      await refreshLoginAndStreak(user.uid);
+    }
+  }
+
+  /// Whether [uid] is somebody CheCu knows: a tenant member or a platform
+  /// owner.
+  Future<bool> _isProvisioned(String uid) async {
+    if (await _hasUserProfile(uid)) return true;
+    try {
+      final owner = await _firestore
+          .collection(FirestoreCollections.platformOwners)
+          .doc(uid)
+          .get();
+      return owner.exists;
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') return false;
+      rethrow;
+    }
+  }
+
+  Future<bool> _hasUserProfile(String uid) async {
+    try {
+      final doc =
+          await _firestore.collection(FirestoreCollections.users).doc(uid).get();
+      return doc.exists;
+    } on FirebaseException catch (e) {
+      // `users/{userId}` only grants `get` when the document's empresaId
+      // matches the caller's own, so a *missing* document fails the rule
+      // rather than coming back empty: the rule dereferences `resource.data`,
+      // which does not exist. Firestore reports that as permission-denied,
+      // which here means precisely "no profile" — the one case this method
+      // exists to detect. Any other failure is a real error and must not be
+      // disguised as "your account is not registered".
+      if (e.code == 'permission-denied') return false;
+      rethrow;
+    }
+  }
 
   /// Creates a brand-new user with Firebase Auth + a matching Firestore
   /// `users` document. Used by the admin "Gestión de usuarios" screen.
@@ -174,4 +272,20 @@ class AuthService {
         return role;
     }
   }
+}
+
+/// Raised when Google authenticated somebody who has no place in CheCu.
+///
+/// Distinct from any `FirebaseAuthException`: nothing failed on Firebase's
+/// side — the sign-in worked perfectly and was then refused by CheCu itself,
+/// which is a different thing to tell the user.
+class AccountNotProvisionedException implements Exception {
+  const AccountNotProvisionedException(this.email);
+
+  /// The address Google returned, so the message can name it — people
+  /// routinely pick the wrong account out of the Google chooser.
+  final String? email;
+
+  @override
+  String toString() => 'AccountNotProvisionedException($email)';
 }
