@@ -18,10 +18,7 @@ import '../../models/task_model.dart';
 /// - Compatibility: tasks created before this feature have `groupId ==
 ///   null`. Those are only visible to `super_admin`/managing admins until an
 ///   admin assigns them a group.
-bool isTaskVisibleToUser({
-  required TaskModel task,
-  required AppUser user,
-}) {
+bool isTaskVisibleToUser({required TaskModel task, required AppUser user}) {
   if (user.isSuperAdmin) return true;
 
   if (user.managesGroup(task.groupId)) return true;

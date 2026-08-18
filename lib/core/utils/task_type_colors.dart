@@ -21,7 +21,8 @@ Color? parseHexColor(String? hex) {
 String taskTypeColorToHex(Color color) {
   String channel(double v) =>
       (v * 255).round().clamp(0, 255).toRadixString(16).padLeft(2, '0');
-  return '#${channel(color.r)}${channel(color.g)}${channel(color.b)}'.toUpperCase();
+  return '#${channel(color.r)}${channel(color.g)}${channel(color.b)}'
+      .toUpperCase();
 }
 
 /// Centralizes resolving a [TaskTypeModel]'s configured color (Sprint 5.5),

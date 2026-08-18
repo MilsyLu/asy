@@ -116,7 +116,10 @@ class GroupCompliance {
   }
 }
 
-List<GroupCompliance> computeGroupCompliance(List<TaskModel> tasks, TaskCatalog catalog) {
+List<GroupCompliance> computeGroupCompliance(
+  List<TaskModel> tasks,
+  TaskCatalog catalog,
+) {
   final completedId = catalog.completedStatusId;
   final cancelledId = catalog.cancelledStatusId;
   final assigned = <String?, int>{};
@@ -132,12 +135,14 @@ List<GroupCompliance> computeGroupCompliance(List<TaskModel> tasks, TaskCatalog 
     }
   }
   return assigned.entries
-      .map((e) => GroupCompliance(
-            groupId: e.key,
-            assigned: e.value,
-            completed: completed[e.key] ?? 0,
-            cancelled: cancelled[e.key] ?? 0,
-          ))
+      .map(
+        (e) => GroupCompliance(
+          groupId: e.key,
+          assigned: e.value,
+          completed: completed[e.key] ?? 0,
+          cancelled: cancelled[e.key] ?? 0,
+        ),
+      )
       .toList();
 }
 
@@ -190,7 +195,10 @@ AppUser? bestActiveStreak(List<AppUser> users) {
 
 /// Task counts per status name (Sprint 6.2 Part 6, "Distribución de
 /// estados").
-Map<String, int> computeStatusDistribution(List<TaskModel> tasks, TaskCatalog catalog) {
+Map<String, int> computeStatusDistribution(
+  List<TaskModel> tasks,
+  TaskCatalog catalog,
+) {
   final counts = <String, int>{};
   for (final t in tasks) {
     final name = catalog.statusName(t.statusId);
@@ -236,13 +244,16 @@ List<TaskModel> computeOverdueTasks(
   // A cancelled task cannot be late: nobody is waiting on it. Leaving them in
   // meant the "tareas vencidas" count asked somebody to chase work that had
   // already been called off.
-  final overdue = tasks
-      .where((t) =>
-          t.statusId != completedId &&
-          t.statusId != cancelledId &&
-          t.scheduledDateTime.isBefore(now))
-      .toList()
-    ..sort((a, b) => a.scheduledDateTime.compareTo(b.scheduledDateTime));
+  final overdue =
+      tasks
+          .where(
+            (t) =>
+                t.statusId != completedId &&
+                t.statusId != cancelledId &&
+                t.scheduledDateTime.isBefore(now),
+          )
+          .toList()
+        ..sort((a, b) => a.scheduledDateTime.compareTo(b.scheduledDateTime));
   return overdue;
 }
 
@@ -250,18 +261,22 @@ List<TaskModel> computeOverdueTasks(
 /// "📅 Próximas 24 horas"). Sorted chronologically.
 List<TaskModel> computeUpcomingTasks(List<TaskModel> tasks, DateTime now) {
   final limit = now.add(const Duration(hours: 24));
-  final upcoming = tasks.where((t) {
-    final dt = t.scheduledDateTime;
-    return !dt.isBefore(now) && !dt.isAfter(limit);
-  }).toList()
-    ..sort((a, b) => a.scheduledDateTime.compareTo(b.scheduledDateTime));
+  final upcoming =
+      tasks.where((t) {
+          final dt = t.scheduledDateTime;
+          return !dt.isBefore(now) && !dt.isAfter(limit);
+        }).toList()
+        ..sort((a, b) => a.scheduledDateTime.compareTo(b.scheduledDateTime));
   return upcoming;
 }
 
 /// An [AppUser] paired with how many tasks they completed in the trailing
 /// 7-day window (Sprint 6.3, "👤 Sin actividad").
 class InactiveUserStat {
-  const InactiveUserStat({required this.user, required this.daysSinceLastCompleted});
+  const InactiveUserStat({
+    required this.user,
+    required this.daysSinceLastCompleted,
+  });
 
   final AppUser user;
 
@@ -309,7 +324,9 @@ List<InactiveUserStat> computeInactiveUsers(
     final ultima = ultimaCompletada[u.id];
     return InactiveUserStat(
       user: u,
-      daysSinceLastCompleted: ultima == null ? null : now.difference(ultima).inDays,
+      daysSinceLastCompleted: ultima == null
+          ? null
+          : now.difference(ultima).inDays,
     );
   }).toList();
 

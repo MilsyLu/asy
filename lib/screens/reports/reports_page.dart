@@ -7,6 +7,7 @@ import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/report_filters.dart';
 import '../../core/utils/report_metrics.dart';
+import '../../core/utils/snackbar_utils.dart';
 import '../../core/utils/task_visibility.dart';
 import '../../models/task_model.dart';
 import '../../providers/auth_provider.dart';
@@ -14,6 +15,7 @@ import '../../providers/catalog_provider.dart';
 import '../../services/task_repository.dart';
 import '../../widgets/kpi_card.dart';
 import '../../widgets/loading_indicator.dart';
+import 'report_excel.dart';
 import 'report_exports.dart';
 import 'widgets/groups_report_tab.dart';
 import 'widgets/performance_report_tab.dart';
@@ -113,6 +115,28 @@ class _ReportsPageState extends State<ReportsPage>
     super.dispose();
   }
 
+  /// Runs an export and always says what happened.
+  ///
+  /// Both buttons used to be bare `() => export(...)` calls: the Future went
+  /// unawaited and nothing caught anything, so a failure anywhere in it — and
+  /// the Excel path builds a zip and rewrites XML inside it — reached the user
+  /// as a button that did nothing at all. No file, no error, nothing to
+  /// report. That is how the Windows download bug stayed a mystery instead of
+  /// being a one-line answer.
+  Future<void> _runExport(String what, Future<void> Function() export) async {
+    try {
+      await export();
+      if (!mounted) return;
+      SnackbarUtils.showSuccess(context, '$what descargado');
+    } catch (e) {
+      if (!mounted) return;
+      SnackbarUtils.showError(
+        context,
+        'No se pudo generar el $what. ${SnackbarUtils.firebaseErrorMessage(e)}',
+      );
+    }
+  }
+
   Future<void> _pickRange() async {
     final picked = await showDateRangePicker(
       context: context,
@@ -204,14 +228,40 @@ class _ReportsPageState extends State<ReportsPage>
                     // Moved up out of the Tareas tab: it exports the filtered
                     // list the whole screen is showing, which has nothing to do
                     // with which tab happens to be open.
+                    FilledButton.icon(
+                      onPressed: ordenadas.isEmpty
+                          ? null
+                          : () => _runExport(
+                              'Excel',
+                              () => exportReportExcel(
+                                tasks: ordenadas,
+                                catalog: catalog,
+                                start: _range.start,
+                                end: _range.end,
+                                generatedBy: currentUser.name,
+                                activeFilters: _filters.describe(
+                                  groupName: catalog.groupName,
+                                  userName: catalog.userName,
+                                  statusName: catalog.statusName,
+                                  taskTypeName: catalog.taskTypeName,
+                                ),
+                              ),
+                            ),
+                      icon: const Icon(LucideIcons.fileSpreadsheet, size: 16),
+                      label: const Text('Excel'),
+                    ),
+                    const SizedBox(width: 8),
                     OutlinedButton.icon(
                       onPressed: ordenadas.isEmpty
                           ? null
-                          : () => exportTasksCsv(
-                              tasks: ordenadas,
-                              catalog: catalog,
-                              start: _range.start,
-                              end: _range.end,
+                          : () => _runExport(
+                              'CSV',
+                              () => exportTasksCsv(
+                                tasks: ordenadas,
+                                catalog: catalog,
+                                start: _range.start,
+                                end: _range.end,
+                              ),
                             ),
                       icon: const Icon(LucideIcons.download, size: 16),
                       label: const Text('CSV'),

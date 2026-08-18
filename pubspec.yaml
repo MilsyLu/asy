@@ -76,6 +76,9 @@ dependencies:
   cloud_functions: ^6.3.6
   flutter_colorpicker: ^1.1.0
   qr_flutter: ^4.1.0
+  excel: ^4.0.6
+  archive: ^3.6.1
+  xml: ^6.6.1
 
 dev_dependencies:
   flutter_test:
@@ -88,7 +91,12 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
-  flutter_native_splash: ^2.4.7
+  # Rango abierto hacia abajo a proposito: desde 2.4.6 arrastra image/archive 4,
+  # que choca con `excel` (todas sus versiones piden archive 3). Es una
+  # herramienta de linea de comandos que solo genera los assets del splash —ya
+  # generados y versionados—, no se importa en lib/ y no entra al binario, asi
+  # que la version que resuelva pub aqui no afecta a la app.
+  flutter_native_splash: ^2.4.0
 
 # Sprint 7.3.2B — CheCu launcher icon, generated from the single official
 # source asset (assets/branding/logo_checu.png). The project has no adaptive

@@ -88,6 +88,30 @@ class ReportFilters {
 
   List<TaskModel> apply(List<TaskModel> tasks) =>
       isEmpty ? tasks : tasks.where(matches).toList();
+
+  /// The active filters spelled out, for the export to carry.
+  ///
+  /// A workbook outlives the screen it came from. Without this, a file opened
+  /// three weeks later shows twelve tasks and no way to tell whether that was
+  /// the whole month or one team's slice of it — and the two get read the same
+  /// way. [nameOf] resolves each id, since the ids mean nothing to a reader.
+  List<String> describe({
+    required String Function(String?) groupName,
+    required String Function(String?) userName,
+    required String Function(String?) statusName,
+    required String Function(String?) taskTypeName,
+  }) {
+    String label(String id, String Function(String?) nameOf) =>
+        nameOf(id == kSinAsignar ? null : id);
+
+    return [
+      if (search.trim().isNotEmpty) 'Búsqueda: "${search.trim()}"',
+      if (groupId != null) 'Equipo: ${label(groupId!, groupName)}',
+      if (userId != null) 'Encargado: ${label(userId!, userName)}',
+      if (statusId != null) 'Estado: ${label(statusId!, statusName)}',
+      if (taskTypeId != null) 'Tipo: ${label(taskTypeId!, taskTypeName)}',
+    ];
+  }
 }
 
 /// Lowercase and strip the accents Spanish names carry, so searching "cafe"
@@ -97,7 +121,9 @@ String _fold(String value) {
   final lower = value.toLowerCase();
   final buffer = StringBuffer();
   for (final rune in lower.runes) {
-    buffer.write(_sinAcento[String.fromCharCode(rune)] ?? String.fromCharCode(rune));
+    buffer.write(
+      _sinAcento[String.fromCharCode(rune)] ?? String.fromCharCode(rune),
+    );
   }
   return buffer.toString();
 }

@@ -15,15 +15,30 @@ class SnackbarUtils {
   static OverlayEntry? _currentEntry;
 
   static void showError(BuildContext context, String message) {
-    _show(context, message: message, icon: Icons.error_outline, colorOf: (c) => c.error);
+    _show(
+      context,
+      message: message,
+      icon: Icons.error_outline,
+      colorOf: (c) => c.error,
+    );
   }
 
   static void showSuccess(BuildContext context, String message) {
-    _show(context, message: message, icon: Icons.check_circle_outline, colorOf: (c) => c.success);
+    _show(
+      context,
+      message: message,
+      icon: Icons.check_circle_outline,
+      colorOf: (c) => c.success,
+    );
   }
 
   static void showInfo(BuildContext context, String message) {
-    _show(context, message: message, icon: Icons.info_outline, colorOf: (c) => c.primary);
+    _show(
+      context,
+      message: message,
+      icon: Icons.info_outline,
+      colorOf: (c) => c.primary,
+    );
   }
 
   static void _show(
@@ -53,13 +68,20 @@ class SnackbarUtils {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 480),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: colors.surface,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: color.withValues(alpha: 0.4)),
                   boxShadow: const [
-                    BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 4)),
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
                   ],
                 ),
                 child: Row(
@@ -68,7 +90,10 @@ class SnackbarUtils {
                     Icon(icon, color: color),
                     const SizedBox(width: 12),
                     Flexible(
-                      child: Text(message, style: TextStyle(color: colors.textPrimary)),
+                      child: Text(
+                        message,
+                        style: TextStyle(color: colors.textPrimary),
+                      ),
                     ),
                   ],
                 ),
@@ -114,14 +139,18 @@ class SnackbarUtils {
   /// — plugins and `Future` wrappers often hand over a plain string.
   static String? _errorCode(Object error) {
     if (error is FirebaseException) return error.code;
-    final match = RegExp(r'\[([a-z_]+)/([a-z0-9\-]+)\]').firstMatch(error.toString());
+    final match = RegExp(
+      r'\[([a-z_]+)/([a-z0-9\-]+)\]',
+    ).firstMatch(error.toString());
     return match?.group(2);
   }
 
   /// `firebase_storage/unauthorized` when the plugin is known, else the code.
   static String? _errorLabel(Object error, String? code) {
     if (error is FirebaseException) return '${error.plugin}/${error.code}';
-    final match = RegExp(r'\[([a-z_]+)/([a-z0-9\-]+)\]').firstMatch(error.toString());
+    final match = RegExp(
+      r'\[([a-z_]+)/([a-z0-9\-]+)\]',
+    ).firstMatch(error.toString());
     if (match != null) return '${match.group(1)}/${match.group(2)}';
     return code;
   }
@@ -133,12 +162,16 @@ class SnackbarUtils {
     bool is_(String c) => code == c || raw.contains(c);
 
     // ── Sesión ────────────────────────────────────────────────────────────
-    if (is_('user-not-found') || is_('wrong-password') || is_('invalid-credential')) {
+    if (is_('user-not-found') ||
+        is_('wrong-password') ||
+        is_('invalid-credential')) {
       return 'Email o contraseña incorrectos';
     }
     if (is_('invalid-email')) return 'El formato del email no es válido';
     if (is_('user-disabled')) return 'Esta cuenta ha sido deshabilitada';
-    if (is_('too-many-requests')) return 'Demasiados intentos. Intenta más tarde';
+    if (is_('too-many-requests')) {
+      return 'Demasiados intentos. Intenta más tarde';
+    }
     if (is_('email-already-in-use')) return 'Ese email ya está registrado';
     if (is_('weak-password')) return 'La contraseña es demasiado débil';
     if (is_('requires-recent-login')) {
@@ -166,16 +199,22 @@ class SnackbarUtils {
     }
 
     // ── Conexión ──────────────────────────────────────────────────────────
-    if (is_('network-request-failed') || is_('unavailable') || is_('retry-limit-exceeded')) {
+    if (is_('network-request-failed') ||
+        is_('unavailable') ||
+        is_('retry-limit-exceeded')) {
       return 'Error de conexión. Revisa tu internet';
     }
-    if (is_('deadline-exceeded')) return 'La operación tardó demasiado. Intenta de nuevo';
+    if (is_('deadline-exceeded')) {
+      return 'La operación tardó demasiado. Intenta de nuevo';
+    }
 
     // ── Permisos (Firestore dice permission-denied, Storage unauthorized) ──
     if (is_('permission-denied') || is_('unauthorized')) {
       return 'No tienes permisos para realizar esta acción';
     }
-    if (is_('unauthenticated')) return 'Tu sesión expiró. Inicia sesión nuevamente';
+    if (is_('unauthenticated')) {
+      return 'Tu sesión expiró. Inicia sesión nuevamente';
+    }
 
     // ── Datos ─────────────────────────────────────────────────────────────
     if (is_('not-found') || is_('object-not-found')) {

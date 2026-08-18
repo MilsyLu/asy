@@ -44,7 +44,9 @@ class Validators {
     final countryCode = digits.substring(0, digits.length - 10);
     final formattedLocal =
         '${local.substring(0, 3)} ${local.substring(3, 6)} ${local.substring(6)}';
-    return countryCode.isEmpty ? formattedLocal : '+$countryCode $formattedLocal';
+    return countryCode.isEmpty
+        ? formattedLocal
+        : '+$countryCode $formattedLocal';
   }
 
   /// Allows only digits, '+' and spaces, and requires at least 10 digits —
