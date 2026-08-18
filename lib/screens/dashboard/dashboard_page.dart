@@ -1,4 +1,5 @@
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +18,7 @@ import '../../services/task_repository.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/responsive_sheet.dart';
 import '../home/widgets/compact_task_card.dart' show taskStatusColor;
+import '../home/widgets/task_detail_dialog.dart';
 
 /// Spacing system (Sprint 6.3.1): preserved unchanged for mobile.
 const double _kSectionGap = 24;
@@ -47,6 +49,14 @@ const _kRangeLabels = [
 ];
 const _kDefaultRangeIndex = 1; // "Últimos 30 días"
 const _kCustomRangeIndex = 4;
+
+/// The two slices of the same query the sheets read from.
+///
+/// [all] carries the extra lookahead day the stream fetches for "Próximas 24
+/// horas"; [historical] is the cut the KPI cards counted. A sheet opened from
+/// a KPI card must use [historical], or its length would disagree with the
+/// number printed on the card that opened it.
+typedef _LiveTasks = ({List<TaskModel> all, List<TaskModel> historical});
 
 /// Computed metrics bundle shared across the three layout builders so each
 /// receives a typed snapshot instead of a long parameter list.
@@ -103,10 +113,41 @@ class _DashboardPageState extends State<DashboardPage> {
 
   int _rangeIndex = _kDefaultRangeIndex;
 
+  /// The visibility-filtered task list, republished on every stream event so
+  /// an open sheet can follow it.
+  ///
+  /// The sheets used to be handed a plain list captured the moment they
+  /// opened, which went stale as soon as the user completed something from
+  /// the detail dialog — the row they had just dealt with stayed on screen,
+  /// still listed as overdue. Nothing extra is fetched to fix that: this page
+  /// keeps its Firestore subscription open underneath the sheet, so the fresh
+  /// data was already arriving and the sheet was simply not looking at it.
+  final ValueNotifier<_LiveTasks> _liveTasks = ValueNotifier((
+    all: const [],
+    historical: const [],
+  ));
+
   @override
   void initState() {
     super.initState();
     _applyRange(_kDefaultRangeIndex);
+  }
+
+  @override
+  void dispose() {
+    _liveTasks.dispose();
+    super.dispose();
+  }
+
+  /// Hands [tasks] to whatever sheet is open.
+  ///
+  /// Deferred by a frame on purpose: assigning during build would mark the
+  /// sheet's builder dirty in the middle of the same frame, which Flutter
+  /// rejects outright.
+  void _publishLiveTasks(List<TaskModel> all, List<TaskModel> historical) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _liveTasks.value = (all: all, historical: historical);
+    });
   }
 
   /// First and last day covered by [index], both inclusive.
@@ -132,7 +173,11 @@ class _DashboardPageState extends State<DashboardPage> {
     final today = DateTime(now.year, now.month, now.day);
 
     if (custom != null) {
-      _start = DateTime(custom.start.year, custom.start.month, custom.start.day);
+      _start = DateTime(
+        custom.start.year,
+        custom.start.month,
+        custom.start.day,
+      );
       _end = DateTime(custom.end.year, custom.end.month, custom.end.day);
     } else {
       final range = _rangeFor(index, today);
@@ -147,7 +192,10 @@ class _DashboardPageState extends State<DashboardPage> {
     _queryEnd = _end.add(const Duration(days: 1));
     _loadLogged = false;
     _loadStopwatch = Stopwatch()..start();
-    _tasksStream = context.read<TaskRepository>().watchTasksInRange(_start, _queryEnd);
+    _tasksStream = context.read<TaskRepository>().watchTasksInRange(
+      _start,
+      _queryEnd,
+    );
   }
 
   Future<void> _onRangeChanged(int index) async {
@@ -186,9 +234,12 @@ class _DashboardPageState extends State<DashboardPage> {
       body: StreamBuilder<List<TaskModel>>(
         stream: _tasksStream,
         builder: (context, snapshot) {
-          if (!_loadLogged && snapshot.connectionState != ConnectionState.waiting) {
+          if (!_loadLogged &&
+              snapshot.connectionState != ConnectionState.waiting) {
             _loadLogged = true;
-            debugPrint('[PERF] Dashboard load: ${_loadStopwatch.elapsedMilliseconds}ms');
+            debugPrint(
+              '[PERF] Dashboard load: ${_loadStopwatch.elapsedMilliseconds}ms',
+            );
           }
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const LoadingIndicator();
@@ -206,7 +257,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
           if (allTasks.isEmpty) {
             return EmptyState(
-              message: 'No hay tareas registradas en el periodo: '
+              message:
+                  'No hay tareas registradas en el periodo: '
                   '${_rangeLabel.toLowerCase()}.',
               icon: LucideIcons.layoutDashboard,
             );
@@ -216,23 +268,40 @@ class _DashboardPageState extends State<DashboardPage> {
           // Historical KPIs/charts only see up to _end (today); the extra day
           // fetched above is for "Próximas 24 horas" only.
           final todayKey = AppDateUtils.formatDateKey(_end);
-          final historicalTasks =
-              allTasks.where((t) => t.date.compareTo(todayKey) <= 0).toList();
+          final historicalTasks = allTasks
+              .where((t) => t.date.compareTo(todayKey) <= 0)
+              .toList();
+
+          _publishLiveTasks(allTasks, historicalTasks);
 
           final kpis = computeTaskKpis(historicalTasks, catalog);
           final topUser = topUserByCompleted(historicalTasks, catalog);
-          final groupCompliance = computeGroupCompliance(historicalTasks, catalog)
-            ..sort((a, b) => b.percent.compareTo(a.percent));
+          final groupCompliance = computeGroupCompliance(
+            historicalTasks,
+            catalog,
+          )..sort((a, b) => b.percent.compareTo(a.percent));
           final bestGroup = bestGroupCompliance(groupCompliance);
           final topClient = mostAttendedClient(historicalTasks, catalog);
           final streakUser = bestActiveStreak(catalog.users);
-          final statusDistribution = computeStatusDistribution(historicalTasks, catalog);
-          final dailyTrend =
-              computeDailyTrend(historicalTasks, _start, _end, AppDateUtils.formatDateKey);
+          final statusDistribution = computeStatusDistribution(
+            historicalTasks,
+            catalog,
+          );
+          final dailyTrend = computeDailyTrend(
+            historicalTasks,
+            _start,
+            _end,
+            AppDateUtils.formatDateKey,
+          );
 
           final overdueTasks = computeOverdueTasks(allTasks, catalog, now);
           final upcomingTasks = computeUpcomingTasks(allTasks, now);
-          final inactiveUsers = computeInactiveUsers(allTasks, catalog.users, catalog, now);
+          final inactiveUsers = computeInactiveUsers(
+            allTasks,
+            catalog.users,
+            catalog,
+            now,
+          );
 
           final snap = _Snapshot(
             kpis: kpis,
@@ -249,7 +318,9 @@ class _DashboardPageState extends State<DashboardPage> {
             catalog: catalog,
           );
 
-          if (context.isDesktop) return _buildDesktopBody(context, snap, currentUser);
+          if (context.isDesktop) {
+            return _buildDesktopBody(context, snap, currentUser);
+          }
           if (context.isTablet) return _buildTabletBody(context, snap);
           return _buildMobileBody(context, snap);
         },
@@ -269,70 +340,87 @@ class _DashboardPageState extends State<DashboardPage> {
         _SectionTitle('⚠️ Atención requerida'),
         const SizedBox(height: _kCardGap),
         _DashboardCard(
-          child: _AttentionList(items: [
-            _AttentionItem(
-              emoji: '🔴',
-              color: colors.error,
-              count: s.overdueTasks.length,
-              singular: 'tarea vencida',
-              plural: 'tareas vencidas',
-              onTap: () => _showOverdueTasksSheet(context, s.catalog, s.overdueTasks),
-            ),
-            _AttentionItem(
-              emoji: '🟠',
-              color: colors.statusPending,
-              count: s.upcomingTasks.length,
-              singular: 'tarea próxima (24h)',
-              plural: 'tareas próximas (24h)',
-              onTap: () => _showUpcomingTasksSheet(context, s.catalog, s.upcomingTasks),
-            ),
-            _AttentionItem(
-              emoji: '🔵',
-              color: colors.statusRescheduled,
-              count: s.inactiveUsers.length,
-              singular: 'usuario sin actividad',
-              plural: 'usuarios sin actividad',
-              onTap: () => _showInactiveUsersSheet(context, s.catalog, s.inactiveUsers),
-            ),
-          ]),
+          child: _AttentionList(
+            items: [
+              _AttentionItem(
+                emoji: '🔴',
+                color: colors.error,
+                count: s.overdueTasks.length,
+                singular: 'tarea vencida',
+                plural: 'tareas vencidas',
+                onTap: () =>
+                    _showOverdueTasksSheet(context, s.catalog, _liveTasks),
+              ),
+              _AttentionItem(
+                emoji: '🟠',
+                color: colors.statusPending,
+                count: s.upcomingTasks.length,
+                singular: 'tarea próxima (24h)',
+                plural: 'tareas próximas (24h)',
+                onTap: () =>
+                    _showUpcomingTasksSheet(context, s.catalog, _liveTasks),
+              ),
+              _AttentionItem(
+                emoji: '🔵',
+                color: colors.statusRescheduled,
+                count: s.inactiveUsers.length,
+                singular: 'usuario sin actividad',
+                plural: 'usuarios sin actividad',
+                onTap: () => _showInactiveUsersSheet(
+                  context,
+                  s.catalog,
+                  s.inactiveUsers,
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: _kSectionGap),
         _SectionTitle('🏆 Resumen ejecutivo'),
         const SizedBox(height: _kCardGap),
         _DashboardCard(
-          child: _ExecutiveSummaryList(items: [
-            _ExecutiveItem(
-              label: 'Mejor colaborador',
-              value: s.topUser?.name ?? 'Sin datos',
-            ),
-            _ExecutiveItem(
-              label: 'Mejor equipo',
-              value: s.bestGroup == null
-                  ? 'Sin datos'
-                  : '${s.catalog.groupName(s.bestGroup!.groupId)} · ${s.bestGroup!.percent}%',
-            ),
-            _ExecutiveItem(
-              label: 'Cliente destacado',
-              value: s.topClient == null
-                  ? 'Sin datos'
-                  : '${s.topClient!.name} · ${s.topClient!.count}',
-            ),
-            _ExecutiveItem(
-              label: 'Mejor racha',
-              value: s.streakUser == null
-                  ? 'Sin datos'
-                  : '${s.streakUser!.name} · ${s.streakUser!.streakDays} días',
-            ),
-          ]),
+          child: _ExecutiveSummaryList(
+            items: [
+              _ExecutiveItem(
+                label: 'Mejor colaborador',
+                value: s.topUser?.name ?? 'Sin datos',
+              ),
+              _ExecutiveItem(
+                label: 'Mejor equipo',
+                value: s.bestGroup == null
+                    ? 'Sin datos'
+                    : '${s.catalog.groupName(s.bestGroup!.groupId)} · ${s.bestGroup!.percent}%',
+              ),
+              _ExecutiveItem(
+                label: 'Cliente destacado',
+                value: s.topClient == null
+                    ? 'Sin datos'
+                    : '${s.topClient!.name} · ${s.topClient!.count}',
+              ),
+              _ExecutiveItem(
+                label: 'Mejor racha',
+                value: s.streakUser == null
+                    ? 'Sin datos'
+                    : '${s.streakUser!.name} · ${s.streakUser!.streakDays} días',
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: _kSectionGap),
         _SectionTitle('Distribución de estados'),
         const SizedBox(height: _kCardGap),
-        _DashboardCard(child: _StatusDistributionChart(distribution: s.statusDistribution)),
+        _DashboardCard(
+          child: _StatusDistributionChart(distribution: s.statusDistribution),
+        ),
         const SizedBox(height: _kSectionGap),
         _SectionTitle('Cumplimiento por equipo'),
         const SizedBox(height: _kCardGap),
-        _DashboardCard(child: _GroupComplianceChart(groups: s.groupCompliance, catalog: s.catalog)),
+        _DashboardCard(
+          child: _GroupComplianceChart(
+            groups: s.groupCompliance,
+            catalog: s.catalog,
+          ),
+        ),
         const SizedBox(height: _kSectionGap),
         _SectionTitle('Tendencia de tareas'),
         const SizedBox(height: _kCardGap),
@@ -362,6 +450,15 @@ class _DashboardPageState extends State<DashboardPage> {
             title: 'Total tareas',
             count: s.kpis.total,
             linkLabel: 'Ver tareas →',
+            onTap: () => _showTasksByStatusSheet(
+              context,
+              s.catalog,
+              _liveTasks,
+              title: 'Todas las tareas',
+              emptyMessage: 'No hay tareas en este periodo.',
+              accent: colors.primary,
+              statusId: null,
+            ),
           ),
           right: _KpiCard(
             icon: LucideIcons.checkCircle2,
@@ -369,6 +466,16 @@ class _DashboardPageState extends State<DashboardPage> {
             count: s.kpis.completed,
             accentColor: colors.success,
             linkLabel: 'Ver completadas →',
+            onTap: () => _showTasksByStatusSheet(
+              context,
+              s.catalog,
+              _liveTasks,
+              title: 'Completadas',
+              emptyMessage:
+                  'Todavía no hay tareas completadas en este periodo.',
+              accent: colors.success,
+              statusId: s.catalog.completedStatusId,
+            ),
           ),
         ),
         const SizedBox(height: AppSpacing.sm),
@@ -379,6 +486,15 @@ class _DashboardPageState extends State<DashboardPage> {
             count: s.kpis.pending,
             accentColor: colors.statusPending,
             linkLabel: 'Ver pendientes →',
+            onTap: () => _showTasksByStatusSheet(
+              context,
+              s.catalog,
+              _liveTasks,
+              title: 'Pendientes',
+              emptyMessage: 'No queda ninguna tarea pendiente.',
+              accent: colors.statusPending,
+              statusId: s.catalog.pendingStatusId,
+            ),
           ),
           right: _KpiCard(
             icon: LucideIcons.calendarDays,
@@ -386,6 +502,15 @@ class _DashboardPageState extends State<DashboardPage> {
             count: s.kpis.rescheduled,
             accentColor: colors.statusRescheduled,
             linkLabel: 'Ver reprogramadas →',
+            onTap: () => _showTasksByStatusSheet(
+              context,
+              s.catalog,
+              _liveTasks,
+              title: 'Reprogramadas',
+              emptyMessage: 'No hay tareas reprogramadas en este periodo.',
+              accent: colors.statusRescheduled,
+              statusId: s.catalog.rescheduledStatusId,
+            ),
           ),
         ),
         const SizedBox(height: AppSpacing.sm),
@@ -395,62 +520,72 @@ class _DashboardPageState extends State<DashboardPage> {
         const SizedBox(height: _kCardGap),
         _DashboardCard(
           showShadow: true,
-          child: _AttentionList(items: [
-            _AttentionItem(
-              emoji: '🔴',
-              color: colors.error,
-              count: s.overdueTasks.length,
-              singular: 'tarea vencida',
-              plural: 'tareas vencidas',
-              onTap: () => _showOverdueTasksSheet(context, s.catalog, s.overdueTasks),
-            ),
-            _AttentionItem(
-              emoji: '🟠',
-              color: colors.statusPending,
-              count: s.upcomingTasks.length,
-              singular: 'tarea próxima (24h)',
-              plural: 'tareas próximas (24h)',
-              onTap: () => _showUpcomingTasksSheet(context, s.catalog, s.upcomingTasks),
-            ),
-            _AttentionItem(
-              emoji: '🔵',
-              color: colors.statusRescheduled,
-              count: s.inactiveUsers.length,
-              singular: 'usuario sin actividad',
-              plural: 'usuarios sin actividad',
-              onTap: () => _showInactiveUsersSheet(context, s.catalog, s.inactiveUsers),
-            ),
-          ]),
+          child: _AttentionList(
+            items: [
+              _AttentionItem(
+                emoji: '🔴',
+                color: colors.error,
+                count: s.overdueTasks.length,
+                singular: 'tarea vencida',
+                plural: 'tareas vencidas',
+                onTap: () =>
+                    _showOverdueTasksSheet(context, s.catalog, _liveTasks),
+              ),
+              _AttentionItem(
+                emoji: '🟠',
+                color: colors.statusPending,
+                count: s.upcomingTasks.length,
+                singular: 'tarea próxima (24h)',
+                plural: 'tareas próximas (24h)',
+                onTap: () =>
+                    _showUpcomingTasksSheet(context, s.catalog, _liveTasks),
+              ),
+              _AttentionItem(
+                emoji: '🔵',
+                color: colors.statusRescheduled,
+                count: s.inactiveUsers.length,
+                singular: 'usuario sin actividad',
+                plural: 'usuarios sin actividad',
+                onTap: () => _showInactiveUsersSheet(
+                  context,
+                  s.catalog,
+                  s.inactiveUsers,
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: _kSectionGap),
         _SectionTitle('🏆 Resumen ejecutivo'),
         const SizedBox(height: _kCardGap),
         _DashboardCard(
           showShadow: true,
-          child: _ExecutiveSummaryList(items: [
-            _ExecutiveItem(
-              label: 'Mejor colaborador',
-              value: s.topUser?.name ?? 'Sin datos',
-            ),
-            _ExecutiveItem(
-              label: 'Mejor equipo',
-              value: s.bestGroup == null
-                  ? 'Sin datos'
-                  : '${s.catalog.groupName(s.bestGroup!.groupId)} · ${s.bestGroup!.percent}%',
-            ),
-            _ExecutiveItem(
-              label: 'Cliente destacado',
-              value: s.topClient == null
-                  ? 'Sin datos'
-                  : '${s.topClient!.name} · ${s.topClient!.count}',
-            ),
-            _ExecutiveItem(
-              label: 'Mejor racha',
-              value: s.streakUser == null
-                  ? 'Sin datos'
-                  : '${s.streakUser!.name} · ${s.streakUser!.streakDays} días',
-            ),
-          ]),
+          child: _ExecutiveSummaryList(
+            items: [
+              _ExecutiveItem(
+                label: 'Mejor colaborador',
+                value: s.topUser?.name ?? 'Sin datos',
+              ),
+              _ExecutiveItem(
+                label: 'Mejor equipo',
+                value: s.bestGroup == null
+                    ? 'Sin datos'
+                    : '${s.catalog.groupName(s.bestGroup!.groupId)} · ${s.bestGroup!.percent}%',
+              ),
+              _ExecutiveItem(
+                label: 'Cliente destacado',
+                value: s.topClient == null
+                    ? 'Sin datos'
+                    : '${s.topClient!.name} · ${s.topClient!.count}',
+              ),
+              _ExecutiveItem(
+                label: 'Mejor racha',
+                value: s.streakUser == null
+                    ? 'Sin datos'
+                    : '${s.streakUser!.name} · ${s.streakUser!.streakDays} días',
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: _kSectionGap),
         _SectionTitle('Distribución de estados  ·  Cumplimiento por equipo'),
@@ -463,13 +598,19 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           right: _DashboardCard(
             showShadow: true,
-            child: _GroupComplianceChart(groups: s.groupCompliance, catalog: s.catalog),
+            child: _GroupComplianceChart(
+              groups: s.groupCompliance,
+              catalog: s.catalog,
+            ),
           ),
         ),
         const SizedBox(height: _kSectionGap),
         _SectionTitle('Tendencia de tareas'),
         const SizedBox(height: _kCardGap),
-        _DashboardCard(showShadow: true, child: _TrendChart(entries: s.dailyTrend)),
+        _DashboardCard(
+          showShadow: true,
+          child: _TrendChart(entries: s.dailyTrend),
+        ),
       ],
     );
   }
@@ -514,13 +655,18 @@ class _DashboardPageState extends State<DashboardPage> {
                             title: 'Total tareas',
                             count: s.kpis.total,
                             linkLabel: 'Ver tareas →',
+                            onTap: () => _showTasksByStatusSheet(
+                              context,
+                              s.catalog,
+                              _liveTasks,
+                              title: 'Todas las tareas',
+                              emptyMessage: 'No hay tareas en este periodo.',
+                              accent: colors.primary,
+                              statusId: null,
+                            ),
                           ),
                         ),
-                        Container(
-                          width: 1,
-                          height: 56,
-                          color: colors.divider,
-                        ),
+                        Container(width: 1, height: 56, color: colors.divider),
                         Expanded(
                           child: _KpiSubBlock(
                             icon: LucideIcons.checkCircle2,
@@ -528,13 +674,19 @@ class _DashboardPageState extends State<DashboardPage> {
                             count: s.kpis.completed,
                             accentColor: colors.success,
                             linkLabel: 'Ver completadas →',
+                            onTap: () => _showTasksByStatusSheet(
+                              context,
+                              s.catalog,
+                              _liveTasks,
+                              title: 'Completadas',
+                              emptyMessage:
+                                  'Todavía no hay tareas completadas en este periodo.',
+                              accent: colors.success,
+                              statusId: s.catalog.completedStatusId,
+                            ),
                           ),
                         ),
-                        Container(
-                          width: 1,
-                          height: 56,
-                          color: colors.divider,
-                        ),
+                        Container(width: 1, height: 56, color: colors.divider),
                         Expanded(
                           child: _KpiSubBlock(
                             icon: LucideIcons.clock,
@@ -542,6 +694,15 @@ class _DashboardPageState extends State<DashboardPage> {
                             count: s.kpis.pending,
                             accentColor: colors.statusPending,
                             linkLabel: 'Ver pendientes →',
+                            onTap: () => _showTasksByStatusSheet(
+                              context,
+                              s.catalog,
+                              _liveTasks,
+                              title: 'Pendientes',
+                              emptyMessage: 'No queda ninguna tarea pendiente.',
+                              accent: colors.statusPending,
+                              statusId: s.catalog.pendingStatusId,
+                            ),
                           ),
                         ),
                       ],
@@ -549,10 +710,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                 ),
                 const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  flex: 1,
-                  child: _ComplianceCard(kpis: s.kpis),
-                ),
+                Expanded(flex: 1, child: _ComplianceCard(kpis: s.kpis)),
               ],
             ),
           ),
@@ -586,7 +744,10 @@ class _DashboardPageState extends State<DashboardPage> {
                                     singular: 'Tarea vencida',
                                     plural: 'Tareas vencidas',
                                     onTap: () => _showOverdueTasksSheet(
-                                        context, s.catalog, s.overdueTasks),
+                                      context,
+                                      s.catalog,
+                                      _liveTasks,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -600,7 +761,10 @@ class _DashboardPageState extends State<DashboardPage> {
                                     singular: 'Próxima 24h',
                                     plural: 'Próximas 24h',
                                     onTap: () => _showUpcomingTasksSheet(
-                                        context, s.catalog, s.upcomingTasks),
+                                      context,
+                                      s.catalog,
+                                      _liveTasks,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -614,7 +778,10 @@ class _DashboardPageState extends State<DashboardPage> {
                                     singular: 'Usuario inactivo',
                                     plural: 'Usuarios inactivos',
                                     onTap: () => _showInactiveUsersSheet(
-                                        context, s.catalog, s.inactiveUsers),
+                                      context,
+                                      s.catalog,
+                                      s.inactiveUsers,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -718,7 +885,9 @@ class _DashboardPageState extends State<DashboardPage> {
                       children: [
                         _SectionTitle('Distribución de estados', fontSize: 16),
                         const SizedBox(height: AppSpacing.md),
-                        _StatusDistributionChart(distribution: s.statusDistribution),
+                        _StatusDistributionChart(
+                          distribution: s.statusDistribution,
+                        ),
                       ],
                     ),
                   ),
@@ -733,7 +902,9 @@ class _DashboardPageState extends State<DashboardPage> {
                         _SectionTitle('Cumplimiento por equipo', fontSize: 16),
                         const SizedBox(height: AppSpacing.md),
                         _GroupComplianceChart(
-                            groups: s.groupCompliance, catalog: s.catalog),
+                          groups: s.groupCompliance,
+                          catalog: s.catalog,
+                        ),
                       ],
                     ),
                   ),
@@ -883,6 +1054,7 @@ class _KpiCard extends StatefulWidget {
     required this.count,
     this.accentColor,
     this.linkLabel,
+    this.onTap,
   });
 
   final IconData icon;
@@ -890,6 +1062,13 @@ class _KpiCard extends StatefulWidget {
   final int count;
   final Color? accentColor;
   final String? linkLabel;
+
+  /// What the card's link actually does.
+  ///
+  /// [linkLabel] used to render on its own, with no handler anywhere in the
+  /// class — a label that read like a link, on a card that lights up under
+  /// the cursor, wired to nothing. The two now travel together.
+  final VoidCallback? onTap;
 
   @override
   State<_KpiCard> createState() => _KpiCardState();
@@ -903,70 +1082,76 @@ class _KpiCardState extends State<_KpiCard> {
     final colors = context.colors;
     final accent = widget.accentColor ?? colors.primary;
     return MouseRegion(
+      cursor: widget.onTap == null
+          ? MouseCursor.defer
+          : SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.all(_kCardPadding),
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: BorderRadius.circular(_kCardRadius),
-          border: Border.all(
-            color: _hovered ? accent.withValues(alpha: 0.45) : colors.divider,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: _hovered ? 0.18 : 0.10),
-              blurRadius: _hovered ? 14 : 8,
-              offset: const Offset(0, 2),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          padding: const EdgeInsets.all(_kCardPadding),
+          decoration: BoxDecoration(
+            color: colors.surface,
+            borderRadius: BorderRadius.circular(_kCardRadius),
+            border: Border.all(
+              color: _hovered ? accent.withValues(alpha: 0.45) : colors.divider,
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(AppSpacing.sm),
-              ),
-              child: Icon(widget.icon, color: accent, size: 18),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              widget.title,
-              style: TextStyle(
-                color: colors.textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 0.2,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              '${widget.count}',
-              style: TextStyle(
-                color: colors.textPrimary,
-                fontSize: 38,
-                fontWeight: FontWeight.bold,
-                height: 1.05,
-              ),
-            ),
-            if (widget.linkLabel != null) ...[
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                widget.linkLabel!,
-                style: TextStyle(
-                  color: accent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: _hovered ? 0.18 : 0.10),
+                blurRadius: _hovered ? 14 : 8,
+                offset: const Offset(0, 2),
               ),
             ],
-          ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(AppSpacing.sm),
+                ),
+                child: Icon(widget.icon, color: accent, size: 18),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                widget.title,
+                style: TextStyle(
+                  color: colors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                '${widget.count}',
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontSize: 38,
+                  fontWeight: FontWeight.bold,
+                  height: 1.05,
+                ),
+              ),
+              if (widget.linkLabel != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  widget.linkLabel!,
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
@@ -984,6 +1169,7 @@ class _KpiSubBlock extends StatelessWidget {
     required this.count,
     this.accentColor,
     this.linkLabel,
+    this.onTap,
   });
 
   final IconData icon;
@@ -992,53 +1178,69 @@ class _KpiSubBlock extends StatelessWidget {
   final Color? accentColor;
   final String? linkLabel;
 
+  /// See [_KpiCard.onTap] — same label, same dead end, same fix.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final accent = accentColor ?? colors.primary;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: accent.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(AppSpacing.xs),
-          ),
-          child: Icon(icon, color: accent, size: 16),
+    return MouseRegion(
+      cursor: onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        // Without this the taps land only on the glyphs, not on the gaps
+        // between them, which on a block this sparse is most of it.
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(AppSpacing.xs),
+              ),
+              child: Icon(icon, color: accent, size: 16),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: colors.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.2,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '$count',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontSize: 30,
+                fontWeight: FontWeight.bold,
+                height: 1.05,
+              ),
+            ),
+            if (linkLabel != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                linkLabel!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: accent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
         ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: colors.textSecondary,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 0.2,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          '$count',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: colors.textPrimary,
-            fontSize: 30,
-            fontWeight: FontWeight.bold,
-            height: 1.05,
-          ),
-        ),
-        if (linkLabel != null) ...[
-          const SizedBox(height: 4),
-          Text(
-            linkLabel!,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: accent, fontSize: 11, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ],
+      ),
     );
   }
 }
@@ -1177,7 +1379,9 @@ class _AttentionCompactCardState extends State<_AttentionCompactCard> {
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  widget.item.count == 1 ? widget.item.singular : widget.item.plural,
+                  widget.item.count == 1
+                      ? widget.item.singular
+                      : widget.item.plural,
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -1355,8 +1559,15 @@ class _HeroSummaryCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: _HeroMetric(value: '${kpis.total}', label: 'tareas')),
-              Expanded(child: _HeroMetric(value: '${kpis.completed}', label: 'completadas')),
+              Expanded(
+                child: _HeroMetric(value: '${kpis.total}', label: 'tareas'),
+              ),
+              Expanded(
+                child: _HeroMetric(
+                  value: '${kpis.completed}',
+                  label: 'completadas',
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 22),
@@ -1424,7 +1635,10 @@ class _HeroMetric extends StatelessWidget {
           label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: colors.onPrimary.withValues(alpha: 0.85), fontSize: 12),
+          style: TextStyle(
+            color: colors.onPrimary.withValues(alpha: 0.85),
+            fontSize: 12,
+          ),
         ),
       ],
     );
@@ -1513,7 +1727,11 @@ class _AttentionRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 6),
-            Icon(LucideIcons.chevronRight, size: 16, color: colors.textSecondary),
+            Icon(
+              LucideIcons.chevronRight,
+              size: 16,
+              color: colors.textSecondary,
+            ),
           ],
         ),
       ),
@@ -1638,7 +1856,10 @@ class _StatusDistributionChart extends StatelessWidget {
           children: [
             for (final e in entries)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: colors.background,
                   borderRadius: BorderRadius.circular(20),
@@ -1661,7 +1882,10 @@ class _StatusDistributionChart extends StatelessWidget {
                         '${e.key} (${e.value})',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                        style: TextStyle(
+                          color: colors.textSecondary,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],
@@ -1776,12 +2000,14 @@ class _TrendChart extends StatelessWidget {
       for (var i = 0; i < entries.length; i++)
         FlSpot(i.toDouble(), entries[i].value.toDouble()),
     ];
-    final maxCount =
-        entries.map((e) => e.value).fold<int>(0, (m, v) => v > m ? v : m);
+    final maxCount = entries
+        .map((e) => e.value)
+        .fold<int>(0, (m, v) => v > m ? v : m);
 
     final yInterval = _niceYInterval(maxCount);
-    final topTick =
-        maxCount == 0 ? yInterval : (maxCount / yInterval).ceil() * yInterval;
+    final topTick = maxCount == 0
+        ? yInterval
+        : (maxCount / yInterval).ceil() * yInterval;
     final maxY = topTick + yInterval;
 
     return Column(
@@ -1803,10 +2029,12 @@ class _TrendChart extends StatelessWidget {
               gridData: const FlGridData(show: true, drawVerticalLine: false),
               borderData: FlBorderData(show: false),
               titlesData: FlTitlesData(
-                topTitles:
-                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles:
-                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                topTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                rightTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
                 // Date labels along the bottom — previously off entirely, so
                 // the only way to know which day a point/spike belonged to
                 // was to count pixels against the "Del X al Y" caption above.
@@ -1816,18 +2044,25 @@ class _TrendChart extends StatelessWidget {
                   sideTitles: SideTitles(
                     showTitles: true,
                     reservedSize: 22,
-                    interval: entries.length > 1 ? (entries.length / 4).ceilToDouble() : 1,
+                    interval: entries.length > 1
+                        ? (entries.length / 4).ceilToDouble()
+                        : 1,
                     getTitlesWidget: (value, meta) {
                       final index = value.round();
                       if (index < 0 || index >= entries.length) {
                         return const SizedBox.shrink();
                       }
-                      final date = AppDateUtils.parseDateKey(entries[index].key);
+                      final date = AppDateUtils.parseDateKey(
+                        entries[index].key,
+                      );
                       return SideTitleWidget(
                         meta: meta,
                         child: Text(
                           AppDateUtils.formatDayMonth(date),
-                          style: TextStyle(color: colors.textSecondary, fontSize: 10),
+                          style: TextStyle(
+                            color: colors.textSecondary,
+                            fontSize: 10,
+                          ),
                         ),
                       );
                     },
@@ -1843,8 +2078,10 @@ class _TrendChart extends StatelessWidget {
                       meta: meta,
                       child: Text(
                         value.toInt().toString(),
-                        style:
-                            TextStyle(color: colors.textSecondary, fontSize: 11),
+                        style: TextStyle(
+                          color: colors.textSecondary,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                   ),
@@ -1875,30 +2112,293 @@ class _TrendChart extends StatelessWidget {
 // Sprint 6.3: operational alert detail sheets — unchanged.
 // -----------------------------------------------------------------------
 
+/// Spanish month abbreviations for the date block, spelled out rather than
+/// formatted: `DateFormat` follows whatever locale data happens to be loaded,
+/// and this label has to read the same on every machine.
+const _kMesesCortos = [
+  'ENE',
+  'FEB',
+  'MAR',
+  'ABR',
+  'MAY',
+  'JUN',
+  'JUL',
+  'AGO',
+  'SEP',
+  'OCT',
+  'NOV',
+  'DIC',
+];
+
+/// How late a task is, in the words somebody would use out loud.
+String _textoVencimiento(DateTime programada, DateTime ahora) {
+  final dias = DateTime(ahora.year, ahora.month, ahora.day)
+      .difference(DateTime(programada.year, programada.month, programada.day))
+      .inDays;
+  if (dias <= 0) return 'Venció hoy';
+  if (dias == 1) return 'Venció ayer';
+  return 'Venció hace $dias días';
+}
+
+/// How soon a task is due. The point of the "próximas 24 horas" list is
+/// ordering the next few hours, so minutes matter near the front of it.
+String _textoProxima(DateTime programada, DateTime ahora) {
+  final falta = programada.difference(ahora);
+  if (falta.inMinutes <= 0) return 'Ahora';
+  if (falta.inMinutes < 60) return 'En ${falta.inMinutes} min';
+  if (falta.inHours < 24) return 'En ${falta.inHours} h';
+  return 'Mañana';
+}
+
+/// One task inside a dashboard sheet.
+///
+/// Replaces a title over four identical grey lines of `"Etiqueta: valor"`,
+/// which held the same facts but gave the eye nothing to land on — reading it
+/// meant reading all of it. Here the date is a block you can scan down a
+/// column, the client is the headline, and who / which team / what state are
+/// chips rather than sentences.
+class _TaskRow extends StatelessWidget {
+  const _TaskRow({
+    required this.task,
+    required this.catalog,
+    required this.accent,
+    required this.onTap,
+    this.note,
+  });
+
+  final TaskModel task;
+  final CatalogProvider catalog;
+  final Color accent;
+  final VoidCallback onTap;
+
+  /// The one thing this particular list adds — how late, or how soon.
+  final String? note;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final when = task.scheduledDateTime;
+    final estado = catalog.statusName(task.statusId);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(_kInnerRadius),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: colors.background,
+            borderRadius: BorderRadius.circular(_kInnerRadius),
+            border: Border.all(color: colors.divider),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _DateBlock(date: when, accent: accent),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        task.clientName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${catalog.taskTypeName(task.taskTypeId)} · '
+                        '${AppDateUtils.formatTime12h(when)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: colors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      if (note != null) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          note!,
+                          style: TextStyle(
+                            color: accent,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          _MiniChip(
+                            icon: LucideIcons.user,
+                            label: catalog.userName(task.assignedUserId),
+                          ),
+                          _MiniChip(
+                            icon: LucideIcons.users,
+                            label: catalog.groupName(task.groupId),
+                          ),
+                          _MiniChip(
+                            label: estado,
+                            color: taskStatusColor(colors, estado),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Icon(
+                  LucideIcons.chevronRight,
+                  size: 18,
+                  color: colors.textSecondary,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Day over month, so a column of these can be scanned without being read.
+class _DateBlock extends StatelessWidget {
+  const _DateBlock({required this.date, required this.accent});
+
+  final DateTime date;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 42,
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '${date.day}',
+            style: TextStyle(
+              color: accent,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              height: 1.1,
+            ),
+          ),
+          Text(
+            _kMesesCortos[date.month - 1],
+            style: TextStyle(
+              color: accent.withValues(alpha: 0.85),
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A fact about the task, sized to be read at a glance and skipped just as
+/// easily.
+class _MiniChip extends StatelessWidget {
+  const _MiniChip({required this.label, this.icon, this.color});
+
+  final String label;
+  final IconData? icon;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final tint = color ?? colors.textSecondary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: tint.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 11, color: tint),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            style: TextStyle(
+              color: tint,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The two task sheets, rebuilt from [liveTasks] instead of from a list
+/// frozen when they opened.
+///
+/// Staying open across an edit is the whole point: the detail dialog can
+/// complete, reschedule or edit a task, and working through ten overdue
+/// tasks should not mean reopening the list ten times. Because the list is
+/// live, a row that stops qualifying simply leaves — completing a task makes
+/// it disappear from "vencidas" on the spot, and the count in the title
+/// follows.
+///
+/// This costs no extra reads. The dashboard behind the sheet keeps its
+/// Firestore subscription open, so these are the same documents it was
+/// already receiving; opening a second subscription here would re-read every
+/// one of them for nothing.
 void _showOverdueTasksSheet(
   BuildContext context,
   CatalogProvider catalog,
-  List<TaskModel> overdueTasks,
+  ValueListenable<_LiveTasks> liveTasks,
 ) {
   showResponsiveSheet(
     context,
     desktopMaxWidth: 480,
     scrollable: false,
-    contentBuilder: (sheetContext) => _DetailSheet(
-      title: 'Tareas vencidas (${overdueTasks.length})',
-      itemCount: overdueTasks.length,
-      emptyMessage: 'No hay tareas vencidas.',
-      itemBuilder: (context, index) {
-        final task = overdueTasks[index];
-        return _DetailCard(
-          title: task.clientName,
-          color: context.colors.error,
-          lines: [
-            '${AppDateUtils.formatShortDate(task.scheduledDateTime)} · ${task.hour}',
-            'Usuario: ${catalog.userName(task.assignedUserId)}',
-            'Equipo: ${catalog.groupName(task.groupId)}',
-            'Estado: ${catalog.statusName(task.statusId)}',
-          ],
+    contentBuilder: (sheetContext) => ValueListenableBuilder<_LiveTasks>(
+      valueListenable: liveTasks,
+      builder: (_, live, _) {
+        final tasks = live.all;
+        // Recomputed rather than passed in: "vencida" is a judgement against
+        // the clock, so it has to be re-asked, not remembered.
+        final ahora = DateTime.now();
+        final overdue = computeOverdueTasks(tasks, catalog, ahora);
+        return _DetailSheet(
+          title: 'Tareas vencidas (${overdue.length})',
+          itemCount: overdue.length,
+          emptyMessage: 'No hay tareas vencidas.',
+          itemBuilder: (_, index) {
+            final task = overdue[index];
+            return _TaskRow(
+              task: task,
+              catalog: catalog,
+              accent: context.colors.error,
+              note: _textoVencimiento(task.scheduledDateTime, ahora),
+              onTap: () => showTaskDetailDialog(context, task),
+            );
+          },
         );
       },
     ),
@@ -1908,27 +2408,78 @@ void _showOverdueTasksSheet(
 void _showUpcomingTasksSheet(
   BuildContext context,
   CatalogProvider catalog,
-  List<TaskModel> upcomingTasks,
+  ValueListenable<_LiveTasks> liveTasks,
 ) {
   showResponsiveSheet(
     context,
     desktopMaxWidth: 480,
     scrollable: false,
-    contentBuilder: (sheetContext) => _DetailSheet(
-      title: 'Próximas 24 horas (${upcomingTasks.length})',
-      itemCount: upcomingTasks.length,
-      emptyMessage: 'No hay tareas programadas en las próximas 24 horas.',
-      itemBuilder: (context, index) {
-        final task = upcomingTasks[index];
-        return _DetailCard(
-          title: task.clientName,
-          color: context.colors.statusPending,
-          lines: [
-            '${AppDateUtils.formatShortDate(task.scheduledDateTime)} · ${task.hour}',
-            'Usuario: ${catalog.userName(task.assignedUserId)}',
-            'Equipo: ${catalog.groupName(task.groupId)}',
-            'Tipo: ${catalog.taskTypeName(task.taskTypeId)}',
-          ],
+    contentBuilder: (sheetContext) => ValueListenableBuilder<_LiveTasks>(
+      valueListenable: liveTasks,
+      builder: (_, live, _) {
+        final tasks = live.all;
+        final ahora = DateTime.now();
+        final upcoming = computeUpcomingTasks(tasks, ahora);
+        return _DetailSheet(
+          title: 'Próximas 24 horas (${upcoming.length})',
+          itemCount: upcoming.length,
+          emptyMessage: 'No hay tareas programadas en las próximas 24 horas.',
+          itemBuilder: (_, index) {
+            final task = upcoming[index];
+            return _TaskRow(
+              task: task,
+              catalog: catalog,
+              accent: context.colors.statusPending,
+              note: _textoProxima(task.scheduledDateTime, ahora),
+              onTap: () => showTaskDetailDialog(context, task),
+            );
+          },
+        );
+      },
+    ),
+  );
+}
+
+/// The list behind a KPI card.
+///
+/// Those cards carried a "Ver tareas →" label with nothing behind it, on a
+/// card that lit up on hover — it looked clickable, promised a destination
+/// and delivered nothing. Rather than delete the promise, this keeps it.
+///
+/// Reads [_LiveTasks.historical], the exact slice the card counted, so the
+/// number on the card and the length of this list cannot disagree.
+void _showTasksByStatusSheet(
+  BuildContext context,
+  CatalogProvider catalog,
+  ValueListenable<_LiveTasks> liveTasks, {
+  required String title,
+  required String emptyMessage,
+  required Color accent,
+  String? statusId,
+}) {
+  showResponsiveSheet(
+    context,
+    desktopMaxWidth: 480,
+    scrollable: false,
+    contentBuilder: (_) => ValueListenableBuilder<_LiveTasks>(
+      valueListenable: liveTasks,
+      builder: (_, live, _) {
+        final tasks = statusId == null
+            ? live.historical
+            : live.historical.where((t) => t.statusId == statusId).toList();
+        return _DetailSheet(
+          title: '$title (${tasks.length})',
+          itemCount: tasks.length,
+          emptyMessage: emptyMessage,
+          itemBuilder: (_, index) {
+            final task = tasks[index];
+            return _TaskRow(
+              task: task,
+              catalog: catalog,
+              accent: accent,
+              onTap: () => showTaskDetailDialog(context, task),
+            );
+          },
         );
       },
     ),
@@ -1956,7 +2507,8 @@ void _showInactiveUsersSheet(
     contentBuilder: (sheetContext) => _DetailSheet(
       title: 'Usuarios sin actividad (${inactiveUsers.length})',
       itemCount: inactiveUsers.length,
-      emptyMessage: 'Todos los usuarios completaron tareas en los últimos 7 días.',
+      emptyMessage:
+          'Todos los usuarios completaron tareas en los últimos 7 días.',
       itemBuilder: (context, index) {
         final stat = inactiveUsers[index];
         return _DetailCard(
@@ -2012,7 +2564,10 @@ class _DetailSheet extends StatelessWidget {
                         child: Text(
                           emptyMessage,
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: colors.textSecondary, fontSize: 13),
+                          style: TextStyle(
+                            color: colors.textSecondary,
+                            fontSize: 13,
+                          ),
                         ),
                       )
                     : ListView.separated(
@@ -2030,48 +2585,68 @@ class _DetailSheet extends StatelessWidget {
 }
 
 class _DetailCard extends StatelessWidget {
-  const _DetailCard({required this.title, required this.color, required this.lines});
+  const _DetailCard({
+    required this.title,
+    required this.color,
+    required this.lines,
+  });
 
   final String title;
   final Color color;
+
+  /// Plain label/value lines. The task sheets outgrew this and moved to
+  /// [_TaskRow]; what is left is the inactive-users list, which lists people
+  /// and has nothing to open.
   final List<String> lines;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return Container(
+    final decoration = BoxDecoration(
+      color: colors.background,
+      borderRadius: BorderRadius.circular(_kInnerRadius),
+      border: Border.all(color: color.withValues(alpha: 0.35)),
+    );
+
+    final content = Padding(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colors.background,
-        borderRadius: BorderRadius.circular(_kInnerRadius),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: colors.textPrimary,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                for (final line in lines)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      line,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
-          const SizedBox(height: 6),
-          for (final line in lines)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                line,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: colors.textSecondary, fontSize: 12),
-              ),
-            ),
         ],
       ),
     );
+
+    return DecoratedBox(decoration: decoration, child: content);
   }
 }
