@@ -103,7 +103,6 @@ class _ReportsPageState extends State<ReportsPage>
               .where((t) => isTaskVisibleToUser(
                     task: t,
                     user: currentUser,
-                    catalog: catalog,
                   ))
               .toList();
 

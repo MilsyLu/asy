@@ -132,7 +132,6 @@ class _HomePageState extends State<HomePage> {
                     .where((t) => isTaskVisibleToUser(
                           task: t,
                           user: currentUser,
-                          catalog: catalog,
                         ))
                     .toList();
 

@@ -142,7 +142,7 @@ class _DashboardPageState extends State<DashboardPage> {
           }
 
           final allTasks = (snapshot.data ?? [])
-              .where((t) => isTaskVisibleToUser(task: t, user: currentUser, catalog: catalog))
+              .where((t) => isTaskVisibleToUser(task: t, user: currentUser))
               .toList();
 
           if (allTasks.isEmpty) {

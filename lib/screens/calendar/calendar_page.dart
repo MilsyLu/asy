@@ -8,7 +8,6 @@ import '../../core/utils/date_utils.dart';
 import '../../core/utils/task_visibility.dart';
 import '../../models/task_model.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/catalog_provider.dart';
 import '../../services/task_repository.dart';
 import '../../widgets/loading_indicator.dart';
 import '../home/add_edit_task_page.dart';
@@ -49,7 +48,6 @@ class _CalendarPageState extends State<CalendarPage> {
   @override
   Widget build(BuildContext context) {
     final repo = context.read<TaskRepository>();
-    final catalog = context.watch<CatalogProvider>();
     final auth = context.watch<AuthProvider>();
     final currentUser = auth.appUser;
     final colors = context.colors;
@@ -98,7 +96,6 @@ class _CalendarPageState extends State<CalendarPage> {
               .where((t) => isTaskVisibleToUser(
                     task: t,
                     user: currentUser,
-                    catalog: catalog,
                   ))
               .toList();
 

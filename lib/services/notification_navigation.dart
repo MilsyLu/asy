@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../core/utils/snackbar_utils.dart';
 import '../core/utils/task_visibility.dart';
 import '../providers/auth_provider.dart';
-import '../providers/catalog_provider.dart';
 import '../screens/home/widgets/task_detail_dialog.dart';
 import '../screens/support_cases/support_case_detail_view.dart';
 import 'support_case_repository.dart';
@@ -37,14 +36,13 @@ Future<void> openTaskFromNotification(String? taskId) async {
   final user = auth.appUser;
   if (user == null) return;
 
-  final catalog = context.read<CatalogProvider>();
   final taskRepo = context.read<TaskRepository>();
   final task = await taskRepo.watchTask(taskId).first;
   if (!context.mounted) return;
 
   if (task == null ||
       task.isDeleted ||
-      !isTaskVisibleToUser(task: task, user: user, catalog: catalog)) {
+      !isTaskVisibleToUser(task: task, user: user)) {
     SnackbarUtils.showError(context, 'Esta tarea ya no está disponible.');
     return;
   }

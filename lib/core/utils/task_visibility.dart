@@ -1,6 +1,5 @@
 import '../../models/app_user.dart';
 import '../../models/task_model.dart';
-import '../../providers/catalog_provider.dart';
 
 /// Centralizes the "tasks belong to a group, and may be shared across
 /// groups" privacy rule. This is the single source of truth for
@@ -22,7 +21,6 @@ import '../../providers/catalog_provider.dart';
 bool isTaskVisibleToUser({
   required TaskModel task,
   required AppUser user,
-  required CatalogProvider catalog,
 }) {
   if (user.isSuperAdmin) return true;
 

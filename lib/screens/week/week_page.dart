@@ -125,7 +125,6 @@ class _WeekPageState extends State<WeekPage> {
               .where((t) => isTaskVisibleToUser(
                     task: t,
                     user: currentUser,
-                    catalog: catalog,
                   ))
               .toList();
 
