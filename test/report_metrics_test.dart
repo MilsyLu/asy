@@ -11,13 +11,34 @@ import 'package:taskflow_executive/models/task_model.dart';
 /// is, which tasks are about to come due, who has the best streak. A mistake
 /// here never throws: it just prints a wrong number, confidently, forever.
 /// That makes them worth pinning down more than most code that *can* crash.
+/// `mostAttendedClient` needs the catalog only to know which status means
+/// "cancelada" — everything else it does is pure counting.
+class _Catalogo implements TaskCatalog {
+  @override
+  String? get completedStatusId => 'completada';
+  @override
+  String? get pendingStatusId => 'pendiente';
+  @override
+  String? get rescheduledStatusId => 'reprogramada';
+  @override
+  String? get cancelledStatusId => 'cancelada';
+  @override
+  String statusName(String? id) => id ?? '-';
+  @override
+  AppUser? userById(String? id) => null;
+}
+
 void main() {
+  final catalogo = _Catalogo();
+
   TaskModel tarea({
     String id = 't',
     String cliente = 'Cliente',
     String telefono = '300',
     String fecha = '2026-08-15',
     String hora = '10:00',
+    String estado = 'pendiente',
+    String? clienteId,
   }) =>
       TaskModel(
         id: id,
@@ -25,7 +46,8 @@ void main() {
         assignedUserId: 'u',
         clientName: cliente,
         clientPhone: telefono,
-        statusId: 's',
+        clientId: clienteId,
+        statusId: estado,
         date: fecha,
       );
 
@@ -35,7 +57,7 @@ void main() {
         tarea(cliente: 'Agua Viva'),
         tarea(cliente: 'Mittsu'),
         tarea(cliente: 'Agua Viva'),
-      ]);
+      ], catalogo);
       expect(r?.name, 'Agua Viva');
       expect(r?.count, 2);
     });
@@ -47,13 +69,46 @@ void main() {
         tarea(cliente: 'Copias', telefono: '111'),
         tarea(cliente: 'Copias', telefono: '222'),
         tarea(cliente: 'Copias', telefono: '222'),
-      ]);
+      ], catalogo);
       expect(r?.phone, '222');
       expect(r?.count, 2);
     });
 
     test('sin tareas devuelve null en vez de romper', () {
-      expect(mostAttendedClient([]), isNull);
+      expect(mostAttendedClient([], catalogo), isNull);
+    });
+
+    test('agrupa por clientId aunque el nombre haya cambiado', () {
+      // El caso que rompía el conteo: al mismo cliente le corrigen el nombre
+      // o le cambian el teléfono, y pasaba a contar como dos clientes
+      // distintos, con lo que ninguna de las dos mitades ganaba.
+      final r = mostAttendedClient([
+        tarea(cliente: 'Comedere', telefono: '300', clienteId: 'c1'),
+        tarea(cliente: 'Comedere SAS', telefono: '311', clienteId: 'c1'),
+        tarea(cliente: 'Otro', telefono: '999', clienteId: 'c2'),
+      ], catalogo);
+      expect(r?.count, 2);
+    });
+
+    test('no cuenta las canceladas', () {
+      // Una visita cancelada no es atención que el cliente haya recibido.
+      final r = mostAttendedClient([
+        tarea(cliente: 'Agua Viva', clienteId: 'c1'),
+        tarea(cliente: 'Agua Viva', clienteId: 'c1', estado: 'cancelada'),
+        tarea(cliente: 'Mittsu', clienteId: 'c2'),
+        tarea(cliente: 'Mittsu', clienteId: 'c2'),
+      ], catalogo);
+      expect(r?.name, 'Mittsu');
+      expect(r?.count, 2);
+    });
+
+    test('devuelve null si todas las tareas están canceladas', () {
+      expect(
+        mostAttendedClient([
+          tarea(cliente: 'Agua Viva', estado: 'cancelada'),
+        ], catalogo),
+        isNull,
+      );
     });
   });
 

@@ -19,6 +19,8 @@ class _Catalogo implements TaskCatalog {
   @override
   String? get rescheduledStatusId => 'reprogramada';
   @override
+  String? get cancelledStatusId => 'cancelada';
+  @override
   String statusName(String? id) => id ?? '-';
   @override
   AppUser? userById(String? id) => null;
@@ -56,6 +58,17 @@ void main() {
       AppUser(id: id, email: '$id@x.com', name: id, role: AppRoles.trabajadorNormal);
 
   group('computeOverdueTasks', () {
+    test('no cuenta las canceladas por muy pasadas que estén', () {
+      // Una tarea cancelada no puede estar "vencida": nadie la está
+      // esperando. Contarlas hacía que el tablero mandara a perseguir
+      // trabajo que ya se había dado de baja.
+      final r = computeOverdueTasks([
+        tarea(id: 'cancelada', hora: '08:00', estado: 'cancelada'),
+        tarea(id: 'pendiente', hora: '08:00'),
+      ], _Catalogo(), ahora);
+      expect(r.map((t) => t.id), ['pendiente']);
+    });
+
     test('incluye lo que ya pasó y sigue sin completarse', () {
       final r = computeOverdueTasks([tarea(id: 'vieja', hora: '08:00')], _Catalogo(), ahora);
       expect(r.map((t) => t.id), ['vieja']);

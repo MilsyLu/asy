@@ -185,6 +185,7 @@ class CatalogProvider extends ChangeNotifier implements TaskCatalog {
   String? get rescheduledStatusId =>
       statusByName(AppStatusNames.reprogramada)?.id;
 
+  @override
   String? get cancelledStatusId => statusByName(AppStatusNames.cancelada)?.id;
 
   @override

@@ -16,6 +16,7 @@ abstract class TaskCatalog {
   String? get completedStatusId;
   String? get pendingStatusId;
   String? get rescheduledStatusId;
+  String? get cancelledStatusId;
 
   /// Display name for a status id, or '-' when unknown.
   String statusName(String? id);
@@ -36,25 +37,40 @@ class TaskKpis {
     required this.completed,
     required this.pending,
     required this.rescheduled,
+    required this.cancelled,
   });
 
   final int total;
   final int completed;
   final int pending;
   final int rescheduled;
+  final int cancelled;
 
-  int get compliancePercent => total == 0 ? 0 : (completed * 100 / total).round();
+  /// Tasks that could actually have been fulfilled — everything except the
+  /// ones somebody decided not to do.
+  int get countable => total - cancelled;
+
+  /// Completed over what was actually there to complete.
+  ///
+  /// Cancelled tasks used to sit in the denominator, so cancelling one cost a
+  /// team exactly as much as letting it lapse. That is backwards on both
+  /// counts: a cancellation is a decision, not a failure, and charging for it
+  /// rewards the team that quietly leaves a task to go overdue instead.
+  int get compliancePercent =>
+      countable <= 0 ? 0 : (completed * 100 / countable).round();
 }
 
 TaskKpis computeTaskKpis(List<TaskModel> tasks, TaskCatalog catalog) {
   final completedId = catalog.completedStatusId;
   final pendingId = catalog.pendingStatusId;
   final rescheduledId = catalog.rescheduledStatusId;
+  final cancelledId = catalog.cancelledStatusId;
   return TaskKpis(
     total: tasks.length,
     completed: tasks.where((t) => t.statusId == completedId).length,
     pending: tasks.where((t) => t.statusId == pendingId).length,
     rescheduled: tasks.where((t) => t.statusId == rescheduledId).length,
+    cancelled: tasks.where((t) => t.statusId == cancelledId).length,
   );
 }
 
@@ -81,23 +97,38 @@ class GroupCompliance {
     required this.groupId,
     required this.assigned,
     required this.completed,
+    required this.cancelled,
   });
 
   final String? groupId;
+
+  /// Everything handed to the team, cancellations included — the honest
+  /// workload figure.
   final int assigned;
   final int completed;
+  final int cancelled;
 
-  int get percent => assigned == 0 ? 0 : (completed * 100 / assigned).round();
+  /// Same rule as [TaskKpis.compliancePercent]: cancelled work leaves the
+  /// denominator, so a team is never penalised for cancelling.
+  int get percent {
+    final countable = assigned - cancelled;
+    return countable <= 0 ? 0 : (completed * 100 / countable).round();
+  }
 }
 
 List<GroupCompliance> computeGroupCompliance(List<TaskModel> tasks, TaskCatalog catalog) {
   final completedId = catalog.completedStatusId;
+  final cancelledId = catalog.cancelledStatusId;
   final assigned = <String?, int>{};
   final completed = <String?, int>{};
+  final cancelled = <String?, int>{};
   for (final t in tasks) {
     assigned[t.groupId] = (assigned[t.groupId] ?? 0) + 1;
     if (t.statusId == completedId) {
       completed[t.groupId] = (completed[t.groupId] ?? 0) + 1;
+    }
+    if (t.statusId == cancelledId) {
+      cancelled[t.groupId] = (cancelled[t.groupId] ?? 0) + 1;
     }
   }
   return assigned.entries
@@ -105,6 +136,7 @@ List<GroupCompliance> computeGroupCompliance(List<TaskModel> tasks, TaskCatalog 
             groupId: e.key,
             assigned: e.value,
             completed: completed[e.key] ?? 0,
+            cancelled: cancelled[e.key] ?? 0,
           ))
       .toList();
 }
@@ -116,14 +148,30 @@ GroupCompliance? bestGroupCompliance(List<GroupCompliance> groups) {
 
 /// The client (name+phone) with the most tasks in [tasks] (Sprint 6.2 Part
 /// 5, "⭐ Cliente más atendido").
-({String name, String phone, int count})? mostAttendedClient(List<TaskModel> tasks) {
+({String name, String phone, int count})? mostAttendedClient(
+  List<TaskModel> tasks,
+  TaskCatalog catalog,
+) {
   if (tasks.isEmpty) return null;
+  final cancelledId = catalog.cancelledStatusId;
   final counts = <String, ({String name, String phone, int count})>{};
   for (final t in tasks) {
-    final key = '${t.clientName}|${t.clientPhone}';
+    // A cancelled visit is not attention the client received.
+    if (t.statusId == cancelledId) continue;
+    // Group by the real client record when the task has one, exactly as
+    // `top_clients_report_tab.dart` does. Keying on the typed name and phone
+    // alone splits a client in two the moment either is corrected — and left
+    // the Dashboard and the Reports screen free to name different "top"
+    // clients from the same data.
+    final key = t.clientId ?? '${t.clientName}|${t.clientPhone}';
     final existing = counts[key];
-    counts[key] = (name: t.clientName, phone: t.clientPhone, count: (existing?.count ?? 0) + 1);
+    counts[key] = (
+      name: t.clientName,
+      phone: t.clientPhone,
+      count: (existing?.count ?? 0) + 1,
+    );
   }
+  if (counts.isEmpty) return null;
   return counts.values.reduce((a, b) => b.count > a.count ? b : a);
 }
 
@@ -179,8 +227,15 @@ List<TaskModel> computeOverdueTasks(
   DateTime now,
 ) {
   final completedId = catalog.completedStatusId;
+  final cancelledId = catalog.cancelledStatusId;
+  // A cancelled task cannot be late: nobody is waiting on it. Leaving them in
+  // meant the "tareas vencidas" count asked somebody to chase work that had
+  // already been called off.
   final overdue = tasks
-      .where((t) => t.statusId != completedId && t.scheduledDateTime.isBefore(now))
+      .where((t) =>
+          t.statusId != completedId &&
+          t.statusId != cancelledId &&
+          t.scheduledDateTime.isBefore(now))
       .toList()
     ..sort((a, b) => a.scheduledDateTime.compareTo(b.scheduledDateTime));
   return overdue;

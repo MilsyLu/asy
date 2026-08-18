@@ -31,8 +31,13 @@ const double _kInnerRadius = AppSpacing.radiusMd;
 /// Compact row height used inside consolidated mobile cards.
 const double _kRowMinHeight = 40;
 
-// Sprint 14: desktop header range labels.
-// Actual query wiring is deferred — stream always uses 30 days this sprint.
+/// Ranges offered by the header selector.
+///
+/// These used to be labels and nothing more: picking one changed the text and
+/// left every number on screen exactly as it was, because the query was
+/// hard-wired to 30 days. That is worse than a disabled control — the screen
+/// claimed to show the year while showing the month, and there was no way to
+/// tell from looking. They now drive the query (see [_rangeFor]).
 const _kRangeLabels = [
   'Últimos 7 días',
   'Últimos 30 días',
@@ -40,7 +45,8 @@ const _kRangeLabels = [
   'Este año',
   'Personalizado',
 ];
-const _kDefaultRangeIndex = 1; // "Últimos 30 días" — matches _rangeDays = 30
+const _kDefaultRangeIndex = 1; // "Últimos 30 días"
+const _kCustomRangeIndex = 4;
 
 /// Computed metrics bundle shared across the three layout builders so each
 /// receives a typed snapshot instead of a long parameter list.
@@ -88,31 +94,84 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  static const _rangeDays = 30;
-
-  late final DateTime _start;
-  late final DateTime _end;
-  late final DateTime _queryEnd;
-  late final Stream<List<TaskModel>> _tasksStream;
-  late final Stopwatch _loadStopwatch;
+  late DateTime _start;
+  late DateTime _end;
+  late DateTime _queryEnd;
+  late Stream<List<TaskModel>> _tasksStream;
+  late Stopwatch _loadStopwatch;
   bool _loadLogged = false;
 
-  // Visual-only state for the desktop header dropdown (Sprint 14).
-  // Stream query wiring is deferred to a future sprint.
   int _rangeIndex = _kDefaultRangeIndex;
 
   @override
   void initState() {
     super.initState();
-    final repo = context.read<TaskRepository>();
-    final now = DateTime.now();
-    _end = DateTime(now.year, now.month, now.day);
-    _start = _end.subtract(const Duration(days: _rangeDays));
-    // One extra day so "Próximas 24 horas" sees tomorrow without a second stream.
-    _queryEnd = _end.add(const Duration(days: 1));
-    _loadStopwatch = Stopwatch()..start();
-    _tasksStream = repo.watchTasksInRange(_start, _queryEnd);
+    _applyRange(_kDefaultRangeIndex);
   }
+
+  /// First and last day covered by [index], both inclusive.
+  static ({DateTime start, DateTime end}) _rangeFor(int index, DateTime today) {
+    switch (index) {
+      case 0:
+        return (start: today.subtract(const Duration(days: 7)), end: today);
+      case 2:
+        return (start: DateTime(today.year, today.month, 1), end: today);
+      case 3:
+        return (start: DateTime(today.year, 1, 1), end: today);
+      default:
+        return (start: today.subtract(const Duration(days: 30)), end: today);
+    }
+  }
+
+  /// Points the screen at a new period and re-opens the query behind it.
+  ///
+  /// Everything downstream already reads [_start]/[_end] — the KPIs, the
+  /// trend, the charts — so re-running the stream is the whole change.
+  void _applyRange(int index, {DateTimeRange? custom}) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    if (custom != null) {
+      _start = DateTime(custom.start.year, custom.start.month, custom.start.day);
+      _end = DateTime(custom.end.year, custom.end.month, custom.end.day);
+    } else {
+      final range = _rangeFor(index, today);
+      _start = range.start;
+      _end = range.end;
+    }
+
+    _rangeIndex = index;
+    // One extra day so "Próximas 24 horas" sees tomorrow without a second
+    // stream. On a custom range that ends in the past there is nothing ahead
+    // to show, which is the honest answer for a window that already closed.
+    _queryEnd = _end.add(const Duration(days: 1));
+    _loadLogged = false;
+    _loadStopwatch = Stopwatch()..start();
+    _tasksStream = context.read<TaskRepository>().watchTasksInRange(_start, _queryEnd);
+  }
+
+  Future<void> _onRangeChanged(int index) async {
+    if (index == _kCustomRangeIndex) {
+      final now = DateTime.now();
+      final picked = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(now.year - 3),
+        lastDate: DateTime(now.year, now.month, now.day),
+        initialDateRange: DateTimeRange(start: _start, end: _end),
+        helpText: 'Elige el periodo',
+        saveText: 'Aplicar',
+      );
+      if (picked == null || !mounted) return;
+      setState(() => _applyRange(_kCustomRangeIndex, custom: picked));
+      return;
+    }
+    setState(() => _applyRange(index));
+  }
+
+  /// What the header and the empty state call the current period.
+  String get _rangeLabel => _rangeIndex == _kCustomRangeIndex
+      ? '${AppDateUtils.formatShortDate(_start)} — ${AppDateUtils.formatShortDate(_end)}'
+      : _kRangeLabels[_rangeIndex];
 
   @override
   Widget build(BuildContext context) {
@@ -146,8 +205,9 @@ class _DashboardPageState extends State<DashboardPage> {
               .toList();
 
           if (allTasks.isEmpty) {
-            return const EmptyState(
-              message: 'No hay tareas registradas en los últimos 30 días.',
+            return EmptyState(
+              message: 'No hay tareas registradas en el periodo: '
+                  '${_rangeLabel.toLowerCase()}.',
               icon: LucideIcons.layoutDashboard,
             );
           }
@@ -164,7 +224,7 @@ class _DashboardPageState extends State<DashboardPage> {
           final groupCompliance = computeGroupCompliance(historicalTasks, catalog)
             ..sort((a, b) => b.percent.compareTo(a.percent));
           final bestGroup = bestGroupCompliance(groupCompliance);
-          final topClient = mostAttendedClient(historicalTasks);
+          final topClient = mostAttendedClient(historicalTasks, catalog);
           final streakUser = bestActiveStreak(catalog.users);
           final statusDistribution = computeStatusDistribution(historicalTasks, catalog);
           final dailyTrend =
@@ -204,7 +264,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
-        _HeroSummaryCard(rangeDays: _rangeDays, kpis: s.kpis),
+        _HeroSummaryCard(rangeLabel: _rangeLabel, kpis: s.kpis),
         const SizedBox(height: _kSectionGap),
         _SectionTitle('⚠️ Atención requerida'),
         const SizedBox(height: _kCardGap),
@@ -432,7 +492,7 @@ class _DashboardPageState extends State<DashboardPage> {
           _DesktopHeader(
             user: user,
             rangeIndex: _rangeIndex,
-            onRangeChanged: (i) => setState(() => _rangeIndex = i),
+            onRangeChanged: _onRangeChanged,
           ),
           const SizedBox(height: AppSpacing.md),
 
@@ -758,7 +818,7 @@ class _DesktopHeader extends StatelessWidget {
             ],
           ),
         ),
-        // Range selector (visual-only; query wiring deferred to future sprint)
+        // Range selector — drives the query (see _DashboardPageState._applyRange)
         Container(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md,
@@ -777,16 +837,8 @@ class _DesktopHeader extends StatelessWidget {
               style: TextStyle(color: colors.textPrimary, fontSize: 14),
               dropdownColor: colors.surface,
               items: [
-                for (var i = 0; i < _kRangeLabels.length - 1; i++)
+                for (var i = 0; i < _kRangeLabels.length; i++)
                   DropdownMenuItem(value: i, child: Text(_kRangeLabels[i])),
-                DropdownMenuItem(
-                  value: 4,
-                  enabled: false,
-                  child: Text(
-                    _kRangeLabels[4],
-                    style: TextStyle(color: colors.textSecondary),
-                  ),
-                ),
               ],
             ),
           ),
@@ -1271,9 +1323,9 @@ class _DashboardCard extends StatelessWidget {
 
 /// Mobile hero card (Sprint 6.4 Part 1). Desktop/tablet use _KpiCard rows instead.
 class _HeroSummaryCard extends StatelessWidget {
-  const _HeroSummaryCard({required this.rangeDays, required this.kpis});
+  const _HeroSummaryCard({required this.rangeLabel, required this.kpis});
 
-  final int rangeDays;
+  final String rangeLabel;
   final TaskKpis kpis;
 
   @override
@@ -1290,7 +1342,7 @@ class _HeroSummaryCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Resumen · últimos $rangeDays días',
+            'Resumen · $rangeLabel',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(

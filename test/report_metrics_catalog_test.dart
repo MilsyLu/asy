@@ -20,6 +20,8 @@ class _CatalogoFalso implements TaskCatalog {
   String? get pendingStatusId => 'pendiente';
   @override
   String? get rescheduledStatusId => 'reprogramada';
+  @override
+  String? get cancelledStatusId => 'cancelada';
 
   @override
   String statusName(String? id) => id ?? '-';
@@ -41,6 +43,8 @@ class _CatalogoVacio extends _CatalogoFalso {
   String? get pendingStatusId => null;
   @override
   String? get rescheduledStatusId => null;
+  @override
+  String? get cancelledStatusId => null;
 }
 
 void main() {
@@ -62,6 +66,30 @@ void main() {
       );
 
   group('computeTaskKpis', () {
+    test('el cumplimiento no castiga las canceladas', () {
+      // 2 completadas de 3 que se podían hacer = 67%, no 50%.
+      // Antes la cancelada pesaba en el denominador, así que cancelar salía
+      // igual de caro que dejar vencer — y encima premiaba al equipo que
+      // calladamente deja la tarea sin tocar.
+      final k = computeTaskKpis([
+        tarea(estado: 'completada'),
+        tarea(estado: 'completada'),
+        tarea(estado: 'pendiente'),
+        tarea(estado: 'cancelada'),
+      ], _CatalogoFalso());
+
+      expect(k.total, 4, reason: 'el total sigue mostrando todo el trabajo');
+      expect(k.cancelled, 1);
+      expect(k.countable, 3);
+      expect(k.compliancePercent, 67);
+    });
+
+    test('todas canceladas no da división por cero', () {
+      final k = computeTaskKpis([tarea(estado: 'cancelada')], _CatalogoFalso());
+      expect(k.countable, 0);
+      expect(k.compliancePercent, 0);
+    });
+
     test('cuenta cada estado por separado', () {
       final k = computeTaskKpis([
         tarea(estado: 'completada'),
@@ -101,6 +129,19 @@ void main() {
   });
 
   group('computeGroupCompliance', () {
+    test('el equipo tampoco paga por cancelar', () {
+      final r = computeGroupCompliance([
+        tarea(grupo: 'g1', estado: 'completada'),
+        tarea(grupo: 'g1', estado: 'pendiente'),
+        tarea(grupo: 'g1', estado: 'cancelada'),
+      ], _CatalogoFalso());
+
+      final g1 = r.firstWhere((g) => g.groupId == 'g1');
+      expect(g1.assigned, 3, reason: 'la carga real del equipo no se esconde');
+      expect(g1.cancelled, 1);
+      expect(g1.percent, 50, reason: '1 de 2 que se podían hacer');
+    });
+
     test('separa el conteo por equipo', () {
       final r = computeGroupCompliance([
         tarea(grupo: 'A', estado: 'completada'),
