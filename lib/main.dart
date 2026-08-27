@@ -7,6 +7,7 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'app.dart';
 import 'firebase_options.dart';
+import 'services/app_check_service.dart';
 import 'services/notification_service.dart';
 
 Future<void> main() async {
@@ -17,6 +18,11 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Right after initializeApp and before anything reads Firestore, so the
+  // token is attached to the very first request instead of the app making a
+  // handful of unattested ones on the way up.
+  await AppCheckService.activate();
 
   // Enable offline cache (works for mobile, desktop and web).
   FirebaseFirestore.instance.settings = const Settings(
