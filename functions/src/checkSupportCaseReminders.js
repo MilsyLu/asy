@@ -18,7 +18,7 @@ function dayDiff(dateKeyA, dateKeyB) {
   return Math.round((a - b) / 86400000);
 }
 
-const OPEN_STATUSES = ["Nuevo", "En proceso", "Esperando cliente"];
+const { OPEN_STATUSES } = require("./supportCaseStatus");
 const THRESHOLDS = [5, 10, 15];
 const THRESHOLD_META = {
   5: { emoji: "🟠", label: "dar seguimiento" },

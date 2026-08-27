@@ -1,6 +1,7 @@
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { getFirestore, Timestamp } = require("firebase-admin/firestore");
 const { sendNotificationToUser } = require("./notifications");
+const { isOpen } = require("./supportCaseStatus");
 
 /**
  * Runs every minute. Sends a push notification for every Casos de Soporte
@@ -37,6 +38,24 @@ const checkSupportCaseCustomReminders = onSchedule("every 1 minutes", async () =
         const c = doc.data();
         const { reminderSetBy, reminderNote, clientName, caseNumber } = c;
         const caseLabel = `CS-${String(caseNumber || 0).padStart(4, "0")}`;
+
+        // Un caso ya resuelto no necesita que le recuerden nada. El
+        // recordatorio se marca como consumido igual, para que no se vuelva a
+        // leer cada minuto para siempre — su momento ya pasó, y si el caso se
+        // reabre lo que corresponde es programar uno nuevo.
+        //
+        // Se descarta aquí, al dispararse, y no al resolver el caso: así no
+        // depende de acordarse de limpiarlo en cada sitio desde donde se puede
+        // resolver uno —el desplegable del detalle, arrastrar en el Kanban, o
+        // lo que se agregue después—. Es el mismo punto único por el que pasa
+        // `checkReminders.js` con las tareas completadas.
+        if (!isOpen(c.status)) {
+          await doc.ref.update({ reminderSent: true });
+          console.log(
+            `[SUPPORT_CASE_CUSTOM_REMINDER] ${caseLabel} ya está en "${c.status}" — se descarta`
+          );
+          return;
+        }
 
         if (reminderSetBy) {
           const count = await sendNotificationToUser(reminderSetBy, {
