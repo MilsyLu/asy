@@ -15,7 +15,11 @@ class PriorityBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TaskTypeChip(label: priority, color: SupportCasePriority.colorFor(priority), dense: dense);
+    return TaskTypeChip(
+      label: priority,
+      color: SupportCasePriority.colorFor(priority),
+      dense: dense,
+    );
   }
 }
 
@@ -28,7 +32,11 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TaskTypeChip(label: status, color: SupportCaseStatus.colorFor(status), dense: dense);
+    return TaskTypeChip(
+      label: SupportCaseStatus.labelFor(status),
+      color: SupportCaseStatus.colorFor(status),
+      dense: dense,
+    );
   }
 }
 
@@ -37,7 +45,12 @@ class StatusBadge extends StatelessWidget {
 /// example). [resolved] freezes the wording ("resuelto en X días") instead
 /// of implying it's still open.
 class DaysOpenBadge extends StatelessWidget {
-  const DaysOpenBadge({super.key, required this.days, this.resolved = false, this.dense = false});
+  const DaysOpenBadge({
+    super.key,
+    required this.days,
+    this.resolved = false,
+    this.dense = false,
+  });
 
   final int days;
   final bool resolved;
@@ -50,7 +63,10 @@ class DaysOpenBadge extends StatelessWidget {
         ? 'Resuelto en $days ${days == 1 ? 'día' : 'días'}'
         : '$days ${days == 1 ? 'día' : 'días'}';
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: dense ? 8 : 10, vertical: dense ? 2 : 5),
+      padding: EdgeInsets.symmetric(
+        horizontal: dense ? 8 : 10,
+        vertical: dense ? 2 : 5,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
@@ -66,7 +82,11 @@ class DaysOpenBadge extends StatelessWidget {
           SizedBox(width: dense ? 4 : 6),
           Text(
             label,
-            style: TextStyle(color: color, fontSize: dense ? 11 : 13, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: color,
+              fontSize: dense ? 11 : 13,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),

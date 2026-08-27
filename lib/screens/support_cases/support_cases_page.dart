@@ -64,7 +64,9 @@ extension on _QuickFilter {
     switch (this) {
       case _QuickFilter.todos:
         return true;
-      // "Pendientes" == recién creado, todavía sin tocar (estado "Nuevo").
+      // "Pendientes" == sin empezar. Coincide con la columna del Kanban y con
+      // la insignia; el estado se sigue guardando como "Nuevo" (ver
+      // SupportCaseStatus.labelFor).
       case _QuickFilter.pendientes:
         return c.status == SupportCaseStatus.nuevo;
       case _QuickFilter.enProceso:
@@ -74,13 +76,15 @@ extension on _QuickFilter {
       case _QuickFilter.resueltos:
         return !SupportCaseStatus.isOpen(c.status);
       case _QuickFilter.altaPrioridad:
-        return c.priority == SupportCasePriority.alta || c.priority == SupportCasePriority.critica;
+        return c.priority == SupportCasePriority.alta ||
+            c.priority == SupportCasePriority.critica;
       case _QuickFilter.mas5dias:
         return SupportCaseStatus.isOpen(c.status) && c.daysOpen() > 5;
       case _QuickFilter.mas10dias:
         return SupportCaseStatus.isOpen(c.status) && c.daysOpen() > 10;
       case _QuickFilter.misCasos:
-        return myUid != null && (c.assignedUserId == myUid || c.createdBy == myUid);
+        return myUid != null &&
+            (c.assignedUserId == myUid || c.createdBy == myUid);
     }
   }
 }
@@ -99,6 +103,29 @@ const _priorityRank = {
 /// firestore.rules; only permanent delete is gated). Table view only in v1
 /// (Michel's own reference screenshot is a table too) — Kanban, tag
 /// catalogs and automatic day-threshold push reminders are deferred.
+/// Abre el formulario de caso nuevo.
+///
+/// Libre y no un método de la página porque los botones subieron a la barra
+/// superior del shell, que no tiene acceso al estado de la pantalla. Ninguna
+/// de las dos lo necesitaba: sólo abren una hoja.
+void openSupportCaseCreateForm(BuildContext context) {
+  showResponsiveSheet<void>(
+    context,
+    desktopMaxWidth: 480,
+    contentBuilder: (sheetCtx) =>
+        _NewCaseForm(onCreated: () => Navigator.of(sheetCtx).pop()),
+  );
+}
+
+/// Abre la hoja de gestión de etiquetas. Ver [openSupportCaseCreateForm].
+void openSupportCaseTagsSheet(BuildContext context) {
+  showResponsiveSheet<void>(
+    context,
+    desktopMaxWidth: 420,
+    contentBuilder: (_) => const SupportCaseTagsSheet(),
+  );
+}
+
 class SupportCasesPage extends StatefulWidget {
   const SupportCasesPage({super.key, this.showAppBar = true});
 
@@ -123,7 +150,10 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
     super.dispose();
   }
 
-  List<SupportCaseModel> _applyFiltersAndSort(List<SupportCaseModel> all, String? myUid) {
+  List<SupportCaseModel> _applyFiltersAndSort(
+    List<SupportCaseModel> all,
+    String? myUid,
+  ) {
     final q = _query.trim().toLowerCase();
     var result = all.where((c) => _filter.matches(c, myUid)).toList();
     if (_tagFilter != null) {
@@ -149,7 +179,10 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
         break;
       case _SortBy.prioridad:
         result.sort(
-            (a, b) => (_priorityRank[b.priority] ?? -1).compareTo(_priorityRank[a.priority] ?? -1));
+          (a, b) => (_priorityRank[b.priority] ?? -1).compareTo(
+            _priorityRank[a.priority] ?? -1,
+          ),
+        );
         break;
       case _SortBy.dias:
         result.sort((a, b) => b.daysOpen().compareTo(a.daysOpen()));
@@ -158,26 +191,19 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
     return result;
   }
 
-  void _openCreateForm(BuildContext context) {
-    showResponsiveSheet<void>(
-      context,
-      desktopMaxWidth: 480,
-      contentBuilder: (sheetCtx) => _NewCaseForm(onCreated: () => Navigator.of(sheetCtx).pop()),
-    );
-  }
+  void _openCreateForm(BuildContext context) =>
+      openSupportCaseCreateForm(context);
 
-  void _openManageTags(BuildContext context) {
-    showResponsiveSheet<void>(
-      context,
-      desktopMaxWidth: 420,
-      contentBuilder: (_) => const SupportCaseTagsSheet(),
-    );
-  }
+  void _openManageTags(BuildContext context) =>
+      openSupportCaseTagsSheet(context);
 
   void _openDetail(BuildContext context, String caseId) {
     if (context.isMobile) {
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => SupportCaseDetailView(caseId: caseId, showAppBar: true)),
+        MaterialPageRoute(
+          builder: (_) =>
+              SupportCaseDetailView(caseId: caseId, showAppBar: true),
+        ),
       );
     } else {
       setState(() => _selectedCaseId = caseId);
@@ -207,7 +233,10 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
 
         final canDelete = auth.hasPermission(AppPermissions.manageSupportCases);
         final list = (!isMobile && _viewMode == _ViewMode.kanban)
-            ? SupportCaseKanbanView(cases: filtered, onTap: (id) => _openDetail(context, id))
+            ? SupportCaseKanbanView(
+                cases: filtered,
+                onTap: (id) => _openDetail(context, id),
+              )
             : _CaseList(
                 cases: filtered,
                 selectedCaseId: _selectedCaseId,
@@ -225,20 +254,36 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
           onTagFilterChanged: (t) => setState(() => _tagFilter = t),
           sortBy: _sortBy,
           onSortChanged: (s) => setState(() => _sortBy = s),
-          onNewCase: isMobile ? null : () => _openCreateForm(context),
-          onManageTags: canDelete ? () => _openManageTags(context) : null,
+          // Sólo en celular: en escritorio ambos viven en la barra superior
+          // (ver _supportCaseActions en main_shell.dart). En celular esa barra
+          // no lleva acciones por sección y crear un caso ya tiene su botón
+          // flotante, así que aquí sólo queda gestionar etiquetas.
+          onManageTags: (canDelete && isMobile)
+              ? () => _openManageTags(context)
+              : null,
           viewMode: isMobile ? null : _viewMode,
           onViewModeChanged: (v) => setState(() => _viewMode = v),
         );
 
         if (isMobile) {
-          return Column(children: [header, Expanded(child: list)]);
+          return Column(
+            children: [
+              header,
+              Expanded(child: list),
+            ],
+          );
         }
 
         return LayoutBuilder(
           builder: (context, constraints) {
-            final sideBySide = constraints.maxWidth >= 900 && _selectedCaseId != null;
-            final listColumn = Column(children: [header, Expanded(child: list)]);
+            final sideBySide =
+                constraints.maxWidth >= 900 && _selectedCaseId != null;
+            final listColumn = Column(
+              children: [
+                header,
+                Expanded(child: list),
+              ],
+            );
             if (!sideBySide) return listColumn;
             return Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -261,7 +306,9 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
       },
     );
 
-    if (!widget.showAppBar) return Scaffold(body: body, floatingActionButton: fab);
+    if (!widget.showAppBar) {
+      return Scaffold(body: body, floatingActionButton: fab);
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Casos de Soporte')),
       body: body,
@@ -285,7 +332,6 @@ class _CasesHeader extends StatelessWidget {
     required this.onTagFilterChanged,
     required this.sortBy,
     required this.onSortChanged,
-    required this.onNewCase,
     required this.onManageTags,
     required this.viewMode,
     required this.onViewModeChanged,
@@ -306,7 +352,6 @@ class _CasesHeader extends StatelessWidget {
 
   final _SortBy sortBy;
   final ValueChanged<_SortBy> onSortChanged;
-  final VoidCallback? onNewCase;
 
   /// Null when the viewer lacks `manageSupportCases` — hides the button.
   final VoidCallback? onManageTags;
@@ -323,56 +368,72 @@ class _CasesHeader extends StatelessWidget {
     final availableTags = all.expand((c) => c.tags).toSet().toList()..sort();
     final open = all.where((c) => SupportCaseStatus.isOpen(c.status));
     final urgentes = open.where(
-        (c) => c.priority == SupportCasePriority.alta || c.priority == SupportCasePriority.critica);
+      (c) =>
+          c.priority == SupportCasePriority.alta ||
+          c.priority == SupportCasePriority.critica,
+    );
     final mas5 = open.where((c) => c.daysOpen() > 5);
     final mas10 = open.where((c) => c.daysOpen() > 10);
-    final resueltosHoy = all.where((c) =>
-        c.resolvedAt != null &&
-        c.resolvedAt!.year == today.year &&
-        c.resolvedAt!.month == today.month &&
-        c.resolvedAt!.day == today.day);
+    final resueltosHoy = all.where(
+      (c) =>
+          c.resolvedAt != null &&
+          c.resolvedAt!.year == today.year &&
+          c.resolvedAt!.month == today.month &&
+          c.resolvedAt!.day == today.day,
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Casos de Soporte',
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 20,
-                  ),
-                ),
+          // En escritorio no hay fila de título ni botones: el nombre de la
+          // pantalla y las acciones viven en la barra superior, que cruzaba el
+          // ancho entero sin usar. En celular esa barra no lleva acciones por
+          // sección, así que el botón de etiquetas se queda aquí.
+          if (onManageTags != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
+                tooltip: 'Gestionar etiquetas',
+                onPressed: onManageTags,
+                icon: Icon(LucideIcons.tag, color: colors.primary, size: 20),
               ),
-              if (onManageTags != null)
-                IconButton(
-                  tooltip: 'Gestionar etiquetas',
-                  onPressed: onManageTags,
-                  icon: Icon(LucideIcons.tag, color: colors.primary, size: 20),
-                ),
-              if (onNewCase != null)
-                ElevatedButton.icon(
-                  onPressed: onNewCase,
-                  icon: const Icon(LucideIcons.plus, size: 16),
-                  label: const Text('Nuevo caso'),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
+            ),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              _KpiCard(icon: LucideIcons.fileText, label: 'Casos abiertos', value: open.length, color: colors.primary),
-              _KpiCard(icon: LucideIcons.alertTriangle, label: 'Urgentes', value: urgentes.length, color: Colors.red),
-              _KpiCard(icon: LucideIcons.sunrise, label: 'Más de 5 días', value: mas5.length, color: Colors.orange),
-              _KpiCard(icon: LucideIcons.alarmClock, label: 'Más de 10 días', value: mas10.length, color: Colors.red),
-              _KpiCard(icon: LucideIcons.checkCircle2, label: 'Resueltos hoy', value: resueltosHoy.length, color: Colors.green),
+              _KpiCard(
+                icon: LucideIcons.fileText,
+                label: 'Casos abiertos',
+                value: open.length,
+                color: colors.primary,
+              ),
+              _KpiCard(
+                icon: LucideIcons.alertTriangle,
+                label: 'Urgentes',
+                value: urgentes.length,
+                color: Colors.red,
+              ),
+              _KpiCard(
+                icon: LucideIcons.sunrise,
+                label: 'Más de 5 días',
+                value: mas5.length,
+                color: Colors.orange,
+              ),
+              _KpiCard(
+                icon: LucideIcons.alarmClock,
+                label: 'Más de 10 días',
+                value: mas10.length,
+                color: Colors.red,
+              ),
+              _KpiCard(
+                icon: LucideIcons.checkCircle2,
+                label: 'Resueltos hoy',
+                value: resueltosHoy.length,
+                color: Colors.green,
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -384,8 +445,13 @@ class _CasesHeader extends StatelessWidget {
                   style: TextStyle(color: colors.textPrimary, fontSize: 14),
                   decoration: InputDecoration(
                     isDense: true,
-                    hintText: 'Buscar por cliente, asunto, descripción o número de caso',
-                    prefixIcon: Icon(LucideIcons.search, color: colors.primary, size: 18),
+                    hintText:
+                        'Buscar por cliente, asunto, descripción o número de caso',
+                    prefixIcon: Icon(
+                      LucideIcons.search,
+                      color: colors.primary,
+                      size: 18,
+                    ),
                   ),
                   onChanged: onQueryChanged,
                 ),
@@ -396,10 +462,22 @@ class _CasesHeader extends StatelessWidget {
                 underline: const SizedBox.shrink(),
                 onChanged: (v) => v != null ? onSortChanged(v) : null,
                 items: const [
-                  DropdownMenuItem(value: _SortBy.recientes, child: Text('Más recientes')),
-                  DropdownMenuItem(value: _SortBy.antiguos, child: Text('Más antiguos')),
-                  DropdownMenuItem(value: _SortBy.prioridad, child: Text('Prioridad')),
-                  DropdownMenuItem(value: _SortBy.dias, child: Text('Días sin resolver')),
+                  DropdownMenuItem(
+                    value: _SortBy.recientes,
+                    child: Text('Más recientes'),
+                  ),
+                  DropdownMenuItem(
+                    value: _SortBy.antiguos,
+                    child: Text('Más antiguos'),
+                  ),
+                  DropdownMenuItem(
+                    value: _SortBy.prioridad,
+                    child: Text('Prioridad'),
+                  ),
+                  DropdownMenuItem(
+                    value: _SortBy.dias,
+                    child: Text('Días sin resolver'),
+                  ),
                 ],
               ),
               if (availableTags.isNotEmpty) ...[
@@ -410,14 +488,21 @@ class _CasesHeader extends StatelessWidget {
                   hint: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(LucideIcons.tag, size: 14, color: colors.textSecondary),
+                      Icon(
+                        LucideIcons.tag,
+                        size: 14,
+                        color: colors.textSecondary,
+                      ),
                       const SizedBox(width: 4),
                       const Text('Etiqueta'),
                     ],
                   ),
                   onChanged: onTagFilterChanged,
                   items: [
-                    const DropdownMenuItem<String?>(value: null, child: Text('Todas las etiquetas')),
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('Todas las etiquetas'),
+                    ),
                     for (final tag in availableTags)
                       DropdownMenuItem<String?>(value: tag, child: Text(tag)),
                   ],
@@ -427,9 +512,16 @@ class _CasesHeader extends StatelessWidget {
                 const SizedBox(width: 8),
                 SegmentedButton<_ViewMode>(
                   segments: const [
-                    ButtonSegment(value: _ViewMode.tabla, label: Text('Tabla'), icon: Icon(LucideIcons.list, size: 15)),
                     ButtonSegment(
-                        value: _ViewMode.kanban, label: Text('Kanban'), icon: Icon(LucideIcons.columns, size: 15)),
+                      value: _ViewMode.tabla,
+                      label: Text('Tabla'),
+                      icon: Icon(LucideIcons.list, size: 15),
+                    ),
+                    ButtonSegment(
+                      value: _ViewMode.kanban,
+                      label: Text('Kanban'),
+                      icon: Icon(LucideIcons.columns, size: 15),
+                    ),
                   ],
                   selected: {viewMode!},
                   onSelectionChanged: (s) => onViewModeChanged(s.first),
@@ -464,7 +556,12 @@ class _CasesHeader extends StatelessWidget {
 }
 
 class _KpiCard extends StatelessWidget {
-  const _KpiCard({required this.icon, required this.label, required this.value, required this.color});
+  const _KpiCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   final IconData icon;
   final String label;
@@ -486,7 +583,10 @@ class _KpiCard extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
             child: Icon(icon, color: color, size: 18),
           ),
           const SizedBox(width: 10),
@@ -495,8 +595,20 @@ class _KpiCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('$value', style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18)),
-                Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: colors.textSecondary, fontSize: 11)),
+                Text(
+                  '$value',
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: colors.textSecondary, fontSize: 11),
+                ),
               ],
             ),
           ),
@@ -507,7 +619,11 @@ class _KpiCard extends StatelessWidget {
 }
 
 class _FilterChip extends StatelessWidget {
-  const _FilterChip({required this.label, required this.selected, required this.onTap});
+  const _FilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String label;
   final bool selected;
@@ -545,11 +661,15 @@ class _FilterChip extends StatelessWidget {
 /// Shared by the table row and (in the future, if needed) any other quick
 /// delete entry point — same confirm+delete flow the detail view already
 /// has, just reachable without opening it first.
-Future<void> confirmDeleteSupportCase(BuildContext context, SupportCaseModel c) async {
+Future<void> confirmDeleteSupportCase(
+  BuildContext context,
+  SupportCaseModel c,
+) async {
   final confirm = await showConfirmDialog(
     context,
     title: 'Eliminar caso',
-    message: '¿Eliminar el caso CS-${c.caseNumber.toString().padLeft(4, '0')} '
+    message:
+        '¿Eliminar el caso CS-${c.caseNumber.toString().padLeft(4, '0')} '
         '(${c.clientName}) de forma permanente? Esta acción no se puede deshacer.',
     confirmLabel: 'Eliminar',
     destructive: true,
@@ -559,7 +679,9 @@ Future<void> confirmDeleteSupportCase(BuildContext context, SupportCaseModel c) 
     await context.read<SupportCaseRepository>().delete(c.id);
     if (context.mounted) SnackbarUtils.showSuccess(context, 'Caso eliminado');
   } catch (e) {
-    if (context.mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+    if (context.mounted) {
+      SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+    }
   }
 }
 
@@ -594,7 +716,9 @@ class _CaseList extends StatelessWidget {
           caseModel: c,
           selected: c.id == selectedCaseId,
           onTap: () => onTap(c.id),
-          onDelete: canDelete ? () => confirmDeleteSupportCase(context, c) : null,
+          onDelete: canDelete
+              ? () => confirmDeleteSupportCase(context, c)
+              : null,
         );
       },
     );
@@ -607,7 +731,11 @@ Color _avatarColorFor(String name) {
 }
 
 String _initialsFor(String name) {
-  final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+  final parts = name
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((p) => p.isNotEmpty)
+      .toList();
   if (parts.isEmpty) return '?';
   if (parts.length == 1) return parts[0].substring(0, 1).toUpperCase();
   return (parts[0].substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
@@ -642,9 +770,15 @@ class _CaseRow extends StatelessWidget {
       borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
       child: Container(
         decoration: BoxDecoration(
-          color: selected ? colors.primary.withValues(alpha: 0.08) : colors.surface,
+          color: selected
+              ? colors.primary.withValues(alpha: 0.08)
+              : colors.surface,
           borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-          border: Border.all(color: selected ? colors.primary : priorityColor.withValues(alpha: 0.25)),
+          border: Border.all(
+            color: selected
+                ? colors.primary
+                : priorityColor.withValues(alpha: 0.25),
+          ),
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -658,21 +792,32 @@ class _CaseRow extends StatelessWidget {
                     width: 4,
                     decoration: BoxDecoration(
                       color: priorityColor,
-                      borderRadius: const BorderRadius.horizontal(left: Radius.circular(10)),
+                      borderRadius: const BorderRadius.horizontal(
+                        left: Radius.circular(10),
+                      ),
                     ),
                   ),
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           CircleAvatar(
                             radius: 18,
-                            backgroundColor: avatarColor.withValues(alpha: 0.85),
+                            backgroundColor: avatarColor.withValues(
+                              alpha: 0.85,
+                            ),
                             child: Text(
                               _initialsFor(c.clientName),
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -686,20 +831,32 @@ class _CaseRow extends StatelessWidget {
                                   'CS-${c.caseNumber.toString().padLeft(4, '0')} · ${c.clientName}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
+                                  style: TextStyle(
+                                    color: colors.textPrimary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
                                 ),
                                 Text(
                                   c.subject,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                                  style: TextStyle(
+                                    color: colors.textSecondary,
+                                    fontSize: 12,
+                                  ),
                                 ),
                                 if (showContact && c.contactName.isNotEmpty)
                                   Text(
                                     c.contactName,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(color: colors.textSecondary.withValues(alpha: 0.8), fontSize: 11),
+                                    style: TextStyle(
+                                      color: colors.textSecondary.withValues(
+                                        alpha: 0.8,
+                                      ),
+                                      fontSize: 11,
+                                    ),
                                   ),
                               ],
                             ),
@@ -710,16 +867,29 @@ class _CaseRow extends StatelessWidget {
                           PriorityBadge(priority: c.priority, dense: true),
                           if (showDate) ...[
                             const SizedBox(width: 10),
-                            Text(formattedDate, style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+                            Text(
+                              formattedDate,
+                              style: TextStyle(
+                                color: colors.textSecondary,
+                                fontSize: 12,
+                              ),
+                            ),
                           ],
                           const SizedBox(width: 10),
-                          DaysOpenBadge(days: c.daysOpen(), resolved: isResolved, dense: true),
+                          DaysOpenBadge(
+                            days: c.daysOpen(),
+                            resolved: isResolved,
+                            dense: true,
+                          ),
                           if (onDelete != null)
                             IconButton(
                               tooltip: 'Eliminar',
                               iconSize: 16,
                               visualDensity: VisualDensity.compact,
-                              icon: Icon(LucideIcons.trash2, color: colors.error),
+                              icon: Icon(
+                                LucideIcons.trash2,
+                                color: colors.error,
+                              ),
                               onPressed: onDelete,
                             ),
                         ],
@@ -809,7 +979,9 @@ class _NewCaseFormState extends State<_NewCaseForm> {
         widget.onCreated();
       }
     } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      if (mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -828,34 +1000,49 @@ class _NewCaseFormState extends State<_NewCaseForm> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Nuevo caso', style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18)),
+              Text(
+                'Nuevo caso',
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _clientController,
                 autofocus: true,
                 style: TextStyle(color: colors.textPrimary),
                 decoration: const InputDecoration(labelText: 'Cliente *'),
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'El cliente es obligatorio' : null,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'El cliente es obligatorio'
+                    : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _contactController,
                 style: TextStyle(color: colors.textPrimary),
-                decoration: const InputDecoration(labelText: 'Persona que reportó (opcional)'),
+                decoration: const InputDecoration(
+                  labelText: 'Persona que reportó (opcional)',
+                ),
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _phoneController,
                 keyboardType: TextInputType.phone,
                 style: TextStyle(color: colors.textPrimary),
-                decoration: const InputDecoration(labelText: 'Teléfono (opcional)'),
+                decoration: const InputDecoration(
+                  labelText: 'Teléfono (opcional)',
+                ),
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _subjectController,
                 style: TextStyle(color: colors.textPrimary),
                 decoration: const InputDecoration(labelText: 'Asunto *'),
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'El asunto es obligatorio' : null,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'El asunto es obligatorio'
+                    : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -872,9 +1059,11 @@ class _NewCaseFormState extends State<_NewCaseForm> {
                       initialValue: _priority,
                       decoration: const InputDecoration(labelText: 'Prioridad'),
                       items: [
-                        for (final p in SupportCasePriority.all) DropdownMenuItem(value: p, child: Text(p)),
+                        for (final p in SupportCasePriority.all)
+                          DropdownMenuItem(value: p, child: Text(p)),
                       ],
-                      onChanged: (v) => setState(() => _priority = v ?? _priority),
+                      onChanged: (v) =>
+                          setState(() => _priority = v ?? _priority),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -882,7 +1071,9 @@ class _NewCaseFormState extends State<_NewCaseForm> {
                     child: InkWell(
                       onTap: _pickReportedDate,
                       child: InputDecorator(
-                        decoration: const InputDecoration(labelText: 'Fecha de reporte'),
+                        decoration: const InputDecoration(
+                          labelText: 'Fecha de reporte',
+                        ),
                         child: Text(
                           AppDateUtils.formatShortDate(_reportedAt),
                           style: TextStyle(color: colors.textPrimary),
@@ -895,15 +1086,24 @@ class _NewCaseFormState extends State<_NewCaseForm> {
               const SizedBox(height: 12),
               DropdownButtonFormField<String?>(
                 initialValue: _assignedUserId,
-                decoration: const InputDecoration(labelText: 'Responsable (opcional)'),
+                decoration: const InputDecoration(
+                  labelText: 'Responsable (opcional)',
+                ),
                 items: [
-                  const DropdownMenuItem<String?>(value: null, child: Text('Sin asignar')),
-                  for (final u in catalog.users) DropdownMenuItem<String?>(value: u.id, child: Text(u.name)),
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Sin asignar'),
+                  ),
+                  for (final u in catalog.users)
+                    DropdownMenuItem<String?>(value: u.id, child: Text(u.name)),
                 ],
                 onChanged: (v) => setState(() => _assignedUserId = v),
               ),
               const SizedBox(height: 16),
-              Text('Etiquetas', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+              Text(
+                'Etiquetas',
+                style: TextStyle(color: colors.textSecondary, fontSize: 12),
+              ),
               const SizedBox(height: 6),
               StreamBuilder<List<SupportCaseTagModel>>(
                 stream: context.read<SupportCaseRepository>().watchTags(),
@@ -918,7 +1118,10 @@ class _NewCaseFormState extends State<_NewCaseForm> {
                   if (tags.isEmpty) {
                     return Text(
                       'Sin etiquetas todavía.',
-                      style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                      style: TextStyle(
+                        color: colors.textSecondary,
+                        fontSize: 12,
+                      ),
                     );
                   }
                   return Wrap(
@@ -947,7 +1150,11 @@ class _NewCaseFormState extends State<_NewCaseForm> {
                 child: ElevatedButton(
                   onPressed: _isSaving ? null : _save,
                   child: _isSaving
-                      ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
                       : const Text('Crear caso'),
                 ),
               ),

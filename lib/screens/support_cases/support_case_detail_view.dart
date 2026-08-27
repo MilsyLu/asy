@@ -59,19 +59,27 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
     if (user == null) return;
     setState(() => _isSendingComment = true);
     try {
-      await context
-          .read<SupportCaseRepository>()
-          .addComment(c.id, text, authorId: user.id, authorName: user.name);
+      await context.read<SupportCaseRepository>().addComment(
+        c.id,
+        text,
+        authorId: user.id,
+        authorName: user.name,
+      );
       _commentController.clear();
     } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      if (mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      }
     } finally {
       if (mounted) setState(() => _isSendingComment = false);
     }
   }
 
   Future<void> _pickAndUploadAttachment(SupportCaseModel c) async {
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
     if (picked == null || !mounted) return;
     final user = context.read<AuthProvider>().appUser;
     if (user == null) return;
@@ -87,16 +95,16 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
         contentType: 'image/jpeg',
       );
       await repo.addAttachment(
-            c.id,
-            SupportCaseAttachment(
-              url: url,
-              name: picked.name,
-              contentType: 'image/jpeg',
-              size: bytes.length,
-            ),
-            authorId: user.id,
-            authorName: user.name,
-          );
+        c.id,
+        SupportCaseAttachment(
+          url: url,
+          name: picked.name,
+          contentType: 'image/jpeg',
+          size: bytes.length,
+        ),
+        authorId: user.id,
+        authorName: user.name,
+      );
     } catch (e) {
       // Surfacing the underlying cause rather than a flat "no se pudo":
       // Storage failures are all indistinguishable otherwise (permission
@@ -118,11 +126,16 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
     final user = context.read<AuthProvider>().appUser;
     if (user == null || newStatus == c.status) return;
     try {
-      await context
-          .read<SupportCaseRepository>()
-          .updateStatus(c.id, newStatus, authorId: user.id, authorName: user.name);
+      await context.read<SupportCaseRepository>().updateStatus(
+        c.id,
+        newStatus,
+        authorId: user.id,
+        authorName: user.name,
+      );
     } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      if (mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      }
     }
   }
 
@@ -130,27 +143,38 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
     final user = context.read<AuthProvider>().appUser;
     if (user == null || newPriority == c.priority) return;
     try {
-      await context
-          .read<SupportCaseRepository>()
-          .updatePriority(c.id, newPriority, authorId: user.id, authorName: user.name);
+      await context.read<SupportCaseRepository>().updatePriority(
+        c.id,
+        newPriority,
+        authorId: user.id,
+        authorName: user.name,
+      );
     } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      if (mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      }
     }
   }
 
-  Future<void> _changeAssignee(SupportCaseModel c, String? newAssigneeId, String? newAssigneeName) async {
+  Future<void> _changeAssignee(
+    SupportCaseModel c,
+    String? newAssigneeId,
+    String? newAssigneeName,
+  ) async {
     final user = context.read<AuthProvider>().appUser;
     if (user == null || newAssigneeId == c.assignedUserId) return;
     try {
       await context.read<SupportCaseRepository>().updateAssignee(
-            c.id,
-            newAssigneeId,
-            newAssigneeName,
-            authorId: user.id,
-            authorName: user.name,
-          );
+        c.id,
+        newAssigneeId,
+        newAssigneeName,
+        authorId: user.id,
+        authorName: user.name,
+      );
     } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      if (mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      }
     }
   }
 
@@ -162,7 +186,9 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
     try {
       available = await repo.watchTags().first;
     } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      if (mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      }
       return;
     }
     if (!mounted) return;
@@ -210,9 +236,16 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
     );
     if (result == null || !mounted) return;
     try {
-      await repo.updateTags(c.id, result.toList(), authorId: user.id, authorName: user.name);
+      await repo.updateTags(
+        c.id,
+        result.toList(),
+        authorId: user.id,
+        authorName: user.name,
+      );
     } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      if (mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      }
     }
   }
 
@@ -287,7 +320,9 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
         authorName: user.name,
       );
     } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      if (mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      }
     }
   }
 
@@ -296,13 +331,15 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
     if (user == null) return;
     try {
       await context.read<SupportCaseRepository>().setReminder(
-            c.id,
-            reminderTime: null,
-            authorId: user.id,
-            authorName: user.name,
-          );
+        c.id,
+        reminderTime: null,
+        authorId: user.id,
+        authorName: user.name,
+      );
     } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      if (mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      }
     }
   }
 
@@ -310,7 +347,8 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
     final confirm = await showConfirmDialog(
       context,
       title: 'Eliminar caso',
-      message: '¿Eliminar el caso CS-${c.caseNumber.toString().padLeft(4, '0')} de forma '
+      message:
+          '¿Eliminar el caso CS-${c.caseNumber.toString().padLeft(4, '0')} de forma '
           'permanente? Esta acción no se puede deshacer.',
       confirmLabel: 'Eliminar',
       destructive: true,
@@ -321,7 +359,9 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
       if (widget.showAppBar && mounted) Navigator.of(context).pop();
       widget.onClose?.call();
     } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      if (mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      }
     }
   }
 
@@ -337,23 +377,55 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
         if (!snapshot.hasData) return const LoadingIndicator();
         final c = snapshot.data;
         if (c == null) {
-          return const EmptyState(message: 'Este caso ya no existe.', icon: LucideIcons.alertCircle);
+          return const EmptyState(
+            message: 'Este caso ya no existe.',
+            icon: LucideIcons.alertCircle,
+          );
         }
         return _buildContent(context, c, canDelete);
       },
     );
 
-    if (!widget.showAppBar) return body;
-    return Scaffold(appBar: AppBar(title: const Text('Detalle del caso')), body: body);
+    // Flutter no deja seleccionar texto salvo que se pida: por defecto un
+    // Text es pintura, no contenido. En una pantalla de lectura como esta
+    // —descripciones largas, listados que el cliente mando, comentarios del
+    // equipo— eso significa que la unica forma de reusar lo que dice es
+    // transcribirlo a mano.
+    //
+    // SelectionArea y no SelectableText uno por uno: envuelve todo el arbol de
+    // una vez, y permite arrastrar de un parrafo a otro, que es como la gente
+    // copia de verdad. Los botones, el desplegable de responsable y el campo
+    // de comentario siguen funcionando igual.
+    //
+    // Deliberadamente NO va en la raiz de la app: el Kanban usa
+    // LongPressDraggable para mover tarjetas, y la seleccion le disputaria el
+    // gesto. Se envuelven las pantallas de lectura, que es donde hace falta.
+    final selectable = SelectionArea(child: body);
+
+    if (!widget.showAppBar) return selectable;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Detalle del caso')),
+      body: selectable,
+    );
   }
 
-  Widget _buildContent(BuildContext context, SupportCaseModel c, bool canDelete) {
+  Widget _buildContent(
+    BuildContext context,
+    SupportCaseModel c,
+    bool canDelete,
+  ) {
     final colors = context.colors;
     final catalog = context.watch<CatalogProvider>();
     final isResolved = !SupportCaseStatus.isOpen(c.status);
 
-    Widget sectionLabel(String text) =>
-        Text(text, style: TextStyle(color: colors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600));
+    Widget sectionLabel(String text) => Text(
+      text,
+      style: TextStyle(
+        color: colors.textSecondary,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+    );
 
     return Column(
       children: [
@@ -368,7 +440,11 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                     CircleAvatar(
                       radius: 20,
                       backgroundColor: colors.primary.withValues(alpha: 0.15),
-                      child: Icon(LucideIcons.fileText, color: colors.primary, size: 18),
+                      child: Icon(
+                        LucideIcons.fileText,
+                        color: colors.primary,
+                        size: 18,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -378,12 +454,23 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                         children: [
                           Text(
                             'CS-${c.caseNumber.toString().padLeft(4, '0')} · ${c.clientName}',
-                            style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+                            style: TextStyle(
+                              color: colors.textPrimary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
-                          if (c.contactName.isNotEmpty || c.contactPhone.isNotEmpty)
+                          if (c.contactName.isNotEmpty ||
+                              c.contactPhone.isNotEmpty)
                             Text(
-                              [c.contactName, c.contactPhone].where((s) => s.isNotEmpty).join(' · '),
-                              style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                              [
+                                c.contactName,
+                                c.contactPhone,
+                              ].where((s) => s.isNotEmpty).join(' · '),
+                              style: TextStyle(
+                                color: colors.textSecondary,
+                                fontSize: 12,
+                              ),
                             ),
                         ],
                       ),
@@ -391,7 +478,11 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                     if (canDelete)
                       IconButton(
                         tooltip: 'Eliminar',
-                        icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
+                        icon: Icon(
+                          LucideIcons.trash2,
+                          color: colors.error,
+                          size: 18,
+                        ),
                         onPressed: () => _confirmDelete(c),
                       ),
                     if (widget.onClose != null)
@@ -408,22 +499,39 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                   runSpacing: 10,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Text('Reportado: ${AppDateUtils.formatShortDate(c.reportedAt)}',
-                        style: TextStyle(color: colors.textSecondary, fontSize: 12)),
-                    Text('· Registrado: ${AppDateUtils.formatShortDate(c.createdAt)}',
-                        style: TextStyle(color: colors.textSecondary.withValues(alpha: 0.7), fontSize: 11)),
+                    Text(
+                      'Reportado: ${AppDateUtils.formatShortDate(c.reportedAt)}',
+                      style: TextStyle(
+                        color: colors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                    Text(
+                      '· Registrado: ${AppDateUtils.formatShortDate(c.createdAt)}',
+                      style: TextStyle(
+                        color: colors.textSecondary.withValues(alpha: 0.7),
+                        fontSize: 11,
+                      ),
+                    ),
                     PopupMenuButton<String>(
                       initialValue: c.status,
                       onSelected: (v) => _changeStatus(c, v),
-                      itemBuilder: (_) =>
-                          [for (final s in SupportCaseStatus.all) PopupMenuItem(value: s, child: Text(s))],
+                      itemBuilder: (_) => [
+                        for (final s in SupportCaseStatus.all)
+                          PopupMenuItem(
+                            value: s,
+                            child: Text(SupportCaseStatus.labelFor(s)),
+                          ),
+                      ],
                       child: StatusBadge(status: c.status),
                     ),
                     PopupMenuButton<String>(
                       initialValue: c.priority,
                       onSelected: (v) => _changePriority(c, v),
-                      itemBuilder: (_) =>
-                          [for (final p in SupportCasePriority.all) PopupMenuItem(value: p, child: Text(p))],
+                      itemBuilder: (_) => [
+                        for (final p in SupportCasePriority.all)
+                          PopupMenuItem(value: p, child: Text(p)),
+                      ],
                       child: PriorityBadge(priority: c.priority),
                     ),
                     DaysOpenBadge(days: c.daysOpen(), resolved: isResolved),
@@ -432,20 +540,46 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    Icon(LucideIcons.userCircle, size: 14, color: colors.textSecondary),
+                    Icon(
+                      LucideIcons.userCircle,
+                      size: 14,
+                      color: colors.textSecondary,
+                    ),
                     const SizedBox(width: 6),
-                    Text('Responsable:', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+                    Text(
+                      'Responsable:',
+                      style: TextStyle(
+                        color: colors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
                     const SizedBox(width: 6),
                     DropdownButton<String?>(
                       value: c.assignedUserId,
                       underline: const SizedBox.shrink(),
-                      hint: Text('Sin asignar', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+                      hint: Text(
+                        'Sin asignar',
+                        style: TextStyle(
+                          color: colors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
                       items: [
-                        const DropdownMenuItem<String?>(value: null, child: Text('Sin asignar')),
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Sin asignar'),
+                        ),
                         for (final u in catalog.users)
-                          DropdownMenuItem<String?>(value: u.id, child: Text(u.name)),
+                          DropdownMenuItem<String?>(
+                            value: u.id,
+                            child: Text(u.name),
+                          ),
                       ],
-                      onChanged: (v) => _changeAssignee(c, v, v == null ? null : catalog.userName(v)),
+                      onChanged: (v) => _changeAssignee(
+                        c,
+                        v,
+                        v == null ? null : catalog.userName(v),
+                      ),
                     ),
                   ],
                 ),
@@ -453,7 +587,11 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(LucideIcons.bellRing, size: 14, color: colors.textSecondary),
+                    Icon(
+                      LucideIcons.bellRing,
+                      size: 14,
+                      color: colors.textSecondary,
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: c.reminderTime == null
@@ -481,7 +619,10 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                                 if (c.reminderNote.isNotEmpty)
                                   Text(
                                     c.reminderNote,
-                                    style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                                    style: TextStyle(
+                                      color: colors.textSecondary,
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 Row(
                                   children: [
@@ -489,10 +630,14 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                                       style: TextButton.styleFrom(
                                         padding: EdgeInsets.zero,
                                         minimumSize: Size.zero,
-                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
                                       ),
                                       onPressed: () => _editReminder(c),
-                                      child: const Text('Editar', style: TextStyle(fontSize: 12)),
+                                      child: const Text(
+                                        'Editar',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
                                     ),
                                     const SizedBox(width: 12),
                                     TextButton(
@@ -500,10 +645,14 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                                         foregroundColor: colors.error,
                                         padding: EdgeInsets.zero,
                                         minimumSize: Size.zero,
-                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
                                       ),
                                       onPressed: () => _clearReminder(c),
-                                      child: const Text('Quitar', style: TextStyle(fontSize: 12)),
+                                      child: const Text(
+                                        'Quitar',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -515,7 +664,10 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                 const SizedBox(height: 18),
                 sectionLabel('ASUNTO'),
                 const SizedBox(height: 4),
-                Text(c.subject, style: TextStyle(color: colors.textPrimary, fontSize: 14)),
+                Text(
+                  c.subject,
+                  style: TextStyle(color: colors.textPrimary, fontSize: 14),
+                ),
                 const SizedBox(height: 14),
                 sectionLabel('DESCRIPCIÓN'),
                 const SizedBox(height: 4),
@@ -537,12 +689,21 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                 ),
                 const SizedBox(height: 6),
                 if (c.tags.isEmpty)
-                  Text('Sin etiquetas.', style: TextStyle(color: colors.textSecondary, fontSize: 12))
+                  Text(
+                    'Sin etiquetas.',
+                    style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                  )
                 else
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
-                    children: [for (final tag in c.tags) Chip(label: Text(tag), visualDensity: VisualDensity.compact)],
+                    children: [
+                      for (final tag in c.tags)
+                        Chip(
+                          label: Text(tag),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                    ],
                   ),
                 const SizedBox(height: 18),
                 Row(
@@ -550,9 +711,15 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                     sectionLabel('ARCHIVOS ADJUNTOS'),
                     const Spacer(),
                     TextButton.icon(
-                      onPressed: _isUploading ? null : () => _pickAndUploadAttachment(c),
+                      onPressed: _isUploading
+                          ? null
+                          : () => _pickAndUploadAttachment(c),
                       icon: _isUploading
-                          ? const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                          ? const SizedBox(
+                              height: 14,
+                              width: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
                           : const Icon(LucideIcons.paperclip, size: 15),
                       label: const Text('Adjuntar'),
                     ),
@@ -560,14 +727,20 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                 ),
                 const SizedBox(height: 6),
                 if (c.attachments.isEmpty)
-                  Text('Sin adjuntos.', style: TextStyle(color: colors.textSecondary, fontSize: 12))
+                  Text(
+                    'Sin adjuntos.',
+                    style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                  )
                 else
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
                       for (final a in c.attachments)
-                        _AttachmentChip(attachment: a, onOpen: () => launchUrl(Uri.parse(a.url))),
+                        _AttachmentChip(
+                          attachment: a,
+                          onOpen: () => launchUrl(Uri.parse(a.url)),
+                        ),
                     ],
                   ),
                 const SizedBox(height: 20),
@@ -598,7 +771,11 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
               ElevatedButton(
                 onPressed: _isSendingComment ? null : () => _sendComment(c),
                 child: _isSendingComment
-                    ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Text('Comentar'),
               ),
             ],
@@ -680,12 +857,19 @@ class _Timeline extends StatelessWidget {
         if (!snapshot.hasData) {
           return const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
-            child: SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+            child: SizedBox(
+              height: 18,
+              width: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
           );
         }
         final entries = snapshot.data!;
         if (entries.isEmpty) {
-          return Text('Sin actividad todavía.', style: TextStyle(color: colors.textSecondary, fontSize: 12));
+          return Text(
+            'Sin actividad todavía.',
+            style: TextStyle(color: colors.textSecondary, fontSize: 12),
+          );
         }
         return Column(
           children: [
@@ -697,20 +881,35 @@ class _Timeline extends StatelessWidget {
                   children: [
                     Container(
                       padding: const EdgeInsets.all(6),
-                      decoration:
-                          BoxDecoration(color: colors.primary.withValues(alpha: 0.12), shape: BoxShape.circle),
-                      child: Icon(_iconFor(e.type), size: 12, color: colors.primary),
+                      decoration: BoxDecoration(
+                        color: colors.primary.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        _iconFor(e.type),
+                        size: 12,
+                        color: colors.primary,
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(e.text, style: TextStyle(color: colors.textPrimary, fontSize: 13)),
+                          Text(
+                            e.text,
+                            style: TextStyle(
+                              color: colors.textPrimary,
+                              fontSize: 13,
+                            ),
+                          ),
                           const SizedBox(height: 2),
                           Text(
                             '${e.authorName} · ${AppDateUtils.formatDateTimeOrDash(e.createdAt)}',
-                            style: TextStyle(color: colors.textSecondary, fontSize: 11),
+                            style: TextStyle(
+                              color: colors.textSecondary,
+                              fontSize: 11,
+                            ),
                           ),
                         ],
                       ),

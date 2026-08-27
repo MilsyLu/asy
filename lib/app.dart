@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'core/constants/app_constants.dart';
 import 'core/theme/theme_manager.dart';
 import 'providers/auth_provider.dart';
+import 'providers/dashboard_range_provider.dart';
 import 'providers/catalog_provider.dart';
 import 'providers/system_config_provider.dart';
 import 'screens/auth/login_page.dart';
@@ -89,6 +90,11 @@ class TaskFlowApp extends StatelessWidget {
                   Provider<NotificationRepository>(create: (_) => NotificationRepository()),
                   Provider<PrinterConfigRepository>(create: (_) => PrinterConfigRepository(empresaId: empresaId)),
                   Provider<SupportCaseRepository>(create: (_) => SupportCaseRepository(empresaId: empresaId)),
+                  // El periodo del Dashboard: lo leen la página (para su
+                  // consulta) y la barra superior del shell (para el selector).
+                  ChangeNotifierProvider<DashboardRangeController>(
+                    create: (_) => DashboardRangeController(),
+                  ),
                 ],
                 child: ChangeNotifierProvider<AppUpdateService>(
                   create: (_) => AppUpdateService(),

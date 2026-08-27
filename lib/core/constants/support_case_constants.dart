@@ -34,7 +34,12 @@ class SupportCaseStatus {
   // "Cerrado" (a separate closed state) was removed — Michel felt it was
   // practically the same as "Resuelto" and preferred one clear state
   // instead of two similar ones.
-  static const List<String> all = [nuevo, enProceso, esperandoCliente, resuelto];
+  static const List<String> all = [
+    nuevo,
+    enProceso,
+    esperandoCliente,
+    resuelto,
+  ];
 
   static const List<String> openStates = [nuevo, enProceso, esperandoCliente];
   static const List<String> closedStates = [resuelto];
@@ -47,6 +52,25 @@ class SupportCaseStatus {
   };
 
   static Color colorFor(String status) => colors[status] ?? Colors.grey;
+
+  /// Lo que ve el usuario para un estado guardado.
+  ///
+  /// El valor de [nuevo] es la cadena `'Nuevo'` y así está escrito en cada
+  /// documento de `supportCases`, además de en `checkSupportCaseReminders.js`,
+  /// que decide a quién recordarle. Renombrar la constante rompería los dos.
+  /// Así que el valor se queda y solo cambia la etiqueta.
+  ///
+  /// Y cambia porque mentía: esa columna no tiene casos nuevos, tiene casos
+  /// sin empezar — Michel encontró ahí casos de once días. "Pendiente" es lo
+  /// que la columna siempre quiso decir. De hecho el filtro rápido de esa
+  /// misma pantalla ya se llamaba "Pendientes" y filtraba exactamente por este
+  /// estado: la pantalla venía llamando a lo mismo de dos formas distintas.
+  static String labelFor(String status) =>
+      status == nuevo ? 'Pendiente' : status;
+
+  /// Igual, para un encabezado de columna que agrupa varios.
+  static String columnLabelFor(String status) =>
+      status == nuevo ? 'Pendientes' : status;
 
   static bool isOpen(String status) => openStates.contains(status);
 }

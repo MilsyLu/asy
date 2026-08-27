@@ -14,6 +14,7 @@ import '../../models/app_user.dart';
 import '../../models/task_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
+import '../../providers/dashboard_range_provider.dart';
 import '../../services/task_repository.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/responsive_sheet.dart';
@@ -32,23 +33,6 @@ const double _kInnerRadius = AppSpacing.radiusMd;
 
 /// Compact row height used inside consolidated mobile cards.
 const double _kRowMinHeight = 40;
-
-/// Ranges offered by the header selector.
-///
-/// These used to be labels and nothing more: picking one changed the text and
-/// left every number on screen exactly as it was, because the query was
-/// hard-wired to 30 days. That is worse than a disabled control — the screen
-/// claimed to show the year while showing the month, and there was no way to
-/// tell from looking. They now drive the query (see [_rangeFor]).
-const _kRangeLabels = [
-  'Últimos 7 días',
-  'Últimos 30 días',
-  'Este mes',
-  'Este año',
-  'Personalizado',
-];
-const _kDefaultRangeIndex = 1; // "Últimos 30 días"
-const _kCustomRangeIndex = 4;
 
 /// The two slices of the same query the sheets read from.
 ///
@@ -104,14 +88,11 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  late DateTime _start;
-  late DateTime _end;
-  late DateTime _queryEnd;
-  late Stream<List<TaskModel>> _tasksStream;
-  late Stopwatch _loadStopwatch;
+  Stream<List<TaskModel>>? _tasksStream;
+  DateTime? _streamStart;
+  DateTime? _streamEnd;
+  late Stopwatch _loadStopwatch = Stopwatch()..start();
   bool _loadLogged = false;
-
-  int _rangeIndex = _kDefaultRangeIndex;
 
   /// The visibility-filtered task list, republished on every stream event so
   /// an open sheet can follow it.
@@ -128,15 +109,30 @@ class _DashboardPageState extends State<DashboardPage> {
   ));
 
   @override
-  void initState() {
-    super.initState();
-    _applyRange(_kDefaultRangeIndex);
-  }
-
-  @override
   void dispose() {
     _liveTasks.dispose();
     super.dispose();
+  }
+
+  /// Re-opens the query only when the period actually moved.
+  ///
+  /// `build` runs for many reasons — a theme change, a catalog snapshot — and
+  /// re-subscribing on each of them would drop and re-create the Firestore
+  /// listener for nothing, flashing the whole screen back to its spinner.
+  Stream<List<TaskModel>> _streamFor(DashboardRangeController range) {
+    if (_tasksStream != null &&
+        _streamStart == range.start &&
+        _streamEnd == range.end) {
+      return _tasksStream!;
+    }
+    _streamStart = range.start;
+    _streamEnd = range.end;
+    _loadLogged = false;
+    _loadStopwatch = Stopwatch()..start();
+    return _tasksStream = context.read<TaskRepository>().watchTasksInRange(
+      range.start,
+      range.queryEnd,
+    );
   }
 
   /// Hands [tasks] to whatever sheet is open.
@@ -148,72 +144,6 @@ class _DashboardPageState extends State<DashboardPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _liveTasks.value = (all: all, historical: historical);
     });
-  }
-
-  /// First and last day covered by [index], both inclusive.
-  static ({DateTime start, DateTime end}) _rangeFor(int index, DateTime today) {
-    switch (index) {
-      case 0:
-        return (start: today.subtract(const Duration(days: 7)), end: today);
-      case 2:
-        return (start: DateTime(today.year, today.month, 1), end: today);
-      case 3:
-        return (start: DateTime(today.year, 1, 1), end: today);
-      default:
-        return (start: today.subtract(const Duration(days: 30)), end: today);
-    }
-  }
-
-  /// Points the screen at a new period and re-opens the query behind it.
-  ///
-  /// Everything downstream already reads [_start]/[_end] — the KPIs, the
-  /// trend, the charts — so re-running the stream is the whole change.
-  void _applyRange(int index, {DateTimeRange? custom}) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
-    if (custom != null) {
-      _start = DateTime(
-        custom.start.year,
-        custom.start.month,
-        custom.start.day,
-      );
-      _end = DateTime(custom.end.year, custom.end.month, custom.end.day);
-    } else {
-      final range = _rangeFor(index, today);
-      _start = range.start;
-      _end = range.end;
-    }
-
-    _rangeIndex = index;
-    // One extra day so "Próximas 24 horas" sees tomorrow without a second
-    // stream. On a custom range that ends in the past there is nothing ahead
-    // to show, which is the honest answer for a window that already closed.
-    _queryEnd = _end.add(const Duration(days: 1));
-    _loadLogged = false;
-    _loadStopwatch = Stopwatch()..start();
-    _tasksStream = context.read<TaskRepository>().watchTasksInRange(
-      _start,
-      _queryEnd,
-    );
-  }
-
-  Future<void> _onRangeChanged(int index) async {
-    if (index == _kCustomRangeIndex) {
-      final now = DateTime.now();
-      final picked = await showDateRangePicker(
-        context: context,
-        firstDate: DateTime(now.year - 3),
-        lastDate: DateTime(now.year, now.month, now.day),
-        initialDateRange: DateTimeRange(start: _start, end: _end),
-        helpText: 'Elige el periodo',
-        saveText: 'Aplicar',
-      );
-      if (picked == null || !mounted) return;
-      setState(() => _applyRange(_kCustomRangeIndex, custom: picked));
-      return;
-    }
-    setState(() => _applyRange(index));
   }
 
   /// The four headline facts of "Resumen ejecutivo".
@@ -304,11 +234,6 @@ class _DashboardPageState extends State<DashboardPage> {
     ];
   }
 
-  /// What the header and the empty state call the current period.
-  String get _rangeLabel => _rangeIndex == _kCustomRangeIndex
-      ? '${AppDateUtils.formatShortDate(_start)} — ${AppDateUtils.formatShortDate(_end)}'
-      : _kRangeLabels[_rangeIndex];
-
   @override
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
@@ -318,9 +243,11 @@ class _DashboardPageState extends State<DashboardPage> {
       return const Scaffold(body: LoadingIndicator());
     }
 
+    final range = context.watch<DashboardRangeController>();
+
     return Scaffold(
       body: StreamBuilder<List<TaskModel>>(
-        stream: _tasksStream,
+        stream: _streamFor(range),
         builder: (context, snapshot) {
           if (!_loadLogged &&
               snapshot.connectionState != ConnectionState.waiting) {
@@ -347,7 +274,7 @@ class _DashboardPageState extends State<DashboardPage> {
             return EmptyState(
               message:
                   'No hay tareas registradas en el periodo: '
-                  '${_rangeLabel.toLowerCase()}.',
+                  '${range.label.toLowerCase()}.',
               icon: LucideIcons.layoutDashboard,
             );
           }
@@ -355,7 +282,7 @@ class _DashboardPageState extends State<DashboardPage> {
           final now = DateTime.now();
           // Historical KPIs/charts only see up to _end (today); the extra day
           // fetched above is for "Próximas 24 horas" only.
-          final todayKey = AppDateUtils.formatDateKey(_end);
+          final todayKey = AppDateUtils.formatDateKey(range.end);
           final historicalTasks = allTasks
               .where((t) => t.date.compareTo(todayKey) <= 0)
               .toList();
@@ -377,8 +304,8 @@ class _DashboardPageState extends State<DashboardPage> {
           );
           final dailyTrend = computeDailyTrend(
             historicalTasks,
-            _start,
-            _end,
+            range.start,
+            range.end,
             AppDateUtils.formatDateKey,
           );
 
@@ -420,10 +347,11 @@ class _DashboardPageState extends State<DashboardPage> {
   // Identical to the pre-Sprint-14 ListView; no line changed.
   Widget _buildMobileBody(BuildContext context, _Snapshot s) {
     final colors = context.colors;
+    final range = context.read<DashboardRangeController>();
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
-        _HeroSummaryCard(rangeLabel: _rangeLabel, kpis: s.kpis),
+        _HeroSummaryCard(rangeLabel: range.label, kpis: s.kpis),
         const SizedBox(height: _kSectionGap),
         _SectionTitle('⚠️ Atención requerida'),
         const SizedBox(height: _kCardGap),
@@ -668,13 +596,9 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header: title + greeting + range selector ──────────────────
-          _DesktopHeader(
-            user: user,
-            rangeIndex: _rangeIndex,
-            onRangeChanged: _onRangeChanged,
-          ),
-          const SizedBox(height: AppSpacing.md),
+          // Sin encabezado: el título, el saludo y el selector de periodo
+          // viven ahora en la barra superior del shell, que estaba vacía de
+          // lado a lado mientras esto ocupaba tres renglones aquí abajo.
 
           // ── Row 1: KPI group card (Total/Completadas/Pendientes, ~67%)
           // + Cumplimiento general filling the row's full height (~33%) ──
@@ -964,91 +888,6 @@ class _DashboardPageState extends State<DashboardPage> {
 }
 
 // ── Sprint 14: desktop header ──────────────────────────────────────────────────
-
-class _DesktopHeader extends StatelessWidget {
-  const _DesktopHeader({
-    required this.user,
-    required this.rangeIndex,
-    required this.onRangeChanged,
-  });
-
-  final AppUser user;
-  final int rangeIndex;
-  final ValueChanged<int> onRangeChanged;
-
-  static String _greeting() {
-    final h = DateTime.now().hour;
-    if (h < 12) return 'Buenos días';
-    if (h < 18) return 'Buenas tardes';
-    return 'Buenas noches';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Dashboard',
-                style: TextStyle(
-                  color: colors.textPrimary,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  height: 1.15,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                '${_greeting()}, ${user.name}',
-                style: TextStyle(
-                  color: colors.primary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                'Aquí tienes un resumen de la actividad del equipo.',
-                style: TextStyle(color: colors.textSecondary, fontSize: 15),
-              ),
-            ],
-          ),
-        ),
-        // Range selector — drives the query (see _DashboardPageState._applyRange)
-        Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.sm,
-          ),
-          decoration: BoxDecoration(
-            color: colors.surface,
-            borderRadius: BorderRadius.circular(_kCardRadius),
-            border: Border.all(color: colors.divider),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<int>(
-              value: rangeIndex,
-              onChanged: (i) => onRangeChanged(i!),
-              isDense: true,
-              style: TextStyle(color: colors.textPrimary, fontSize: 14),
-              dropdownColor: colors.surface,
-              items: [
-                for (var i = 0; i < _kRangeLabels.length; i++)
-                  DropdownMenuItem(value: i, child: Text(_kRangeLabels[i])),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 // ── Sprint 14: shared layout helpers ──────────────────────────────────────────
 

@@ -17,6 +17,7 @@ import '../services/notification_repository.dart';
 import '../services/notification_web_api_stub.dart'
     if (dart.library.js_interop) '../services/notification_web_api.dart';
 import '../widgets/app_drawer.dart';
+import '../widgets/dashboard_range_selector.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/confirm_dialog.dart';
 import '../widgets/user_avatar.dart';
@@ -51,11 +52,24 @@ class _ShellEntry {
     required this.icon,
     required this.label,
     required this.page,
+    this.showsDashboardControls = false,
+    this.appBarActions,
   });
 
   final IconData icon;
   final String label;
   final Widget page;
+
+  /// Si esta sección aporta el saludo y el selector de periodo a la barra
+  /// superior. Hoy solo el Dashboard.
+  final bool showsDashboardControls;
+
+  /// Acciones propias de la sección para la barra superior.
+  ///
+  /// Se declaran aquí, junto a la página, para que el shell no tenga que
+  /// saber de qué pantalla se trata. Sólo caben acciones que no dependan del
+  /// estado interno de la página — la barra vive fuera de ella.
+  final List<Widget> Function(BuildContext)? appBarActions;
 }
 
 // ── Calendar view toggle (desktop/tablet only) ───────────────────────────────
@@ -191,24 +205,24 @@ class _AdminSectionState extends State<_AdminSection> {
   }
 
   String _subTitle(String key) => switch (key) {
-        'grupos' => 'Equipos',
-        'tiposTarea' => 'Tipos de tarea',
-        'estados' => 'Estados',
-        'horarios' => 'Horarios disponibles',
-        'usuarios' => 'Usuarios',
-        'clientes' => 'Clientes',
-        _ => key,
-      };
+    'grupos' => 'Equipos',
+    'tiposTarea' => 'Tipos de tarea',
+    'estados' => 'Estados',
+    'horarios' => 'Horarios disponibles',
+    'usuarios' => 'Usuarios',
+    'clientes' => 'Clientes',
+    _ => key,
+  };
 
   Widget _buildSubPage(String key) => switch (key) {
-        'grupos' => const GroupsPage(showAppBar: false),
-        'tiposTarea' => const TaskTypesPage(showAppBar: false),
-        'estados' => const StatusesPage(showAppBar: false),
-        'horarios' => const AvailableHoursPage(showAppBar: false),
-        'usuarios' => const UsersPage(showAppBar: false),
-        'clientes' => const ClientsPage(showAppBar: false),
-        _ => const SizedBox.shrink(),
-      };
+    'grupos' => const GroupsPage(showAppBar: false),
+    'tiposTarea' => const TaskTypesPage(showAppBar: false),
+    'estados' => const StatusesPage(showAppBar: false),
+    'horarios' => const AvailableHoursPage(showAppBar: false),
+    'usuarios' => const UsersPage(showAppBar: false),
+    'clientes' => const ClientsPage(showAppBar: false),
+    _ => const SizedBox.shrink(),
+  };
 }
 
 /// Breadcrumb bar rendered when a sub-module is active inside [_AdminSection].
@@ -242,7 +256,11 @@ class _AdminBreadcrumb extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Icon(LucideIcons.chevronRight, size: 14, color: colors.textSecondary),
+              child: Icon(
+                LucideIcons.chevronRight,
+                size: 14,
+                color: colors.textSecondary,
+              ),
             ),
             Expanded(
               child: Text(
@@ -290,6 +308,34 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _index = 0;
 
+  // ── Ancho de la barra lateral ────────────────────────────────────────────
+  // Vive aquí y no dentro de _AppSidebar porque la barra superior lo necesita:
+  // el saludo va alineado con donde empieza el contenido, y ese punto se mueve
+  // cuando el menú se pliega.
+  static const double _kSidebarExpanded = 220;
+  static const double _kSidebarCollapsed = AppLayout.navigationRailWidth; // 72
+  static const String _kSidebarPrefsKey = 'sidebar_collapsed';
+
+  bool _sidebarCollapsed = false;
+  double get _sidebarWidth =>
+      _sidebarCollapsed ? _kSidebarCollapsed : _kSidebarExpanded;
+
+  Future<void> _loadSidebarState() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(
+        () => _sidebarCollapsed = prefs.getBool(_kSidebarPrefsKey) ?? false,
+      );
+    }
+  }
+
+  Future<void> _toggleSidebar() async {
+    final next = !_sidebarCollapsed;
+    setState(() => _sidebarCollapsed = next);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kSidebarPrefsKey, next);
+  }
+
   // ── Content-area nested Navigator controls ───────────────────────────────
   // Used only in the tablet/desktop sidebar layout. Null-safe: `.currentState`
   // is only non-null once the content area has been built.
@@ -299,6 +345,7 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
+    _loadSidebarState();
     // Tap-to-open, background/terminated-app case: the service worker
     // (web/firebase-messaging-sw.js) sends a background push click to
     // "<origin>/?openTask=<taskId>" or "<origin>/?openCase=<caseId>" — the
@@ -312,10 +359,15 @@ class _MainShellState extends State<MainShell> {
     if (kIsWeb) {
       final taskId = Uri.base.queryParameters['openTask'];
       final caseId = Uri.base.queryParameters['openCase'];
-      if ((taskId != null && taskId.isNotEmpty) || (caseId != null && caseId.isNotEmpty)) {
+      if ((taskId != null && taskId.isNotEmpty) ||
+          (caseId != null && caseId.isNotEmpty)) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (taskId != null && taskId.isNotEmpty) openTaskFromNotification(taskId);
-          if (caseId != null && caseId.isNotEmpty) openSupportCaseFromNotification(caseId);
+          if (taskId != null && taskId.isNotEmpty) {
+            openTaskFromNotification(taskId);
+          }
+          if (caseId != null && caseId.isNotEmpty) {
+            openSupportCaseFromNotification(caseId);
+          }
           clearOpenTaskQueryParam();
         });
       }
@@ -340,7 +392,10 @@ class _MainShellState extends State<MainShell> {
     _contentNavKey.currentState?.popUntil((route) => route.isFirst);
     final auth = context.read<AuthProvider>();
     final isAdmin = auth.isAdminOfAnyKind;
-    final all = [..._buildTabEntries(isAdmin, auth), ..._buildSectionEntries(isAdmin, auth)];
+    final all = [
+      ..._buildTabEntries(isAdmin, auth),
+      ..._buildSectionEntries(isAdmin, auth),
+    ];
     _contentBaseKey.currentState?.setChildren(all.map((e) => e.page).toList());
     _contentBaseKey.currentState?.setIndex(i);
     setState(() => _index = i);
@@ -355,28 +410,66 @@ class _MainShellState extends State<MainShell> {
     'Perfil',
   ];
 
+  /// Botones de Casos de Soporte para la barra superior.
+  ///
+  /// Estaban dentro del contenido, repetidos a un centímetro de una barra que
+  /// cruzaba la pantalla entera vacía.
+  static List<Widget> _supportCaseActions(BuildContext context) {
+    final puedeEtiquetas = context.watch<AuthProvider>().hasPermission(
+      AppPermissions.manageSupportCases,
+    );
+    return [
+      if (puedeEtiquetas)
+        IconButton(
+          tooltip: 'Gestionar etiquetas',
+          onPressed: () => openSupportCaseTagsSheet(context),
+          icon: const Icon(LucideIcons.tag, size: 20),
+        ),
+      const SizedBox(width: AppSpacing.xs),
+      ElevatedButton.icon(
+        onPressed: () => openSupportCaseCreateForm(context),
+        icon: const Icon(LucideIcons.plus, size: 18),
+        label: const Text('Nuevo caso'),
+      ),
+      const SizedBox(width: AppSpacing.sm),
+    ];
+  }
+
+  /// Acciones de la sección abierta, sólo en el diseño con barra lateral.
+  ///
+  /// El diseño de celular no las usa: su barra es estrecha, y crear un caso ya
+  /// tiene ahí su botón flotante.
+  List<Widget> _accionesDeSeccion(BuildContext context, _ShellEntry entry) {
+    return entry.appBarActions?.call(context) ?? const [];
+  }
+
   // ── Single source of truth: primary tabs (sidebar section 1) ────────────
   // [0] Dashboard / Inicio
   // [1] Calendario  (_CalendarSection wraps CalendarPage + WeekPage toggle)
   // [2] Reportes    (viewReports permission — super_admin always has it)
   List<_ShellEntry> _buildTabEntries(bool isAdmin, AuthProvider auth) => [
-        _ShellEntry(
-          icon: isAdmin ? LucideIcons.gauge : LucideIcons.home,
-          label: isAdmin ? 'Dashboard' : 'Inicio',
-          page: isAdmin ? const DashboardPage() : const HomePage(),
-        ),
-        const _ShellEntry(
-          icon: LucideIcons.calendar,
-          label: 'Calendario',
-          page: _CalendarSection(),
-        ),
-        if (auth.hasPermission(AppPermissions.viewReports))
-          const _ShellEntry(
-            icon: LucideIcons.barChart3,
-            label: 'Reportes',
-            page: ReportsPage(),
-          ),
-      ];
+    _ShellEntry(
+      icon: isAdmin ? LucideIcons.gauge : LucideIcons.home,
+      label: isAdmin ? 'Dashboard' : 'Inicio',
+      page: isAdmin ? const DashboardPage() : const HomePage(),
+      // El saludo y el selector de periodo van en la barra superior, y solo
+      // pertenecen al Dashboard. La condicion vive aqui, junto a la decision
+      // de que pagina es — no en un `_index == 0` suelto en el otro extremo
+      // del archivo, que hay que recordar mantener a la par.
+      showsDashboardControls: isAdmin,
+    ),
+    const _ShellEntry(
+      icon: LucideIcons.calendar,
+      label: 'Calendario',
+      page: _CalendarSection(),
+    ),
+    if (auth.hasPermission(AppPermissions.viewReports))
+      const _ShellEntry(
+        icon: LucideIcons.barChart3,
+        label: 'Reportes',
+        page: ReportsPage(),
+      ),
+  ];
 
   // ── Single source of truth: secondary sections (sidebar section 2) ──────
   // [0] Perfil                    — user-card tap only, not a nav item
@@ -385,69 +478,70 @@ class _MainShellState extends State<MainShell> {
   // [3] Papelera                  (manageTasks permission)
   // [4 / 1] Configuración
   List<_ShellEntry> _buildSectionEntries(bool isAdmin, AuthProvider auth) => [
+    const _ShellEntry(
+      icon: LucideIcons.user,
+      label: 'Perfil',
+      page: ProfilePage(),
+    ),
+    if (isAdmin) ...[
+      const _ShellEntry(
+        icon: LucideIcons.clipboardList,
+        label: 'Agenda diaria',
+        page: HomePage(),
+      ),
+      // Only shown if at least one of AdminPanelPage's own modules would
+      // actually render for this admin (manageUsers/manageTeams/
+      // manageCatalogs) — otherwise a scoped admin_equipo with none of
+      // those would land on an empty panel with nothing to click.
+      if (auth.hasPermission(AppPermissions.manageUsers) ||
+          auth.hasPermission(AppPermissions.manageTeams) ||
+          auth.hasPermission(AppPermissions.manageCatalogs))
         const _ShellEntry(
-          icon: LucideIcons.user,
-          label: 'Perfil',
-          page: ProfilePage(),
+          icon: LucideIcons.layoutDashboard,
+          label: 'Panel de administración',
+          page: _AdminSection(),
         ),
-        if (isAdmin) ...[
-          const _ShellEntry(
-            icon: LucideIcons.clipboardList,
-            label: 'Agenda diaria',
-            page: HomePage(),
-          ),
-          // Only shown if at least one of AdminPanelPage's own modules would
-          // actually render for this admin (manageUsers/manageTeams/
-          // manageCatalogs) — otherwise a scoped admin_equipo with none of
-          // those would land on an empty panel with nothing to click.
-          if (auth.hasPermission(AppPermissions.manageUsers) ||
-              auth.hasPermission(AppPermissions.manageTeams) ||
-              auth.hasPermission(AppPermissions.manageCatalogs))
-            const _ShellEntry(
-              icon: LucideIcons.layoutDashboard,
-              label: 'Panel de administración',
-              page: _AdminSection(),
-            ),
-          // Lives as its own top-level sidebar item (not inside
-          // AdminPanelPage's module grid) — Michel's explicit placement
-          // preference, since it's a different kind of tool (an unrelated
-          // desktop program's client config) than the catalog-style modules
-          // grouped in the panel.
-          if (auth.hasPermission(AppPermissions.managePrinterConfigs))
-            const _ShellEntry(
-              icon: LucideIcons.printer,
-              label: 'VinApp Print',
-              page: PrinterConfigsPage(showAppBar: false),
-            ),
-          if (auth.hasPermission(AppPermissions.manageTasks))
-            const _ShellEntry(
-              icon: LucideIcons.trash2,
-              label: 'Papelera',
-              page: TrashPage(showAppBar: false),
-            ),
-        ],
-        // Casos de Soporte — create/read/comment/status changes are open to
-        // any signed-in user by design (see firestore.rules); only
-        // permanent delete is gated behind manageSupportCases, checked
-        // inside the page itself, not the nav entry.
+      // Lives as its own top-level sidebar item (not inside
+      // AdminPanelPage's module grid) — Michel's explicit placement
+      // preference, since it's a different kind of tool (an unrelated
+      // desktop program's client config) than the catalog-style modules
+      // grouped in the panel.
+      if (auth.hasPermission(AppPermissions.managePrinterConfigs))
         const _ShellEntry(
-          icon: LucideIcons.lifeBuoy,
-          label: 'Casos de Soporte',
-          page: SupportCasesPage(showAppBar: false),
+          icon: LucideIcons.printer,
+          label: 'VinApp Print',
+          page: PrinterConfigsPage(showAppBar: false),
         ),
-        // Generic "paste a link, get a QR" utility — no permission gate,
-        // open to any signed-in user (unlike the admin-only entries above).
+      if (auth.hasPermission(AppPermissions.manageTasks))
         const _ShellEntry(
-          icon: LucideIcons.qrCode,
-          label: 'Generador de QR',
-          page: QrGeneratorPage(showAppBar: false),
+          icon: LucideIcons.trash2,
+          label: 'Papelera',
+          page: TrashPage(showAppBar: false),
         ),
-        const _ShellEntry(
-          icon: LucideIcons.settings,
-          label: 'Configuración',
-          page: SettingsPage(showAppBar: false),
-        ),
-      ];
+    ],
+    // Casos de Soporte — create/read/comment/status changes are open to
+    // any signed-in user by design (see firestore.rules); only
+    // permanent delete is gated behind manageSupportCases, checked
+    // inside the page itself, not the nav entry.
+    _ShellEntry(
+      icon: LucideIcons.lifeBuoy,
+      label: 'Casos de Soporte',
+      page: const SupportCasesPage(showAppBar: false),
+      appBarActions: _supportCaseActions,
+    ),
+    // Generic "paste a link, get a QR" utility — no permission gate,
+    // open to any signed-in user (unlike the admin-only entries above).
+    const _ShellEntry(
+      icon: LucideIcons.qrCode,
+      label: 'Generador de QR',
+      page: QrGeneratorPage(showAppBar: false),
+    ),
+    const _ShellEntry(
+      icon: LucideIcons.settings,
+      label: 'Configuración',
+      page: SettingsPage(showAppBar: false),
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -477,18 +571,30 @@ class _MainShellState extends State<MainShell> {
     final items = <BottomNavigationBarItem>[
       isAdmin
           ? const BottomNavigationBarItem(
-              icon: Icon(LucideIcons.gauge), label: 'Dashboard')
+              icon: Icon(LucideIcons.gauge),
+              label: 'Dashboard',
+            )
           : const BottomNavigationBarItem(
-              icon: Icon(LucideIcons.home), label: 'Inicio'),
+              icon: Icon(LucideIcons.home),
+              label: 'Inicio',
+            ),
       const BottomNavigationBarItem(
-          icon: Icon(LucideIcons.calendar), label: 'Calendario'),
+        icon: Icon(LucideIcons.calendar),
+        label: 'Calendario',
+      ),
       const BottomNavigationBarItem(
-          icon: Icon(LucideIcons.calendarDays), label: 'Semana'),
+        icon: Icon(LucideIcons.calendarDays),
+        label: 'Semana',
+      ),
       if (canViewReports)
         const BottomNavigationBarItem(
-            icon: Icon(LucideIcons.barChart3), label: 'Reportes'),
+          icon: Icon(LucideIcons.barChart3),
+          label: 'Reportes',
+        ),
       const BottomNavigationBarItem(
-          icon: Icon(LucideIcons.user), label: 'Perfil'),
+        icon: Icon(LucideIcons.user),
+        label: 'Perfil',
+      ),
     ];
 
     if (_index >= pages.length) _index = 0;
@@ -501,7 +607,9 @@ class _MainShellState extends State<MainShell> {
     final stack = IndexedStack(index: _index, children: pages);
     return Scaffold(
       appBar: AppBar(
-          title: Text(title), actions: const [_NotificationBellAction()]),
+        title: Text(title),
+        actions: const [_NotificationBellAction()],
+      ),
       drawer: const AppDrawer(),
       body: Column(
         children: [
@@ -517,26 +625,72 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  Widget _buildSidebarLayout(BuildContext context, bool isAdmin, AuthProvider auth) {
+  Widget _buildSidebarLayout(
+    BuildContext context,
+    bool isAdmin,
+    AuthProvider auth,
+  ) {
     final tabs = _buildTabEntries(isAdmin, auth);
     final sections = _buildSectionEntries(isAdmin, auth);
     final all = [...tabs, ...sections];
 
     if (_index >= all.length) _index = 0;
 
-    // Index 0 shows the app name; every other section shows its own label.
+    // Cada sección muestra su propia etiqueta, incluida la primera.
+    //
+    // Antes el índice 0 era un caso especial y ponía el nombre de la app, que
+    // ya está en la cabecera de la barra lateral justo debajo, con el logo al
+    // lado. Resultado: "CheCu" dos veces casi pegados, y el nombre de la
+    // pantalla —"Dashboard"— en un tercer sitio dentro del contenido. Era la
+    // única pantalla fuera del patrón que siguen todas las demás.
+    //
+    // Solo el diseño con barra lateral. En celular no hay barra lateral, así
+    // que ahí el nombre de la app en la barra superior sí es la marca.
     final String title;
     if (_index < tabs.length) {
-      title = _index == 0 ? AppConstants.appName : tabs[_index].label;
+      title = tabs[_index].label;
     } else {
       title = sections[_index - tabs.length].label;
     }
 
+    final entry = _index < tabs.length
+        ? tabs[_index]
+        : sections[_index - tabs.length];
+    final conControles = entry.showsDashboardControls;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(title),
         automaticallyImplyLeading: false,
-        actions: [_NotificationBellAction(contentNavKey: _contentNavKey)],
+        // La barra iba de lado a lado con el título a la izquierda, la
+        // campana a la derecha y nada en medio, mientras el saludo y el
+        // selector de periodo ocupaban tres renglones del contenido. Ahora
+        // ese ancho se usa.
+        title: Text(title),
+        // El saludo va aquí y no junto al título porque la barra cruza por
+        // encima de la barra lateral: puesto después del título caía sobre la
+        // columna del menú, a caballo entre las dos zonas. `flexibleSpace`
+        // permite colocarlo en una posición exacta —el borde donde empieza el
+        // contenido— sin depender de cuánto mida el título. Y el margen sale
+        // del ancho real de la barra lateral, que se mueve al plegarla.
+        flexibleSpace: conControles
+            ? SafeArea(
+                child: Padding(
+                  padding: EdgeInsets.only(left: _sidebarWidth + AppSpacing.md),
+                  child: const Align(
+                    alignment: Alignment.centerLeft,
+                    child: _SaludoDelDia(),
+                  ),
+                ),
+              )
+            : null,
+        actions: [
+          ..._accionesDeSeccion(context, entry),
+          if (conControles) ...[
+            const DashboardRangeSelector(),
+            const SizedBox(width: AppSpacing.sm),
+          ],
+          _NotificationBellAction(contentNavKey: _contentNavKey),
+        ],
       ),
       body: Column(
         children: [
@@ -549,6 +703,9 @@ class _MainShellState extends State<MainShell> {
                   onTabSelected: _navigateToIndex,
                   tabEntries: tabs,
                   sectionEntries: sections,
+                  collapsed: _sidebarCollapsed,
+                  width: _sidebarWidth,
+                  onToggleCollapsed: _toggleSidebar,
                 ),
                 Expanded(
                   // Nested Navigator: every Navigator.push() call from within a
@@ -590,10 +747,20 @@ class _AppSidebar extends StatefulWidget {
     required this.onTabSelected,
     required this.tabEntries,
     required this.sectionEntries,
+    required this.collapsed,
+    required this.width,
+    required this.onToggleCollapsed,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onTabSelected;
+
+  /// Estado y control del plegado, ahora en manos del shell: la barra superior
+  /// necesita el ancho para alinear el saludo con donde empieza el contenido.
+  final bool collapsed;
+  final double width;
+  final Future<void> Function() onToggleCollapsed;
+
   final List<_ShellEntry> tabEntries;
 
   /// [sectionEntries[0]] is always Perfil (user-card access only, not rendered
@@ -606,31 +773,9 @@ class _AppSidebar extends StatefulWidget {
 }
 
 class _AppSidebarState extends State<_AppSidebar> {
-  bool _collapsed = false;
+  bool get _collapsed => widget.collapsed;
 
-  static const double _kExpandedWidth = 220;
-  static const double _kCollapsedWidth = AppLayout.navigationRailWidth; // 72
-  static const String _kPrefsKey = 'sidebar_collapsed';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCollapsedState();
-  }
-
-  Future<void> _loadCollapsedState() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (mounted) {
-      setState(() => _collapsed = prefs.getBool(_kPrefsKey) ?? false);
-    }
-  }
-
-  Future<void> _toggleCollapsed() async {
-    final next = !_collapsed;
-    setState(() => _collapsed = next);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kPrefsKey, next);
-  }
+  Future<void> _toggleCollapsed() => widget.onToggleCollapsed();
 
   Future<void> _signOut(BuildContext context) async {
     final confirm = await showConfirmDialog(
@@ -656,7 +801,7 @@ class _AppSidebarState extends State<_AppSidebar> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeInOut,
-      width: _collapsed ? _kCollapsedWidth : _kExpandedWidth,
+      width: widget.width,
       decoration: BoxDecoration(
         color: colors.surface,
         border: Border(right: BorderSide(color: colors.divider)),
@@ -700,7 +845,9 @@ class _AppSidebarState extends State<_AppSidebar> {
                       ),
                       child: Divider(height: 1, color: colors.divider),
                     ),
-                    ...widget.sectionEntries.skip(1).toList().asMap().entries.map((e) {
+                    ...widget.sectionEntries.skip(1).toList().asMap().entries.map((
+                      e,
+                    ) {
                       // Profile is at sectionEntries[0], so visible items start at [1].
                       // Global index = tabEntries.length + 1 (skip profile) + e.key.
                       final globalIdx = widget.tabEntries.length + 1 + e.key;
@@ -732,7 +879,9 @@ class _AppSidebarState extends State<_AppSidebar> {
           if (!_collapsed)
             Padding(
               padding: const EdgeInsets.only(
-                  bottom: AppSpacing.sm, top: AppSpacing.xs),
+                bottom: AppSpacing.sm,
+                top: AppSpacing.xs,
+              ),
               child: Center(
                 child: Text(
                   '${AppConstants.appName} v${AppConstants.appVersion}',
@@ -758,8 +907,11 @@ class _AppSidebarState extends State<_AppSidebar> {
           child: Tooltip(
             message: 'Expandir menú',
             child: IconButton(
-              icon: Icon(LucideIcons.panelLeftOpen,
-                  color: colors.textSecondary, size: 18),
+              icon: Icon(
+                LucideIcons.panelLeftOpen,
+                color: colors.textSecondary,
+                size: 18,
+              ),
               onPressed: _toggleCollapsed,
             ),
           ),
@@ -769,7 +921,9 @@ class _AppSidebarState extends State<_AppSidebar> {
 
     return Padding(
       padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       child: Row(
         children: [
           const BrandLogo(size: 32),
@@ -789,11 +943,16 @@ class _AppSidebarState extends State<_AppSidebar> {
           Tooltip(
             message: 'Contraer menú',
             child: IconButton(
-              icon: Icon(LucideIcons.panelLeftClose,
-                  color: colors.textSecondary, size: 18),
+              icon: Icon(
+                LucideIcons.panelLeftClose,
+                color: colors.textSecondary,
+                size: 18,
+              ),
               onPressed: _toggleCollapsed,
               style: IconButton.styleFrom(
-                  minimumSize: const Size(32, 32), padding: EdgeInsets.zero),
+                minimumSize: const Size(32, 32),
+                padding: EdgeInsets.zero,
+              ),
             ),
           ),
         ],
@@ -819,14 +978,15 @@ class _AppSidebarState extends State<_AppSidebar> {
         child: InkWell(
           onTap: goToProfile,
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
             child: Center(
               child: user != null
-                  ? UserAvatarDisplay(
-                      user: user, size: 40, borderWidth: 1.5)
-                  : Icon(LucideIcons.userCircle,
-                      color: colors.primary, size: 40),
+                  ? UserAvatarDisplay(user: user, size: 40, borderWidth: 1.5)
+                  : Icon(
+                      LucideIcons.userCircle,
+                      color: colors.primary,
+                      size: 40,
+                    ),
             ),
           ),
         ),
@@ -844,18 +1004,19 @@ class _AppSidebarState extends State<_AppSidebar> {
             Row(
               children: [
                 user != null
-                    ? UserAvatarDisplay(
-                        user: user, size: 52, borderWidth: 2)
+                    ? UserAvatarDisplay(user: user, size: 52, borderWidth: 2)
                     : Container(
                         width: 52,
                         height: 52,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(
-                              color: colors.primary, width: 2),
+                          border: Border.all(color: colors.primary, width: 2),
                         ),
-                        child: Icon(LucideIcons.userCircle,
-                            color: colors.primary, size: 28),
+                        child: Icon(
+                          LucideIcons.userCircle,
+                          color: colors.primary,
+                          size: 28,
+                        ),
                       ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
@@ -964,7 +1125,9 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
         onExit: (_) => setState(() => _hovered = false),
         child: Padding(
           padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.xs, vertical: 1),
+            horizontal: AppSpacing.xs,
+            vertical: 1,
+          ),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             curve: Curves.easeInOut,
@@ -972,22 +1135,17 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
               color: widget.selected
                   ? colors.primary.withValues(alpha: 0.10)
                   : (_hovered ? hoverBg : Colors.transparent),
-              borderRadius:
-                  BorderRadius.circular(AppSpacing.radiusSm),
+              borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
               border: widget.selected
-                  ? Border.all(
-                      color: colors.primary.withValues(alpha: 0.20))
+                  ? Border.all(color: colors.primary.withValues(alpha: 0.20))
                   : null,
             ),
             child: InkWell(
               onTap: widget.onTap,
-              borderRadius:
-                  BorderRadius.circular(AppSpacing.radiusSm),
+              borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
               child: Padding(
                 padding: EdgeInsets.symmetric(
-                  horizontal: widget.collapsed
-                      ? AppSpacing.sm
-                      : AppSpacing.md,
+                  horizontal: widget.collapsed ? AppSpacing.sm : AppSpacing.md,
                   vertical: AppSpacing.sm + 2,
                 ),
                 child: Row(
@@ -1040,7 +1198,9 @@ class _SidebarBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sm, vertical: 4),
+        horizontal: AppSpacing.sm,
+        vertical: 4,
+      ),
       decoration: BoxDecoration(
         color: colors.background,
         borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
@@ -1051,8 +1211,10 @@ class _SidebarBadge extends StatelessWidget {
         children: [
           Icon(icon, size: 12, color: colors.primary),
           const SizedBox(width: 4),
-          Text(label,
-              style: TextStyle(color: colors.textSecondary, fontSize: 10)),
+          Text(
+            label,
+            style: TextStyle(color: colors.textSecondary, fontSize: 10),
+          ),
         ],
       ),
     );
@@ -1071,11 +1233,7 @@ class _SidebarBadge extends StatelessWidget {
 /// The active [index] is updated at runtime via [_ContentBaseState.setIndex],
 /// called through the [GlobalKey<_ContentBaseState>] in [_MainShellState].
 class _ContentBase extends StatefulWidget {
-  const _ContentBase({
-    super.key,
-    required this.index,
-    required this.children,
-  });
+  const _ContentBase({super.key, required this.index, required this.children});
 
   final int index;
   final List<Widget> children;
@@ -1093,7 +1251,8 @@ class _ContentBaseState extends State<_ContentBase> {
   /// Refreshes the page list — see [_MainShellState._navigateToIndex] for
   /// why this can't just come from `widget.children` (the Navigator route
   /// that owns this widget is only built once, at first mount).
-  void setChildren(List<Widget> children) => setState(() => _children = children);
+  void setChildren(List<Widget> children) =>
+      setState(() => _children = children);
 
   @override
   Widget build(BuildContext context) {
@@ -1101,6 +1260,41 @@ class _ContentBaseState extends State<_ContentBase> {
     // transiently leave _currentIndex pointing past a now-shorter list.
     final safeIndex = _currentIndex < _children.length ? _currentIndex : 0;
     return IndexedStack(index: safeIndex, children: _children);
+  }
+}
+
+/// "Buenas tardes, Michel" — lo único del viejo encabezado que valía la pena
+/// conservar: cambia con la hora y con quién entró, así que no está en ningún
+/// otro lado. La frase que lo acompañaba —"Aquí tienes un resumen de la
+/// actividad del equipo"— se fue: debajo hay indicadores y cuatro gráficos, y
+/// decir que es un resumen ocupaba un renglón para no aportar nada.
+class _SaludoDelDia extends StatelessWidget {
+  const _SaludoDelDia();
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<AuthProvider>().appUser;
+    if (user == null) return const SizedBox.shrink();
+
+    final h = DateTime.now().hour;
+    final saludo = h < 12
+        ? 'Buenos días'
+        : h < 18
+        ? 'Buenas tardes'
+        : 'Buenas noches';
+
+    return Text(
+      '$saludo, ${user.name}',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: context.colors.primary,
+        // Un punto por debajo del título de la sección: se lee cómodo sin
+        // competir con el nombre de la pantalla, que es lo que orienta.
+        fontSize: 19,
+        fontWeight: FontWeight.w600,
+      ),
+    );
   }
 }
 
@@ -1132,7 +1326,8 @@ class _NotificationBellAction extends StatelessWidget {
         // set out to find (push arrives, bell shows nothing).
         if (snapshot.hasError) {
           debugPrint(
-              '[Notifications] unreadCount stream error: ${snapshot.error}');
+            '[Notifications] unreadCount stream error: ${snapshot.error}',
+          );
         }
         final count = snapshot.data ?? 0;
         return IconButton(

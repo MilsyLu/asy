@@ -39,7 +39,9 @@ class _SupportCaseTagsSheetState extends State<SupportCaseTagsSheet> {
       await repo.addTag(name);
       _nameController.clear();
     } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      if (mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -49,7 +51,8 @@ class _SupportCaseTagsSheetState extends State<SupportCaseTagsSheet> {
     final confirm = await showConfirmDialog(
       context,
       title: 'Eliminar etiqueta',
-      message: '¿Eliminar la etiqueta "${tag.name}"? Los casos que ya la tienen la conservan '
+      message:
+          '¿Eliminar la etiqueta "${tag.name}"? Los casos que ya la tienen la conservan '
           'como texto — solo deja de estar disponible para elegirla en casos nuevos.',
       confirmLabel: 'Eliminar',
       destructive: true,
@@ -59,7 +62,9 @@ class _SupportCaseTagsSheetState extends State<SupportCaseTagsSheet> {
     try {
       await repo.deleteTag(tag.id);
     } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      if (mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      }
     }
   }
 
@@ -74,8 +79,14 @@ class _SupportCaseTagsSheetState extends State<SupportCaseTagsSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Gestionar etiquetas',
-                style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18)),
+            Text(
+              'Gestionar etiquetas',
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
             const SizedBox(height: 4),
             Text(
               'Cualquiera puede aplicarlas a un caso; solo un administrador puede crearlas o eliminarlas.',
@@ -88,7 +99,10 @@ class _SupportCaseTagsSheetState extends State<SupportCaseTagsSheet> {
                   child: TextField(
                     controller: _nameController,
                     style: TextStyle(color: colors.textPrimary),
-                    decoration: const InputDecoration(isDense: true, labelText: 'Nueva etiqueta'),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      labelText: 'Nueva etiqueta',
+                    ),
                     onSubmitted: (_) => _add(),
                   ),
                 ),
@@ -96,7 +110,11 @@ class _SupportCaseTagsSheetState extends State<SupportCaseTagsSheet> {
                 IconButton.filled(
                   onPressed: _isSaving ? null : _add,
                   icon: _isSaving
-                      ? const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                      ? const SizedBox(
+                          height: 14,
+                          width: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
                       : const Icon(LucideIcons.plus, size: 18),
                 ),
               ],
@@ -118,13 +136,23 @@ class _SupportCaseTagsSheetState extends State<SupportCaseTagsSheet> {
                     return const Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),
                       child: Center(
-                        child: SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                        child: SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
                       ),
                     );
                   }
                   final tags = snapshot.data!;
                   if (tags.isEmpty) {
-                    return Text('Sin etiquetas todavía.', style: TextStyle(color: colors.textSecondary, fontSize: 12));
+                    return Text(
+                      'Sin etiquetas todavía.',
+                      style: TextStyle(
+                        color: colors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    );
                   }
                   return SingleChildScrollView(
                     child: Wrap(

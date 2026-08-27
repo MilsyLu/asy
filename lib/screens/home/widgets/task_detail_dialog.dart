@@ -41,8 +41,13 @@ String reminderLabel(TaskModel task) {
   }
 
   final taskDate = AppDateUtils.parseDateKey(task.date);
-  final taskDt =
-      DateTime(taskDate.year, taskDate.month, taskDate.day, hour, minute);
+  final taskDt = DateTime(
+    taskDate.year,
+    taskDate.month,
+    taskDate.day,
+    hour,
+    minute,
+  );
   final diff = taskDt.difference(reminderTime);
 
   if (diff == const Duration(minutes: 5)) return '5 minutos antes';
@@ -64,7 +69,8 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
 
   final isPending = task.statusId == catalog.pendingStatusId;
   final isCompleted = task.statusId == catalog.completedStatusId;
-  final canEdit = (auth.managesGroup(task.groupId) &&
+  final canEdit =
+      (auth.managesGroup(task.groupId) &&
           auth.hasPermission(AppPermissions.manageTasks)) ||
       isPending;
   final canComplete = !isCompleted;
@@ -76,168 +82,200 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
       final colors = dialogContext.colors;
       return AlertDialog(
         title: const Text('Detalle de la tarea'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TaskDetailRow(
-                icon: LucideIcons.userCircle,
-                label: 'Cliente',
-                value: task.clientName,
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: colors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: colors.primary.withValues(alpha: 0.4)),
+        // Ver la nota en support_case_detail_view.dart: el texto de Flutter no
+        // se puede seleccionar salvo que se pida, y este dialogo existe para
+        // leer — cliente, telefono, observaciones.
+        content: SelectionArea(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TaskDetailRow(
+                  icon: LucideIcons.userCircle,
+                  label: 'Cliente',
+                  value: task.clientName,
                 ),
-                child: Row(
-                  children: [
-                    Icon(LucideIcons.phone, size: 18, color: colors.primary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Teléfono',
-                            style: TextStyle(color: colors.textSecondary, fontSize: 11),
-                          ),
-                          Text(
-                            formattedPhone.isEmpty ? 'Sin teléfono' : formattedPhone,
-                            style: TextStyle(
-                              color: colors.textPrimary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (formattedPhone.isNotEmpty)
-                      CopyPhoneButton(phone: Validators.cleanPhone(task.clientPhone)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              TaskDetailRow(
-                icon: LucideIcons.tag,
-                label: 'Tipo',
-                valueWidget: TaskTypeChip(
-                  label: catalog.taskTypeName(task.taskTypeId),
-                  color: catalog.taskTypeById(task.taskTypeId)?.parsedColor ??
-                      colors.primary,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TaskDetailRow(
-                icon: LucideIcons.calendar,
-                label: 'Fecha',
-                value: AppDateUtils.formatShortDate(AppDateUtils.parseDateKey(task.date)),
-              ),
-              const SizedBox(height: 12),
-              TaskDetailRow(icon: LucideIcons.clock, label: 'Hora', value: task.hour),
-              const SizedBox(height: 12),
-              TaskDetailRow(
-                icon: LucideIcons.userCheck,
-                label: 'Encargado',
-                value: catalog.userName(task.assignedUserId),
-              ),
-              const SizedBox(height: 12),
-              TaskDetailRow(
-                icon: LucideIcons.users,
-                label: 'Equipo',
-                value: catalog.groupName(task.groupId),
-              ),
-              const SizedBox(height: 12),
-              TaskDetailRow(
-                icon: LucideIcons.fileText,
-                label: 'Observaciones',
-                value: task.observations.isEmpty ? 'Sin observaciones' : task.observations,
-              ),
-              const SizedBox(height: 12),
-              TaskDetailRow(
-                icon: LucideIcons.bell,
-                label: 'Recordatorio',
-                value: reminderLabel(task),
-              ),
-              const SizedBox(height: 12),
-              TaskDetailRow(
-                icon: LucideIcons.userPlus,
-                label: 'Creado por',
-                value: task.createdBy != null
-                    ? catalog.userName(task.createdBy)
-                    : 'No disponible',
-              ),
-              ...[
                 const SizedBox(height: 12),
-                const Divider(height: 1),
-                const SizedBox(height: 4),
-                Wrap(
-                  alignment: WrapAlignment.end,
-                  spacing: 4,
-                  children: [
-                    if (canEdit)
-                      TextButton.icon(
-                        onPressed: () {
-                          Navigator.of(dialogContext).pop();
-                          openEditTaskFlow(context, task);
-                        },
-                        icon: const Icon(LucideIcons.pencil, size: 16),
-                        label: const Text('Editar'),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: colors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: colors.primary.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.phone, size: 18, color: colors.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Teléfono',
+                              style: TextStyle(
+                                color: colors.textSecondary,
+                                fontSize: 11,
+                              ),
+                            ),
+                            Text(
+                              formattedPhone.isEmpty
+                                  ? 'Sin teléfono'
+                                  : formattedPhone,
+                              style: TextStyle(
+                                color: colors.textPrimary,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    if (canReschedule)
-                      TextButton.icon(
-                        onPressed: () {
-                          Navigator.of(dialogContext).pop();
-                          showRescheduleDialog(context, task);
-                        },
-                        icon: const Icon(LucideIcons.repeat, size: 16),
-                        label: const Text('Reprogramar'),
-                      ),
-                    if (canComplete)
-                      TextButton.icon(
-                        style: TextButton.styleFrom(foregroundColor: colors.success),
-                        onPressed: () async {
-                          Navigator.of(dialogContext).pop();
-                          final completedId = catalog.completedStatusId;
-                          if (completedId == null) {
-                            if (context.mounted) {
-                              SnackbarUtils.showError(
-                                  context, 'No existe un estado "Completada" configurado');
-                            }
-                            return;
-                          }
-                          final confirm = await showConfirmDialog(
-                            context,
-                            title: 'Completar tarea',
-                            message:
-                                '¿Marcar la tarea de ${task.clientName} a las ${task.hour} como completada?',
-                            confirmLabel: 'Completar',
-                          );
-                          if (!confirm) return;
-                          try {
-                            await repo.completeTask(task.id, completedId);
-                            if (context.mounted) {
-                              SnackbarUtils.showSuccess(context, 'Tarea completada');
-                            }
-                          } catch (e) {
-                            if (context.mounted) {
-                              SnackbarUtils.showError(
-                                  context, SnackbarUtils.firebaseErrorMessage(e));
-                            }
-                          }
-                        },
-                        icon: const Icon(LucideIcons.checkCircle, size: 16),
-                        label: const Text('Completar'),
-                      ),
-                  ],
+                      if (formattedPhone.isNotEmpty)
+                        CopyPhoneButton(
+                          phone: Validators.cleanPhone(task.clientPhone),
+                        ),
+                    ],
+                  ),
                 ),
+                const SizedBox(height: 12),
+                TaskDetailRow(
+                  icon: LucideIcons.tag,
+                  label: 'Tipo',
+                  valueWidget: TaskTypeChip(
+                    label: catalog.taskTypeName(task.taskTypeId),
+                    color:
+                        catalog.taskTypeById(task.taskTypeId)?.parsedColor ??
+                        colors.primary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TaskDetailRow(
+                  icon: LucideIcons.calendar,
+                  label: 'Fecha',
+                  value: AppDateUtils.formatShortDate(
+                    AppDateUtils.parseDateKey(task.date),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TaskDetailRow(
+                  icon: LucideIcons.clock,
+                  label: 'Hora',
+                  value: task.hour,
+                ),
+                const SizedBox(height: 12),
+                TaskDetailRow(
+                  icon: LucideIcons.userCheck,
+                  label: 'Encargado',
+                  value: catalog.userName(task.assignedUserId),
+                ),
+                const SizedBox(height: 12),
+                TaskDetailRow(
+                  icon: LucideIcons.users,
+                  label: 'Equipo',
+                  value: catalog.groupName(task.groupId),
+                ),
+                const SizedBox(height: 12),
+                TaskDetailRow(
+                  icon: LucideIcons.fileText,
+                  label: 'Observaciones',
+                  value: task.observations.isEmpty
+                      ? 'Sin observaciones'
+                      : task.observations,
+                ),
+                const SizedBox(height: 12),
+                TaskDetailRow(
+                  icon: LucideIcons.bell,
+                  label: 'Recordatorio',
+                  value: reminderLabel(task),
+                ),
+                const SizedBox(height: 12),
+                TaskDetailRow(
+                  icon: LucideIcons.userPlus,
+                  label: 'Creado por',
+                  value: task.createdBy != null
+                      ? catalog.userName(task.createdBy)
+                      : 'No disponible',
+                ),
+                ...[
+                  const SizedBox(height: 12),
+                  const Divider(height: 1),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 4,
+                    children: [
+                      if (canEdit)
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.of(dialogContext).pop();
+                            openEditTaskFlow(context, task);
+                          },
+                          icon: const Icon(LucideIcons.pencil, size: 16),
+                          label: const Text('Editar'),
+                        ),
+                      if (canReschedule)
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.of(dialogContext).pop();
+                            showRescheduleDialog(context, task);
+                          },
+                          icon: const Icon(LucideIcons.repeat, size: 16),
+                          label: const Text('Reprogramar'),
+                        ),
+                      if (canComplete)
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            foregroundColor: colors.success,
+                          ),
+                          onPressed: () async {
+                            Navigator.of(dialogContext).pop();
+                            final completedId = catalog.completedStatusId;
+                            if (completedId == null) {
+                              if (context.mounted) {
+                                SnackbarUtils.showError(
+                                  context,
+                                  'No existe un estado "Completada" configurado',
+                                );
+                              }
+                              return;
+                            }
+                            final confirm = await showConfirmDialog(
+                              context,
+                              title: 'Completar tarea',
+                              message:
+                                  '¿Marcar la tarea de ${task.clientName} a las ${task.hour} como completada?',
+                              confirmLabel: 'Completar',
+                            );
+                            if (!confirm) return;
+                            try {
+                              await repo.completeTask(task.id, completedId);
+                              if (context.mounted) {
+                                SnackbarUtils.showSuccess(
+                                  context,
+                                  'Tarea completada',
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                SnackbarUtils.showError(
+                                  context,
+                                  SnackbarUtils.firebaseErrorMessage(e),
+                                );
+                              }
+                            }
+                          },
+                          icon: const Icon(LucideIcons.checkCircle, size: 16),
+                          label: const Text('Completar'),
+                        ),
+                    ],
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
         actions: [
@@ -258,11 +296,17 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
               try {
                 await repo.softDeleteTask(task.id, user.id, user.name);
                 if (context.mounted) {
-                  SnackbarUtils.showSuccess(context, 'Tarea enviada a la papelera');
+                  SnackbarUtils.showSuccess(
+                    context,
+                    'Tarea enviada a la papelera',
+                  );
                 }
               } catch (e) {
                 if (context.mounted) {
-                  SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+                  SnackbarUtils.showError(
+                    context,
+                    SnackbarUtils.firebaseErrorMessage(e),
+                  );
                 }
               }
             },
@@ -308,7 +352,10 @@ class TaskDetailRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: TextStyle(color: colors.textSecondary, fontSize: 11)),
+              Text(
+                label,
+                style: TextStyle(color: colors.textSecondary, fontSize: 11),
+              ),
               const SizedBox(height: 4),
               valueWidget ??
                   Text(
@@ -388,7 +435,11 @@ void _showCopiedBanner(BuildContext context) {
             color: colors.success,
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
             boxShadow: const [
-              BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2)),
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 8,
+                offset: Offset(0, 2),
+              ),
             ],
           ),
           child: const Row(
@@ -396,7 +447,13 @@ void _showCopiedBanner(BuildContext context) {
             children: [
               Icon(LucideIcons.checkCircle2, color: Colors.white, size: 18),
               SizedBox(width: 10),
-              Text('Número copiado', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              Text(
+                'Número copiado',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
         ),
