@@ -6,6 +6,7 @@ import '../core/constants/app_constants.dart';
 import '../core/utils/report_metrics.dart' show TaskCatalog;
 import '../models/app_user.dart';
 import '../models/available_hour_model.dart';
+import '../core/utils/client_linking.dart';
 import '../models/client_model.dart';
 import '../models/group_model.dart';
 import '../models/status_model.dart';
@@ -21,8 +22,9 @@ class CatalogProvider extends ChangeNotifier implements TaskCatalog {
     required String empresaId,
     CatalogRepository? repository,
     UserRepository? userRepository,
-  })  : _repository = repository ?? CatalogRepository(empresaId: empresaId),
-        _userRepository = userRepository ?? UserRepository(empresaId: empresaId) {
+  }) : _repository = repository ?? CatalogRepository(empresaId: empresaId),
+       _userRepository =
+           userRepository ?? UserRepository(empresaId: empresaId) {
     _groupsSub = _repository.watchGroups().listen((v) {
       groups = v;
       notifyListeners();
@@ -170,6 +172,14 @@ class CatalogProvider extends ChangeNotifier implements TaskCatalog {
     }
     return null;
   }
+
+  /// Every client whose name matches [name], case-insensitively and trimmed.
+  ///
+  /// Returns a list and not a single client on purpose: two real businesses
+  /// can share a name, and the caller has to decide what to do about that
+  /// rather than being handed an arbitrary one of them.
+  List<ClientModel> clientsByName(String name) =>
+      clientsMatchingName(clients, name);
 
   /// Returns the id of the "Pendiente" status, falling back to the
   /// first status by `order` if no match is found.

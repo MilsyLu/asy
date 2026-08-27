@@ -4,6 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/validators.dart';
 import '../../../models/client_model.dart';
+import '../../../widgets/client_name_autocomplete.dart';
 
 /// Combined Nombre/Teléfono fields for a task's client — the first
 /// `Autocomplete` in the app. Typing in Nombre suggests existing
@@ -84,62 +85,14 @@ class _ClientPickerFieldState extends State<ClientPickerField> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        RawAutocomplete<ClientModel>(
-          textEditingController: widget.nameController,
+        ClientNameAutocomplete(
+          clients: widget.clients,
+          controller: widget.nameController,
           focusNode: _nameFocusNode,
-          optionsBuilder: (textValue) {
-            final query = textValue.text.trim().toLowerCase();
-            if (query.isEmpty) return const Iterable<ClientModel>.empty();
-            return widget.clients
-                .where((c) => c.name.toLowerCase().contains(query))
-                .take(6);
-          },
-          displayStringForOption: (c) => c.name,
           onSelected: _pick,
-          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-            return TextFormField(
-              controller: controller,
-              focusNode: focusNode,
-              style: TextStyle(color: colors.textPrimary),
-              decoration: InputDecoration(
-                labelText: 'Nombre',
-                prefixIcon: Icon(LucideIcons.userCircle, color: colors.primary),
-              ),
-              validator: (v) => Validators.required(v, fieldName: 'El nombre del cliente'),
-            );
-          },
-          optionsViewBuilder: (context, onSelected, options) {
-            return Align(
-              alignment: Alignment.topLeft,
-              child: Material(
-                elevation: 4,
-                borderRadius: BorderRadius.circular(8),
-                color: colors.surface,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 240, maxWidth: 360),
-                  child: ListView.builder(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    itemCount: options.length,
-                    itemBuilder: (context, index) {
-                      final option = options.elementAt(index);
-                      return ListTile(
-                        dense: true,
-                        title: Text(option.name, style: TextStyle(color: colors.textPrimary)),
-                        subtitle: option.phone.isEmpty
-                            ? null
-                            : Text(
-                                Validators.formatPhone(option.phone),
-                                style: TextStyle(color: colors.textSecondary, fontSize: 12),
-                              ),
-                        onTap: () => onSelected(option),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            );
-          },
+          label: 'Nombre',
+          validator: (v) =>
+              Validators.required(v, fieldName: 'El nombre del cliente'),
         ),
         const SizedBox(height: 12),
         TextFormField(

@@ -8,6 +8,7 @@ import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/snackbar_utils.dart';
+import '../../core/utils/client_linking.dart';
 import '../../core/utils/validators.dart';
 import '../../models/app_user.dart';
 import '../../models/group_model.dart';
@@ -98,13 +99,14 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
   // widgets/reminder_picker.dart, shared with the inline TaskCreatePanel.
   // ---------------------------------------------------------------------------
 
-  DateTime? _taskDateTime() => taskDateTimeFromHour(_selectedDate, _selectedHour);
+  DateTime? _taskDateTime() =>
+      taskDateTimeFromHour(_selectedDate, _selectedHour);
 
   String _reminderLabel() => formatReminderLabel(
-        option: _reminderOption,
-        reminderDateTime: _reminderDateTime,
-        taskDateTime: _taskDateTime(),
-      );
+    option: _reminderOption,
+    reminderDateTime: _reminderDateTime,
+    taskDateTime: _taskDateTime(),
+  );
 
   Future<void> _pickReminder() async {
     final result = await pickReminder(
@@ -142,14 +144,16 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
           .toList();
     } else if (current.groupIds.isNotEmpty) {
       final inOwnGroups = {
-        for (final groupId in current.groupIds) ...catalog.usersInGroup(groupId),
+        for (final groupId in current.groupIds)
+          ...catalog.usersInGroup(groupId),
       }.toList();
       pool = inOwnGroups.isNotEmpty ? inOwnGroups : catalog.users;
     } else {
       pool = catalog.users;
     }
     final active = pool.where((u) => u.isActive).toList();
-    if (_assignedUserId != null && !active.any((u) => u.id == _assignedUserId)) {
+    if (_assignedUserId != null &&
+        !active.any((u) => u.id == _assignedUserId)) {
       final assignedUser = catalog.userById(_assignedUserId);
       if (assignedUser != null) active.add(assignedUser);
     }
@@ -175,15 +179,14 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
   /// Clientes feature's plan doc for the full rationale. Returns null only
   /// when the name field ended up empty (shouldn't happen — Nombre is
   /// required — but guards against it defensively).
-  Future<String?> _resolveOrCreateClientId(CatalogProvider catalog) async {
-    if (_clientId != null) return _clientId;
-    final name = _clientNameController.text.trim();
-    if (name.isEmpty) return null;
-    final phone = Validators.cleanPhone(_clientPhoneController.text);
-    final existing = catalog.clientByNameAndPhone(name, phone);
-    if (existing != null) return existing.id;
-    final catalogRepo = context.read<CatalogRepository>();
-    return catalogRepo.addClient(name, phone);
+  Future<String?> _resolveOrCreateClientId(CatalogProvider catalog) {
+    return ClientLinking.forTask(
+      catalog: catalog,
+      repository: context.read<CatalogRepository>(),
+      linkedId: _clientId,
+      name: _clientNameController.text,
+      phone: _clientPhoneController.text,
+    );
   }
 
   Future<void> _save() async {
@@ -269,36 +272,43 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
         // reminderTime/reminderSent at all, even incidentally — otherwise
         // firestore.rules' reminderUnchanged() check would reject the
         // whole update, blocking their edit of unrelated fields too.
-        final reminderTimeToSave =
-            canEditReminder ? _reminderDateTime : widget.existingTask!.reminderTime;
-        final reminderSentToSave =
-            canEditReminder ? false : widget.existingTask!.reminderSent;
-        await repo.updateTask(widget.existingTask!.id, {
-          'date': dateKey,
-          'hour': _selectedHour,
-          'assignedUserId': _assignedUserId,
-          'taskTypeId': _taskTypeId,
-          'statusId': statusId,
-          'clientName': _clientNameController.text.trim(),
-          'clientPhone': Validators.cleanPhone(_clientPhoneController.text),
-          'clientId': resolvedClientId,
-          'observations': _observationsController.text.trim(),
-          'reminderTime': reminderTimeToSave,
-          'reminderSent': reminderSentToSave,
-          'groupId': _groupId,
-          'visibleToAllGroups': _visibleToAllGroups,
-          // Changing date/hour from this form fires onTaskUpdate exactly like
-          // the "Reprogramar" dialog does, so this path has to record who made
-          // the change too — otherwise the notification could name a person
-          // for only one of the two ways of moving a task.
-          'updatedBy': currentUserId,
-        }.map((key, value) {
-          if (key == 'reminderTime') {
-            return MapEntry(key,
-                value == null ? null : Timestamp.fromDate(value as DateTime));
-          }
-          return MapEntry(key, value);
-        }));
+        final reminderTimeToSave = canEditReminder
+            ? _reminderDateTime
+            : widget.existingTask!.reminderTime;
+        final reminderSentToSave = canEditReminder
+            ? false
+            : widget.existingTask!.reminderSent;
+        await repo.updateTask(
+          widget.existingTask!.id,
+          {
+            'date': dateKey,
+            'hour': _selectedHour,
+            'assignedUserId': _assignedUserId,
+            'taskTypeId': _taskTypeId,
+            'statusId': statusId,
+            'clientName': _clientNameController.text.trim(),
+            'clientPhone': Validators.cleanPhone(_clientPhoneController.text),
+            'clientId': resolvedClientId,
+            'observations': _observationsController.text.trim(),
+            'reminderTime': reminderTimeToSave,
+            'reminderSent': reminderSentToSave,
+            'groupId': _groupId,
+            'visibleToAllGroups': _visibleToAllGroups,
+            // Changing date/hour from this form fires onTaskUpdate exactly like
+            // the "Reprogramar" dialog does, so this path has to record who made
+            // the change too — otherwise the notification could name a person
+            // for only one of the two ways of moving a task.
+            'updatedBy': currentUserId,
+          }.map((key, value) {
+            if (key == 'reminderTime') {
+              return MapEntry(
+                key,
+                value == null ? null : Timestamp.fromDate(value as DateTime),
+              );
+            }
+            return MapEntry(key, value);
+          }),
+        );
       } else {
         final newTask = TaskModel(
           id: '',
@@ -381,22 +391,25 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     // encargado or a super_admin may edit an EXISTING task's reminder (not
     // extended to admin_equipo); the creator of a brand-new task may always
     // set the initial one.
-    final canEditReminder = !_isEditing ||
-        auth.isSuperAdmin ||
-        _assignedUserId == currentUser.id;
+    final canEditReminder =
+        !_isEditing || auth.isSuperAdmin || _assignedUserId == currentUser.id;
     if (_statusId == null && !_isEditing) {
       _statusId = catalog.pendingStatusId;
     }
     // Default to the assigned worker's (first) group (covers both brand-new
     // tasks and legacy tasks being edited for the first time after this
     // feature shipped, which have groupId == null).
-    final assignedUserGroupIds = catalog.userById(_assignedUserId)?.groupIds ?? const [];
-    _groupId ??= (assignedUserGroupIds.isNotEmpty ? assignedUserGroupIds.first : null) ??
+    final assignedUserGroupIds =
+        catalog.userById(_assignedUserId)?.groupIds ?? const [];
+    _groupId ??=
+        (assignedUserGroupIds.isNotEmpty ? assignedUserGroupIds.first : null) ??
         (currentUser.groupIds.isNotEmpty ? currentUser.groupIds.first : null);
     // Time-selection mode now lives per-team (GroupModel.timeSelectionMode)
     // instead of the old single global systemConfig toggle.
     final useFreePicker = catalog.groupById(_groupId)?.useFreePicker ?? false;
-    if (_selectedHour == null && !useFreePicker && catalog.availableHours.isNotEmpty) {
+    if (_selectedHour == null &&
+        !useFreePicker &&
+        catalog.availableHours.isNotEmpty) {
       _selectedHour = catalog.availableHours.first.hour;
     }
 
@@ -423,13 +436,17 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     final isGroupLocked = !isAdmin && currentUser.groupIds.length == 1;
     final groupOptions = currentUser.isScopedAdmin
         ? catalog.groups
-            .where((g) => currentUser.managesGroup(g.id) || g.id == _groupId)
-            .toList()
+              .where((g) => currentUser.managesGroup(g.id) || g.id == _groupId)
+              .toList()
         : (currentUser.groupIds.isNotEmpty
-            ? catalog.groups
-                .where((g) => currentUser.groupIds.contains(g.id) || g.id == _groupId)
-                .toList()
-            : catalog.groups);
+              ? catalog.groups
+                    .where(
+                      (g) =>
+                          currentUser.groupIds.contains(g.id) ||
+                          g.id == _groupId,
+                    )
+                    .toList()
+              : catalog.groups);
 
     final title = _isEditing ? 'Editar tarea' : 'Nueva tarea';
 
@@ -482,7 +499,9 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                   );
                   if (!mounted || picked == null) return;
                   setState(() {
-                    _selectedHour = TaskSchedulingService.formatTimeOfDay(picked);
+                    _selectedHour = TaskSchedulingService.formatTimeOfDay(
+                      picked,
+                    );
                   });
                 },
                 child: InputDecorator(
@@ -507,46 +526,50 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
               ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              initialValue:
-                  assignableUsers.any((u) => u.id == _assignedUserId)
-                      ? _assignedUserId
-                      : null,
+              initialValue: assignableUsers.any((u) => u.id == _assignedUserId)
+                  ? _assignedUserId
+                  : null,
               decoration: InputDecoration(
                 labelText: 'Encargado',
-                prefixIcon:
-                    Icon(LucideIcons.userCheck, color: colors.primary),
+                prefixIcon: Icon(LucideIcons.userCheck, color: colors.primary),
               ),
               dropdownColor: colors.surface,
               items: assignableUsers
-                  .map((u) =>
-                      DropdownMenuItem(value: u.id, child: Text(u.name)))
+                  .map(
+                    (u) => DropdownMenuItem(value: u.id, child: Text(u.name)),
+                  )
                   .toList(),
               onChanged: (v) => setState(() => _assignedUserId = v),
               validator: (v) => v == null ? 'Selecciona un encargado' : null,
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              initialValue:
-                  groupOptions.any((g) => g.id == _groupId) ? _groupId : null,
+              initialValue: groupOptions.any((g) => g.id == _groupId)
+                  ? _groupId
+                  : null,
               decoration: InputDecoration(
                 labelText: 'Equipo',
                 prefixIcon: Icon(LucideIcons.users, color: colors.primary),
                 suffixIcon: isGroupLocked
-                    ? Icon(LucideIcons.lock,
-                        color: colors.textSecondary, size: 18)
+                    ? Icon(
+                        LucideIcons.lock,
+                        color: colors.textSecondary,
+                        size: 18,
+                      )
                     : null,
               ),
               dropdownColor: colors.surface,
               items: groupOptions
-                  .map((g) =>
-                      DropdownMenuItem(value: g.id, child: Text(g.name)))
+                  .map(
+                    (g) => DropdownMenuItem(value: g.id, child: Text(g.name)),
+                  )
                   .toList(),
               onChanged: isGroupLocked
                   ? null
                   : (v) => setState(() {
-                        _groupId = v;
-                        _taskTypeId = null;
-                      }),
+                      _groupId = v;
+                      _taskTypeId = null;
+                    }),
               validator: (v) => v == null ? 'Selecciona un equipo' : null,
             ),
             const SizedBox(height: 8),
@@ -564,38 +587,46 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String?>(
-              initialValue:
-                  availableTaskTypes.any((t) => t.id == _taskTypeId)
-                      ? _taskTypeId
-                      : null,
+              initialValue: availableTaskTypes.any((t) => t.id == _taskTypeId)
+                  ? _taskTypeId
+                  : null,
               decoration: InputDecoration(
                 labelText: 'Tipo de tarea (opcional)',
                 prefixIcon: Icon(LucideIcons.tag, color: colors.primary),
               ),
               dropdownColor: colors.surface,
               items: [
-                const DropdownMenuItem<String?>(value: null, child: Text('Sin tipo')),
-                ...availableTaskTypes
-                    .map((t) => DropdownMenuItem<String?>(value: t.id, child: Text(t.name))),
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('Sin tipo'),
+                ),
+                ...availableTaskTypes.map(
+                  (t) => DropdownMenuItem<String?>(
+                    value: t.id,
+                    child: Text(t.name),
+                  ),
+                ),
               ],
               onChanged: (v) => setState(() => _taskTypeId = v),
             ),
             if (isAdmin) ...[
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                initialValue:
-                    catalog.statuses.any((s) => s.id == _statusId)
-                        ? _statusId
-                        : null,
+                initialValue: catalog.statuses.any((s) => s.id == _statusId)
+                    ? _statusId
+                    : null,
                 decoration: InputDecoration(
                   labelText: 'Estado',
-                  prefixIcon:
-                      Icon(LucideIcons.listChecks, color: colors.primary),
+                  prefixIcon: Icon(
+                    LucideIcons.listChecks,
+                    color: colors.primary,
+                  ),
                 ),
                 dropdownColor: colors.surface,
                 items: catalog.statuses
-                    .map((s) =>
-                        DropdownMenuItem(value: s.id, child: Text(s.name)))
+                    .map(
+                      (s) => DropdownMenuItem(value: s.id, child: Text(s.name)),
+                    )
                     .toList(),
                 onChanged: (v) => setState(() => _statusId = v),
               ),
@@ -630,23 +661,29 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                   labelText: 'Recordatorio (opcional)',
                   prefixIcon: Icon(LucideIcons.bell, color: colors.primary),
                   suffixIcon: !canEditReminder
-                      ? Icon(LucideIcons.lock,
-                          color: colors.textSecondary, size: 18)
+                      ? Icon(
+                          LucideIcons.lock,
+                          color: colors.textSecondary,
+                          size: 18,
+                        )
                       : (_reminderOption != ReminderOption.none
-                          ? IconButton(
-                              icon: Icon(LucideIcons.xCircle,
-                                  color: colors.textSecondary),
-                              onPressed: () => setState(() {
-                                _reminderDateTime = null;
-                                _reminderOption = ReminderOption.none;
-                              }),
-                            )
-                          : null),
+                            ? IconButton(
+                                icon: Icon(
+                                  LucideIcons.xCircle,
+                                  color: colors.textSecondary,
+                                ),
+                                onPressed: () => setState(() {
+                                  _reminderDateTime = null;
+                                  _reminderOption = ReminderOption.none;
+                                }),
+                              )
+                            : null),
                 ),
                 child: Text(
                   _reminderLabel(),
-                  style:
-                      !canEditReminder ? TextStyle(color: colors.textSecondary) : null,
+                  style: !canEditReminder
+                      ? TextStyle(color: colors.textSecondary)
+                      : null,
                 ),
               ),
             ),
@@ -714,7 +751,9 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
         key: _formKey,
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: AppLayout.contentMaxWidthWide),
+            constraints: const BoxConstraints(
+              maxWidth: AppLayout.contentMaxWidthWide,
+            ),
             child: Padding(
               padding: const EdgeInsets.all(AppSpacing.lg),
               child: LayoutBuilder(
@@ -730,8 +769,10 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                     isAdmin: isAdmin,
                     canEditReminder: canEditReminder,
                   );
-                  final clientSection =
-                      _buildClientSection(colors: colors, catalog: catalog);
+                  final clientSection = _buildClientSection(
+                    colors: colors,
+                    catalog: catalog,
+                  );
 
                   if (constraints.maxWidth >= 760) {
                     return SingleChildScrollView(
@@ -862,9 +903,9 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
       onChanged: isGroupLocked
           ? null
           : (v) => setState(() {
-                _groupId = v;
-                _taskTypeId = null;
-              }),
+              _groupId = v;
+              _taskTypeId = null;
+            }),
       validator: (v) => v == null ? 'Selecciona un equipo' : null,
     );
 
@@ -879,16 +920,18 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
       dropdownColor: colors.surface,
       items: [
         const DropdownMenuItem<String?>(value: null, child: Text('Sin tipo')),
-        ...availableTaskTypes
-            .map((t) => DropdownMenuItem<String?>(value: t.id, child: Text(t.name))),
+        ...availableTaskTypes.map(
+          (t) => DropdownMenuItem<String?>(value: t.id, child: Text(t.name)),
+        ),
       ],
       onChanged: (v) => setState(() => _taskTypeId = v),
     );
 
     final statusField = isAdmin
         ? DropdownButtonFormField<String>(
-            initialValue:
-                catalog.statuses.any((s) => s.id == _statusId) ? _statusId : null,
+            initialValue: catalog.statuses.any((s) => s.id == _statusId)
+                ? _statusId
+                : null,
             decoration: InputDecoration(
               labelText: 'Estado',
               prefixIcon: Icon(LucideIcons.listChecks, color: colors.primary),
@@ -940,7 +983,10 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                       children: [
                         Text(
                           'Recordatorio',
-                          style: TextStyle(color: colors.textSecondary, fontSize: 11),
+                          style: TextStyle(
+                            color: colors.textSecondary,
+                            fontSize: 11,
+                          ),
                         ),
                         Text(
                           _reminderLabel(),
@@ -956,10 +1002,17 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                     ),
                   ),
                   if (!canEditReminder)
-                    Icon(LucideIcons.lock, color: colors.textSecondary, size: 18)
+                    Icon(
+                      LucideIcons.lock,
+                      color: colors.textSecondary,
+                      size: 18,
+                    )
                   else if (_reminderOption != ReminderOption.none)
                     IconButton(
-                      icon: Icon(LucideIcons.xCircle, color: colors.textSecondary),
+                      icon: Icon(
+                        LucideIcons.xCircle,
+                        color: colors.textSecondary,
+                      ),
                       onPressed: () => setState(() {
                         _reminderDateTime = null;
                         _reminderOption = ReminderOption.none;
@@ -1014,7 +1067,10 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                     ),
                     Text(
                       'Si está desactivado, solo el equipo seleccionado podrá ver esta tarea.',
-                      style: TextStyle(color: colors.textSecondary, fontSize: 11),
+                      style: TextStyle(
+                        color: colors.textSecondary,
+                        fontSize: 11,
+                      ),
                     ),
                   ],
                 ),
@@ -1096,4 +1152,3 @@ Future<void> openEditTaskFlow(BuildContext context, TaskModel task) {
     ),
   );
 }
-

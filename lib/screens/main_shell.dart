@@ -10,6 +10,7 @@ import '../core/responsive/responsive.dart';
 import '../core/theme/theme_colors.dart';
 import '../models/app_user.dart';
 import '../providers/auth_provider.dart';
+import '../providers/support_case_panel_provider.dart';
 import '../providers/catalog_provider.dart';
 import '../services/auth_service.dart';
 import '../services/notification_navigation.dart';
@@ -427,7 +428,12 @@ class _MainShellState extends State<MainShell> {
         ),
       const SizedBox(width: AppSpacing.xs),
       ElevatedButton.icon(
-        onPressed: () => openSupportCaseCreateForm(context),
+        // Abre el panel derecho, no una ventana emergente: el formulario tapaba
+        // la lista de casos, que es justo lo que uno mira mientras registra
+        // uno nuevo. Pasa por el controlador porque esta barra vive fuera de
+        // la página y no puede tocar su estado.
+        onPressed: () =>
+            context.read<SupportCasePanelController>().openCreate(),
         icon: const Icon(LucideIcons.plus, size: 18),
         label: const Text('Nuevo caso'),
       ),

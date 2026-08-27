@@ -8,6 +8,7 @@ import 'core/constants/app_constants.dart';
 import 'core/theme/theme_manager.dart';
 import 'providers/auth_provider.dart';
 import 'providers/dashboard_range_provider.dart';
+import 'providers/support_case_panel_provider.dart';
 import 'providers/catalog_provider.dart';
 import 'providers/system_config_provider.dart';
 import 'screens/auth/login_page.dart';
@@ -94,6 +95,11 @@ class TaskFlowApp extends StatelessWidget {
                   // consulta) y la barra superior del shell (para el selector).
                   ChangeNotifierProvider<DashboardRangeController>(
                     create: (_) => DashboardRangeController(),
+                  ),
+                  // Qué muestra el panel derecho de Casos de Soporte: lo leen
+                  // la página y el botón "Nuevo caso" de la barra superior.
+                  ChangeNotifierProvider<SupportCasePanelController>(
+                    create: (_) => SupportCasePanelController(),
                   ),
                 ],
                 child: ChangeNotifierProvider<AppUpdateService>(

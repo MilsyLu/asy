@@ -6,6 +6,7 @@ import '../../../core/responsive/app_spacing.dart';
 import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../core/utils/snackbar_utils.dart';
+import '../../../core/utils/client_linking.dart';
 import '../../../core/utils/validators.dart';
 import '../../../models/app_user.dart';
 import '../../../models/group_model.dart';
@@ -76,13 +77,14 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
   // Reminder helpers — the sheet/custom-picker UI lives in reminder_picker.dart.
   // ---------------------------------------------------------------------------
 
-  DateTime? _taskDateTime() => taskDateTimeFromHour(_selectedDate, _selectedHour);
+  DateTime? _taskDateTime() =>
+      taskDateTimeFromHour(_selectedDate, _selectedHour);
 
   String _reminderLabel() => formatReminderLabel(
-        option: _reminderOption,
-        reminderDateTime: _reminderDateTime,
-        taskDateTime: _taskDateTime(),
-      );
+    option: _reminderOption,
+    reminderDateTime: _reminderDateTime,
+    taskDateTime: _taskDateTime(),
+  );
 
   Future<void> _pickReminder() async {
     final result = await pickReminder(
@@ -111,14 +113,16 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
           .toList();
     } else if (current.groupIds.isNotEmpty) {
       final inOwnGroups = {
-        for (final groupId in current.groupIds) ...catalog.usersInGroup(groupId),
+        for (final groupId in current.groupIds)
+          ...catalog.usersInGroup(groupId),
       }.toList();
       pool = inOwnGroups.isNotEmpty ? inOwnGroups : catalog.users;
     } else {
       pool = catalog.users;
     }
     final active = pool.where((u) => u.isActive).toList();
-    if (_assignedUserId != null && !active.any((u) => u.id == _assignedUserId)) {
+    if (_assignedUserId != null &&
+        !active.any((u) => u.id == _assignedUserId)) {
       final assignedUser = catalog.userById(_assignedUserId);
       if (assignedUser != null) active.add(assignedUser);
     }
@@ -160,15 +164,14 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
   /// `AddEditTaskPage._resolveOrCreateClientId` (see its doc comment for the
   /// full rationale: this is what makes the client list self-populate from
   /// ordinary task creation).
-  Future<String?> _resolveOrCreateClientId(CatalogProvider catalog) async {
-    if (_clientId != null) return _clientId;
-    final name = _clientNameController.text.trim();
-    if (name.isEmpty) return null;
-    final phone = Validators.cleanPhone(_clientPhoneController.text);
-    final existing = catalog.clientByNameAndPhone(name, phone);
-    if (existing != null) return existing.id;
-    final catalogRepo = context.read<CatalogRepository>();
-    return catalogRepo.addClient(name, phone);
+  Future<String?> _resolveOrCreateClientId(CatalogProvider catalog) {
+    return ClientLinking.forTask(
+      catalog: catalog,
+      repository: context.read<CatalogRepository>(),
+      linkedId: _clientId,
+      name: _clientNameController.text,
+      phone: _clientPhoneController.text,
+    );
   }
 
   Future<void> _save() async {
@@ -282,13 +285,17 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
       _assignedUserId ??= currentUser.id;
     }
     _statusId ??= catalog.pendingStatusId;
-    final assignedUserGroupIds = catalog.userById(_assignedUserId)?.groupIds ?? const [];
-    _groupId ??= (assignedUserGroupIds.isNotEmpty ? assignedUserGroupIds.first : null) ??
+    final assignedUserGroupIds =
+        catalog.userById(_assignedUserId)?.groupIds ?? const [];
+    _groupId ??=
+        (assignedUserGroupIds.isNotEmpty ? assignedUserGroupIds.first : null) ??
         (currentUser.groupIds.isNotEmpty ? currentUser.groupIds.first : null);
     // Time-selection mode now lives per-team (GroupModel.timeSelectionMode)
     // instead of the old single global systemConfig toggle.
     final useFreePicker = catalog.groupById(_groupId)?.useFreePicker ?? false;
-    if (_selectedHour == null && !useFreePicker && catalog.availableHours.isNotEmpty) {
+    if (_selectedHour == null &&
+        !useFreePicker &&
+        catalog.availableHours.isNotEmpty) {
       _selectedHour = catalog.availableHours.first.hour;
     }
 
@@ -302,13 +309,17 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
     final isGroupLocked = !isAdmin && currentUser.groupIds.length == 1;
     final groupOptions = currentUser.isScopedAdmin
         ? catalog.groups
-            .where((g) => currentUser.managesGroup(g.id) || g.id == _groupId)
-            .toList()
+              .where((g) => currentUser.managesGroup(g.id) || g.id == _groupId)
+              .toList()
         : (currentUser.groupIds.isNotEmpty
-            ? catalog.groups
-                .where((g) => currentUser.groupIds.contains(g.id) || g.id == _groupId)
-                .toList()
-            : catalog.groups);
+              ? catalog.groups
+                    .where(
+                      (g) =>
+                          currentUser.groupIds.contains(g.id) ||
+                          g.id == _groupId,
+                    )
+                    .toList()
+              : catalog.groups);
 
     return Form(
       key: _formKey,
@@ -379,7 +390,10 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
               final initial = _selectedHour != null
                   ? TaskSchedulingService.parseHourString(_selectedHour!)
                   : TimeOfDay.now();
-              final picked = await showTimePicker(context: context, initialTime: initial);
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: initial,
+              );
               if (!mounted || picked == null) return;
               setState(() {
                 _selectedHour = TaskSchedulingService.formatTimeOfDay(picked);
@@ -392,7 +406,9 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
               ),
               child: Text(
                 _selectedHour ?? 'Seleccionar hora',
-                style: _selectedHour == null ? TextStyle(color: colors.textSecondary) : null,
+                style: _selectedHour == null
+                    ? TextStyle(color: colors.textSecondary)
+                    : null,
               ),
             ),
           )
@@ -435,9 +451,9 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
       onChanged: isGroupLocked
           ? null
           : (v) => setState(() {
-                _groupId = v;
-                _taskTypeId = null;
-              }),
+              _groupId = v;
+              _taskTypeId = null;
+            }),
       validator: (v) => v == null ? 'Selecciona un equipo' : null,
     );
 
@@ -452,16 +468,18 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
       dropdownColor: colors.surface,
       items: [
         const DropdownMenuItem<String?>(value: null, child: Text('Sin tipo')),
-        ...availableTaskTypes
-            .map((t) => DropdownMenuItem<String?>(value: t.id, child: Text(t.name))),
+        ...availableTaskTypes.map(
+          (t) => DropdownMenuItem<String?>(value: t.id, child: Text(t.name)),
+        ),
       ],
       onChanged: (v) => setState(() => _taskTypeId = v),
     );
 
     final statusField = isAdmin
         ? DropdownButtonFormField<String>(
-            initialValue:
-                catalog.statuses.any((s) => s.id == _statusId) ? _statusId : null,
+            initialValue: catalog.statuses.any((s) => s.id == _statusId)
+                ? _statusId
+                : null,
             decoration: InputDecoration(
               labelText: 'Estado',
               prefixIcon: Icon(LucideIcons.listChecks, color: colors.primary),
@@ -506,7 +524,10 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
                       color: colors.background,
                     ),
                   )
-                : const Text('Crear tarea', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                : const Text(
+                    'Crear tarea',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
           ),
         ],
       ),
@@ -559,7 +580,10 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
                       children: [
                         Text(
                           'Recordatorio',
-                          style: TextStyle(color: colors.textSecondary, fontSize: 11),
+                          style: TextStyle(
+                            color: colors.textSecondary,
+                            fontSize: 11,
+                          ),
                         ),
                         Text(
                           _reminderLabel(),
@@ -574,7 +598,10 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
                   ),
                   if (_reminderOption != ReminderOption.none)
                     IconButton(
-                      icon: Icon(LucideIcons.xCircle, color: colors.textSecondary),
+                      icon: Icon(
+                        LucideIcons.xCircle,
+                        color: colors.textSecondary,
+                      ),
                       onPressed: () => setState(() {
                         _reminderDateTime = null;
                         _reminderOption = ReminderOption.none;
@@ -627,7 +654,10 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
                     ),
                     Text(
                       'Si está desactivado, solo el equipo seleccionado podrá ver esta tarea.',
-                      style: TextStyle(color: colors.textSecondary, fontSize: 10),
+                      style: TextStyle(
+                        color: colors.textSecondary,
+                        fontSize: 10,
+                      ),
                     ),
                   ],
                 ),

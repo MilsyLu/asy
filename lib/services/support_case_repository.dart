@@ -83,6 +83,7 @@ class SupportCaseRepository {
   /// silently failed every "Nuevo caso" attempt.
   Future<String> createCase({
     required String clientName,
+    String? clientId,
     String contactName = '',
     String contactPhone = '',
     required String subject,
@@ -106,6 +107,7 @@ class SupportCaseRepository {
         'caseNumber': nextNumber,
         'empresaId': empresaId,
         'clientName': clientName,
+        'clientId': clientId,
         'contactName': contactName,
         'contactPhone': contactPhone,
         'subject': subject,

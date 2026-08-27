@@ -42,6 +42,7 @@ class SupportCaseModel {
     required this.caseNumber,
     required this.empresaId,
     required this.clientName,
+    this.clientId,
     this.contactName = '',
     this.contactPhone = '',
     required this.subject,
@@ -66,6 +67,13 @@ class SupportCaseModel {
   final int caseNumber;
   final String empresaId;
   final String clientName;
+
+  /// Enlace al registro `clients/{id}`, cuando se pudo resolver.
+  ///
+  /// Nulo en los casos creados antes de que el formulario enlazara clientes,
+  /// y también cuando el nombre escrito coincide con más de un cliente: ahí
+  /// adivinar sería peor que dejarlo sin enlazar.
+  final String? clientId;
   final String contactName;
   final String contactPhone;
   final String subject;
@@ -114,6 +122,7 @@ class SupportCaseModel {
       caseNumber: (map['caseNumber'] as num?)?.toInt() ?? 0,
       empresaId: map['empresaId'] as String? ?? '',
       clientName: map['clientName'] as String? ?? '',
+      clientId: map['clientId'] as String?,
       contactName: map['contactName'] as String? ?? '',
       contactPhone: map['contactPhone'] as String? ?? '',
       subject: map['subject'] as String? ?? '',

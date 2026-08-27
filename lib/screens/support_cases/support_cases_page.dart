@@ -7,14 +7,18 @@ import '../../core/constants/support_case_constants.dart';
 import '../../core/responsive/app_spacing.dart';
 import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
+import '../../core/utils/client_linking.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../models/support_case_model.dart';
 import '../../models/support_case_tag_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
+import '../../providers/support_case_panel_provider.dart';
+import '../../services/catalog_repository.dart';
 import '../../services/support_case_repository.dart';
 import '../../widgets/confirm_dialog.dart';
+import '../../widgets/client_name_autocomplete.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/responsive_sheet.dart';
 import '../../widgets/support_case_badges.dart';
@@ -113,7 +117,7 @@ void openSupportCaseCreateForm(BuildContext context) {
     context,
     desktopMaxWidth: 480,
     contentBuilder: (sheetCtx) =>
-        _NewCaseForm(onCreated: () => Navigator.of(sheetCtx).pop()),
+        _NewCaseForm(onCreated: (_) => Navigator.of(sheetCtx).pop()),
   );
 }
 
@@ -142,7 +146,6 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
   String? _tagFilter;
   _SortBy _sortBy = _SortBy.recientes;
   _ViewMode _viewMode = _ViewMode.tabla;
-  String? _selectedCaseId;
 
   @override
   void dispose() {
@@ -206,7 +209,7 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
         ),
       );
     } else {
-      setState(() => _selectedCaseId = caseId);
+      context.read<SupportCasePanelController>().openCase(caseId);
     }
   }
 
@@ -216,6 +219,7 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
     final auth = context.watch<AuthProvider>();
     final myUid = auth.appUser?.id;
     final isMobile = context.isMobile;
+    final panel = context.watch<SupportCasePanelController>();
 
     final fab = isMobile
         ? FloatingActionButton(
@@ -239,7 +243,7 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
               )
             : _CaseList(
                 cases: filtered,
-                selectedCaseId: _selectedCaseId,
+                selectedCaseId: panel.caseId,
                 onTap: (id) => _openDetail(context, id),
                 canDelete: canDelete,
               );
@@ -276,8 +280,7 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
 
         return LayoutBuilder(
           builder: (context, constraints) {
-            final sideBySide =
-                constraints.maxWidth >= 900 && _selectedCaseId != null;
+            final sideBySide = constraints.maxWidth >= 900 && panel.isOpen;
             final listColumn = Column(
               children: [
                 header,
@@ -292,12 +295,27 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
                 const VerticalDivider(width: 1),
                 Expanded(
                   flex: 2,
-                  child: SupportCaseDetailView(
-                    key: ValueKey(_selectedCaseId),
-                    caseId: _selectedCaseId!,
-                    showAppBar: false,
-                    onClose: () => setState(() => _selectedCaseId = null),
-                  ),
+                  // El mismo espacio sirve para leer un caso y para crear uno.
+                  // El formulario estaba en una ventana emergente que tapaba la
+                  // lista; aqui se ve al lado de los casos que ya existen, que
+                  // es justo lo que uno mira mientras registra uno nuevo.
+                  child: panel.creating
+                      ? _NewCasePanel(
+                          onCreated: (nuevoId) => context
+                              .read<SupportCasePanelController>()
+                              .openCase(nuevoId),
+                          onClose: () => context
+                              .read<SupportCasePanelController>()
+                              .close(),
+                        )
+                      : SupportCaseDetailView(
+                          key: ValueKey(panel.caseId),
+                          caseId: panel.caseId!,
+                          showAppBar: false,
+                          onClose: () => context
+                              .read<SupportCasePanelController>()
+                              .close(),
+                        ),
                 ),
               ],
             );
@@ -910,10 +928,66 @@ class _CaseRow extends StatelessWidget {
 // Create form
 // ---------------------------------------------------------------------------
 
-class _NewCaseForm extends StatefulWidget {
-  const _NewCaseForm({required this.onCreated});
+/// El formulario de caso nuevo, montado en el panel derecho.
+///
+/// Sólo agrega el encabezado con el botón de cerrar y el desplazamiento; el
+/// formulario en sí es el mismo que usa la hoja en celular, para que no haya
+/// dos versiones que mantener a la par.
+class _NewCasePanel extends StatelessWidget {
+  const _NewCasePanel({required this.onCreated, required this.onClose});
 
-  final VoidCallback onCreated;
+  final ValueChanged<String> onCreated;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
+          child: Row(
+            children: [
+              Icon(LucideIcons.plus, size: 18, color: colors.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Nuevo caso',
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Cerrar',
+                icon: const Icon(LucideIcons.x, size: 18),
+                onPressed: onClose,
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            child: _NewCaseForm(onCreated: onCreated, showTitle: false),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NewCaseForm extends StatefulWidget {
+  const _NewCaseForm({required this.onCreated, this.showTitle = true});
+
+  /// Recibe el id del caso recién creado, para que quien lo montó decida qué
+  /// hacer: la hoja de celular se cierra, el panel abre el caso nuevo.
+  final ValueChanged<String> onCreated;
+
+  /// El panel ya pone su propio encabezado con el botón de cerrar.
+  final bool showTitle;
 
   @override
   State<_NewCaseForm> createState() => _NewCaseFormState();
@@ -932,8 +1006,74 @@ class _NewCaseFormState extends State<_NewCaseForm> {
   final Set<String> _selectedTags = {};
   bool _isSaving = false;
 
+  /// Cliente enlazado cuando se eligió uno de las sugerencias.
+  ///
+  /// Se limpia si después se edita el nombre a mano, para que el caso no
+  /// afirme estar enlazado a un cliente cuyo nombre ya no coincide con lo
+  /// escrito — al guardar se resuelve o se crea desde el texto final.
+  String? _clientId;
+  String? _linkedClientName;
+  final _clientFocusNode = FocusNode();
+
+  /// Recordatorio opcional, programado en el mismo formulario.
+  ///
+  /// Antes habia que crear el caso, abrirlo y programarlo desde el detalle:
+  /// tres pasos para algo que casi siempre se decide al registrar el caso.
+  DateTime? _reminderAt;
+  final _reminderNoteController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _clientController.addListener(_onClientNameChanged);
+  }
+
+  void _onClientNameChanged() {
+    if (_clientId == null) return;
+    if (_clientController.text != _linkedClientName) {
+      setState(() {
+        _clientId = null;
+        _linkedClientName = null;
+      });
+    }
+  }
+
+  Future<void> _pickReminder() async {
+    final ahora = DateTime.now();
+    final fecha = await showDatePicker(
+      context: context,
+      initialDate: _reminderAt ?? ahora.add(const Duration(days: 1)),
+      firstDate: ahora,
+      lastDate: ahora.add(const Duration(days: 365 * 2)),
+      helpText: 'Fecha del recordatorio',
+    );
+    if (fecha == null || !mounted) return;
+
+    final hora = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(
+        _reminderAt ?? ahora.add(const Duration(hours: 1)),
+      ),
+      helpText: 'Hora del recordatorio',
+    );
+    if (hora == null || !mounted) return;
+
+    setState(() {
+      _reminderAt = DateTime(
+        fecha.year,
+        fecha.month,
+        fecha.day,
+        hora.hour,
+        hora.minute,
+      );
+    });
+  }
+
   @override
   void dispose() {
+    _clientController.removeListener(_onClientNameChanged);
+    _clientFocusNode.dispose();
+    _reminderNoteController.dispose();
     _clientController.dispose();
     _contactController.dispose();
     _phoneController.dispose();
@@ -959,10 +1099,24 @@ class _NewCaseFormState extends State<_NewCaseForm> {
     final user = auth.appUser;
     if (user == null) return;
     final repo = context.read<SupportCaseRepository>();
+    final catalog = context.read<CatalogProvider>();
+    final catalogRepo = context.read<CatalogRepository>();
     setState(() => _isSaving = true);
     try {
-      await repo.createCase(
+      // Esto es lo que hace que la lista de Clientes se llene sola desde los
+      // casos, como ya pasaba con las tareas. Antes un caso guardaba el nombre
+      // del cliente como texto suelto y ahi moria.
+      final clientId = await ClientLinking.forSupportCase(
+        catalog: catalog,
+        repository: catalogRepo,
+        linkedId: _clientId,
+        clientName: _clientController.text,
+        contactPhone: _phoneController.text,
+      );
+
+      final caseId = await repo.createCase(
         clientName: _clientController.text.trim(),
+        clientId: clientId,
         contactName: _contactController.text.trim(),
         contactPhone: _phoneController.text.trim(),
         subject: _subjectController.text.trim(),
@@ -974,9 +1128,20 @@ class _NewCaseFormState extends State<_NewCaseForm> {
         createdBy: user.id,
         createdByName: user.name,
       );
+
+      if (_reminderAt != null) {
+        await repo.setReminder(
+          caseId,
+          reminderTime: _reminderAt,
+          reminderNote: _reminderNoteController.text.trim(),
+          authorId: user.id,
+          authorName: user.name,
+        );
+      }
+
       if (mounted) {
         SnackbarUtils.showSuccess(context, 'Caso creado');
-        widget.onCreated();
+        widget.onCreated(caseId);
       }
     } catch (e) {
       if (mounted) {
@@ -1000,20 +1165,25 @@ class _NewCaseFormState extends State<_NewCaseForm> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Nuevo caso',
-                style: TextStyle(
-                  color: colors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
+              if (widget.showTitle)
+                Text(
+                  'Nuevo caso',
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
                 ),
-              ),
               const SizedBox(height: 16),
-              TextFormField(
+              ClientNameAutocomplete(
+                clients: catalog.clients,
                 controller: _clientController,
-                autofocus: true,
-                style: TextStyle(color: colors.textPrimary),
-                decoration: const InputDecoration(labelText: 'Cliente *'),
+                focusNode: _clientFocusNode,
+                label: 'Cliente *',
+                onSelected: (c) => setState(() {
+                  _clientId = c.id;
+                  _linkedClientName = c.name;
+                }),
                 validator: (v) => (v == null || v.trim().isEmpty)
                     ? 'El cliente es obligatorio'
                     : null,
@@ -1083,6 +1253,55 @@ class _NewCaseFormState extends State<_NewCaseForm> {
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+              // Recordatorio, aqui mismo. Antes habia que crear el caso,
+              // abrirlo y programarlo desde el detalle: tres pasos para algo
+              // que casi siempre se decide al registrar el caso.
+              InkWell(
+                onTap: _pickReminder,
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'Recordarme (opcional)',
+                    prefixIcon: Icon(LucideIcons.bell, color: colors.primary),
+                    suffixIcon: _reminderAt == null
+                        ? const Icon(LucideIcons.chevronRight, size: 18)
+                        : IconButton(
+                            tooltip: 'Quitar recordatorio',
+                            icon: const Icon(LucideIcons.x, size: 16),
+                            onPressed: () => setState(() {
+                              _reminderAt = null;
+                              _reminderNoteController.clear();
+                            }),
+                          ),
+                  ),
+                  child: Text(
+                    _reminderAt == null
+                        ? 'Sin recordatorio'
+                        : '${AppDateUtils.formatShortDate(_reminderAt!)} · '
+                              '${AppDateUtils.formatTime12h(_reminderAt!)}',
+                    style: TextStyle(
+                      color: _reminderAt == null
+                          ? colors.textSecondary
+                          : colors.textPrimary,
+                      fontWeight: _reminderAt == null
+                          ? FontWeight.w400
+                          : FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              if (_reminderAt != null) ...[
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _reminderNoteController,
+                  style: TextStyle(color: colors.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Nota del recordatorio (opcional)',
+                    hintText: 'Ej: consultarle al equipo de tecno',
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               DropdownButtonFormField<String?>(
                 initialValue: _assignedUserId,
