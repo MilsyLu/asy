@@ -20,7 +20,9 @@ import 'app_update_stub.dart'
 ///      5 minutes as a fallback for cases where Firestore is not updated.
 ///
 /// The admin workflow is:
-///   1. Bump [AppConstants.appVersion] in the Dart source (e.g., '1.0' → '1.1').
+///   1. Bump `version:` in `pubspec.yaml` (e.g., 1.5.0+2 → 1.6.0+3).
+///      [AppConstants.appVersion] reads it at startup — there is no second
+///      copy of the number to keep in sync any more.
 ///   2. Build & deploy: `firebase deploy --only hosting`.
 ///   3. Update `systemConfig/settings.appVersion` to the same string in
 ///      Firestore (Firebase Console or Admin SDK).

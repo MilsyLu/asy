@@ -62,7 +62,8 @@ class _UsersPageState extends State<UsersPage> {
       // A scoped admin_equipo only ever sees workers in their own managed
       // teams — never other admins, never workers outside their reach.
       if (!auth.isSuperAdmin &&
-          !(u.role == AppRoles.trabajadorNormal && u.groupIds.any(auth.managesGroup))) {
+          !(u.role == AppRoles.trabajadorNormal &&
+              u.groupIds.any(auth.managesGroup))) {
         return false;
       }
       if (_filter == _UserStatusFilter.active && !u.isActive) return false;
@@ -81,7 +82,8 @@ class _UsersPageState extends State<UsersPage> {
       return true;
     }).toList();
 
-    final groups = List.of(catalog.groups)..sort((a, b) => a.name.compareTo(b.name));
+    final groups = List.of(catalog.groups)
+      ..sort((a, b) => a.name.compareTo(b.name));
 
     final filtersBlock = Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -92,7 +94,10 @@ class _UsersPageState extends State<UsersPage> {
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _UserSearchField(controller: _searchController, onChanged: (v) => setState(() => _searchQuery = v)),
+                    _UserSearchField(
+                      controller: _searchController,
+                      onChanged: (v) => setState(() => _searchQuery = v),
+                    ),
                     const SizedBox(height: 8),
                     _GroupFilterDropdown(
                       groups: groups,
@@ -110,8 +115,9 @@ class _UsersPageState extends State<UsersPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _UserSearchField(
-                        controller: _searchController,
-                        onChanged: (v) => setState(() => _searchQuery = v)),
+                      controller: _searchController,
+                      onChanged: (v) => setState(() => _searchQuery = v),
+                    ),
                     const SizedBox(height: 10),
                     Row(
                       children: [
@@ -151,7 +157,8 @@ class _UsersPageState extends State<UsersPage> {
               _StatusFilterChip(
                 label: 'Inactivos',
                 selected: _filter == _UserStatusFilter.inactive,
-                onTap: () => setState(() => _filter = _UserStatusFilter.inactive),
+                onTap: () =>
+                    setState(() => _filter = _UserStatusFilter.inactive),
               ),
             ],
           ),
@@ -176,7 +183,9 @@ class _UsersPageState extends State<UsersPage> {
           final user = filtered[index];
           return _UserCard(
             user: user,
-            groupName: user.groupIds.isNotEmpty ? catalog.groupNames(user.groupIds) : null,
+            groupName: user.groupIds.isNotEmpty
+                ? catalog.groupNames(user.groupIds)
+                : null,
             onTap: () => _showUserDetailSheet(context, user),
           );
         },
@@ -185,7 +194,12 @@ class _UsersPageState extends State<UsersPage> {
 
     Widget body;
     if (isMobile) {
-      body = Column(children: [filtersBlock, Expanded(child: buildList(shrink: false))]);
+      body = Column(
+        children: [
+          filtersBlock,
+          Expanded(child: buildList(shrink: false)),
+        ],
+      );
     } else {
       // Same rule as Equipos: below ~900px of *actual* available width (not
       // just device category — a collapsed vs. expanded sidebar changes this
@@ -203,10 +217,14 @@ class _UsersPageState extends State<UsersPage> {
                 Expanded(
                   child: Center(
                     child: ConstrainedBox(
-                      constraints:
-                          const BoxConstraints(maxWidth: AppLayout.contentMaxWidthWide),
+                      constraints: const BoxConstraints(
+                        maxWidth: AppLayout.contentMaxWidthWide,
+                      ),
                       child: Column(
-                        children: [filtersBlock, Expanded(child: buildList(shrink: false))],
+                        children: [
+                          filtersBlock,
+                          Expanded(child: buildList(shrink: false)),
+                        ],
                       ),
                     ),
                   ),
@@ -220,7 +238,10 @@ class _UsersPageState extends State<UsersPage> {
                   // teams/permissions fields) can be taller than the
                   // available height — without this the "Crear" button ends
                   // up cut off below the fold with no way to reach it.
-                  child: SizedBox(width: 320, child: SingleChildScrollView(child: panel)),
+                  child: SizedBox(
+                    width: 320,
+                    child: SingleChildScrollView(child: panel),
+                  ),
                 ),
               ],
             );
@@ -253,7 +274,9 @@ class _UsersPageState extends State<UsersPage> {
             child: const Icon(LucideIcons.userPlus),
           )
         : null;
-    if (!widget.showAppBar) return Scaffold(body: body, floatingActionButton: fab);
+    if (!widget.showAppBar) {
+      return Scaffold(body: body, floatingActionButton: fab);
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Usuarios')),
       body: body,
@@ -295,12 +318,20 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_role == AppRoles.adminEquipo && _managedGroupIds.isEmpty) {
-      SnackbarUtils.showError(context, 'Selecciona al menos un equipo para el administrador');
+      SnackbarUtils.showError(
+        context,
+        'Selecciona al menos un equipo para el administrador',
+      );
       return;
     }
     final isViewerSuperAdmin = context.read<AuthProvider>().isSuperAdmin;
-    if (_role == AppRoles.trabajadorNormal && !isViewerSuperAdmin && _groupIds.isEmpty) {
-      SnackbarUtils.showError(context, 'Selecciona al menos un equipo para el usuario');
+    if (_role == AppRoles.trabajadorNormal &&
+        !isViewerSuperAdmin &&
+        _groupIds.isEmpty) {
+      SnackbarUtils.showError(
+        context,
+        'Selecciona al menos un equipo para el usuario',
+      );
       return;
     }
     setState(() => _isSaving = true);
@@ -331,7 +362,9 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
         SnackbarUtils.showSuccess(context, 'Usuario creado correctamente');
       }
     } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      if (mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -343,7 +376,8 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
     final catalog = context.watch<CatalogProvider>();
     final auth = context.watch<AuthProvider>();
     final isViewerSuperAdmin = auth.isSuperAdmin;
-    final viewerManagedGroupIds = auth.appUser?.managedGroupIds ?? const <String>[];
+    final viewerManagedGroupIds =
+        auth.appUser?.managedGroupIds ?? const <String>[];
     return SidePanelShell(
       title: 'Nuevo usuario',
       icon: LucideIcons.userPlus,
@@ -372,7 +406,9 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
               controller: _passwordController,
               obscureText: true,
               style: TextStyle(color: colors.textPrimary),
-              decoration: const InputDecoration(labelText: 'Contraseña temporal'),
+              decoration: const InputDecoration(
+                labelText: 'Contraseña temporal',
+              ),
               validator: Validators.password,
             ),
             const SizedBox(height: 12),
@@ -386,7 +422,9 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
                 items: [
                   DropdownMenuItem(
                     value: AppRoles.trabajadorNormal,
-                    child: Text(AuthService.roleLabel(AppRoles.trabajadorNormal)),
+                    child: Text(
+                      AuthService.roleLabel(AppRoles.trabajadorNormal),
+                    ),
                   ),
                   DropdownMenuItem(
                     value: AppRoles.adminEquipo,
@@ -405,6 +443,26 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
                 groups: catalog.groups,
                 selected: _managedGroupIds,
                 onChanged: (v) => setState(() => _managedGroupIds = v),
+                label: 'Administra los equipos',
+                dialogHint:
+                    'Equipos que esta persona podrá gestionar: ver y editar a '
+                    'sus miembros y sus tareas. Al menos uno.',
+              ),
+              const SizedBox(height: 12),
+              // Pertenecer y administrar son cosas distintas: se puede
+              // gestionar SOPORTE sin ser de SOPORTE. Faltaba este campo, y
+              // sin él la única forma de hacer miembro a una administradora
+              // era ir a la pantalla de Equipos.
+              _ManagedGroupsField(
+                groups: catalog.groups,
+                selected: _groupIds,
+                allowEmpty: true,
+                onChanged: (v) => setState(() => _groupIds = v),
+                label: 'Pertenece a los equipos',
+                dialogHint:
+                    'Equipos de los que esta persona es miembro. Determina qué '
+                    'tareas ve, qué notificaciones recibe y a quién se le '
+                    'pueden asignar tareas.',
               ),
               const SizedBox(height: 12),
               _PermissionsChecklist(
@@ -416,11 +474,16 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
                 groups: isViewerSuperAdmin
                     ? catalog.groups
                     : catalog.groups
-                        .where((g) => viewerManagedGroupIds.contains(g.id))
-                        .toList(),
+                          .where((g) => viewerManagedGroupIds.contains(g.id))
+                          .toList(),
                 selected: _groupIds,
                 allowEmpty: isViewerSuperAdmin,
                 onChanged: (v) => setState(() => _groupIds = v),
+                label: 'Pertenece a los equipos',
+                dialogHint:
+                    'Equipos de los que esta persona es miembro. Determina qué '
+                    'tareas ve, qué notificaciones recibe y a quién se le '
+                    'pueden asignar tareas.',
               ),
             ],
             const SizedBox(height: 16),
@@ -441,21 +504,34 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
   }
 }
 
-/// Read-only chip summary of an admin_equipo's assigned teams, with a button
-/// that opens [_pickManagedGroups] to change the selection. An admin always
-/// needs at least one team — unlike Tipos de tarea's groupIds, empty here
-/// isn't a valid "universal" state.
+/// Resumen en fichas de una lista de equipos, con un botón para cambiarla.
+///
+/// [label] y [dialogHint] son obligatorios a propósito. Este mismo control
+/// edita dos cosas que no son la misma: los equipos que un administrador
+/// **gestiona** (`managedGroupIds`) y los equipos a los que una persona
+/// **pertenece** (`groupIds`). Los dos se titulaban "Equipos asignados", así
+/// que la ficha de una administradora mostraba SOPORTE y ONBOARDING mientras
+/// ella sólo era miembro de ONBOARDING — y no había manera de notarlo
+/// mirando. Pedir el texto en cada uso obliga a decir cuál de las dos es.
 class _ManagedGroupsField extends StatelessWidget {
   const _ManagedGroupsField({
     required this.groups,
     required this.selected,
     required this.onChanged,
+    required this.label,
+    required this.dialogHint,
     this.allowEmpty = false,
   });
 
   final List<GroupModel> groups;
   final List<String> selected;
   final ValueChanged<List<String>> onChanged;
+
+  /// Título de la sección. Dice cuál de los dos sentidos se está editando.
+  final String label;
+
+  /// Frase de ayuda dentro del diálogo de selección.
+  final String dialogHint;
 
   /// When true, an empty selection is a valid state (shown neutrally) rather
   /// than the red "nothing selected yet" warning — used for a regular
@@ -467,11 +543,17 @@ class _ManagedGroupsField extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final namesById = {for (final g in groups) g.id: g.name};
-    final names = selected.map((id) => namesById[id]).whereType<String>().toList();
+    final names = selected
+        .map((id) => namesById[id])
+        .whereType<String>()
+        .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Equipos asignados', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+        Text(
+          label,
+          style: TextStyle(color: colors.textSecondary, fontSize: 12),
+        ),
         const SizedBox(height: 6),
         if (names.isEmpty)
           Text(
@@ -494,6 +576,9 @@ class _ManagedGroupsField extends StatelessWidget {
               context,
               current: selected.toSet(),
               groups: groups,
+              title: label,
+              hint: dialogHint,
+              allowEmpty: allowEmpty,
             );
             if (result != null) onChanged(result.toList());
           },
@@ -518,7 +603,10 @@ class _PermissionsChecklist extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Permisos', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+        Text(
+          'Permisos',
+          style: TextStyle(color: colors.textSecondary, fontSize: 12),
+        ),
         for (final key in AppPermissions.all)
           CheckboxListTile(
             contentPadding: EdgeInsets.zero,
@@ -540,13 +628,16 @@ class _PermissionsChecklist extends StatelessWidget {
   }
 }
 
-/// Multi-select dialog for an admin_equipo's managed teams — same chip
-/// pattern as Tipos de tarea's groupIds picker, but requires at least one
-/// selection (Guardar stays disabled while empty).
+/// Diálogo de selección múltiple de equipos, para cualquiera de los dos
+/// sentidos: [title] y [hint] dicen cuál. Sin [allowEmpty] exige al menos uno
+/// (Guardar queda deshabilitado mientras esté vacío).
 Future<Set<String>?> _pickManagedGroups(
   BuildContext context, {
   required Set<String> current,
   required List<GroupModel> groups,
+  required String title,
+  required String hint,
+  bool allowEmpty = false,
 }) {
   final selected = {...current};
   final colors = context.colors;
@@ -554,7 +645,7 @@ Future<Set<String>?> _pickManagedGroups(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (dialogContext, setState) => AlertDialog(
-        title: const Text('Equipos asignados'),
+        title: Text(title),
         content: SizedBox(
           width: 360,
           child: Column(
@@ -562,7 +653,7 @@ Future<Set<String>?> _pickManagedGroups(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Selecciona al menos un equipo que este administrador podrá gestionar.',
+                hint,
                 style: TextStyle(color: colors.textSecondary, fontSize: 12),
               ),
               const SizedBox(height: 10),
@@ -593,7 +684,13 @@ Future<Set<String>?> _pickManagedGroups(
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
-            onPressed: selected.isEmpty ? null : () => Navigator.of(dialogContext).pop(selected),
+            // Con `allowEmpty` la lista vacía es un estado válido —una
+            // persona puede no pertenecer a ningún equipo—, así que Guardar
+            // sigue activo. Para los equipos que un administrador gestiona no
+            // lo es: sin ninguno no administra nada.
+            onPressed: (selected.isEmpty && !allowEmpty)
+                ? null
+                : () => Navigator.of(dialogContext).pop(selected),
             child: const Text('Guardar'),
           ),
         ],
@@ -663,7 +760,8 @@ class _GroupFilterDropdown extends StatelessWidget {
           value: AppFilterValues.noGroup,
           child: Text('Sin equipo'),
         ),
-        for (final g in groups) DropdownMenuItem<String?>(value: g.id, child: Text(g.name)),
+        for (final g in groups)
+          DropdownMenuItem<String?>(value: g.id, child: Text(g.name)),
       ],
       onChanged: onChanged,
     );
@@ -712,7 +810,11 @@ class _RoleFilterDropdown extends StatelessWidget {
 /// separated instead of crammed into one ListTile row/trailing, and with a
 /// real profile photo instead of a generic icon.
 class _UserCard extends StatelessWidget {
-  const _UserCard({required this.user, required this.groupName, required this.onTap});
+  const _UserCard({
+    required this.user,
+    required this.groupName,
+    required this.onTap,
+  });
 
   final AppUser user;
   final String? groupName;
@@ -755,7 +857,10 @@ class _UserCard extends StatelessWidget {
                       ),
                       Text(
                         user.email,
-                        style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                        style: TextStyle(
+                          color: colors.textSecondary,
+                          fontSize: 12,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -770,7 +875,10 @@ class _UserCard extends StatelessWidget {
               runSpacing: 6,
               children: [
                 _Tag(label: AuthService.roleLabel(user.role)),
-                _Tag(label: groupName ?? 'Sin equipo', muted: groupName == null),
+                _Tag(
+                  label: groupName ?? 'Sin equipo',
+                  muted: groupName == null,
+                ),
                 _StatusBadge(isActive: user.isActive),
               ],
             ),
@@ -782,7 +890,11 @@ class _UserCard extends StatelessWidget {
 }
 
 class _StatusFilterChip extends StatelessWidget {
-  const _StatusFilterChip({required this.label, required this.selected, required this.onTap});
+  const _StatusFilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String label;
   final bool selected;
@@ -797,7 +909,9 @@ class _StatusFilterChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: selected ? colors.primary.withValues(alpha: 0.2) : colors.background,
+          color: selected
+              ? colors.primary.withValues(alpha: 0.2)
+              : colors.background,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: selected ? colors.primary : colors.divider),
         ),
@@ -832,7 +946,11 @@ class _StatusBadge extends StatelessWidget {
       ),
       child: Text(
         isActive ? 'Activo' : 'Inactivo',
-        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -872,7 +990,8 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
   // scoped admin_equipo (even with manageUsers) never sees these controls,
   // mirroring firestore.rules (which never lets them touch role at all).
   final isViewerSuperAdmin = viewerAuth.isSuperAdmin;
-  final viewerManagedGroupIds = viewerAuth.appUser?.managedGroupIds ?? const <String>[];
+  final viewerManagedGroupIds =
+      viewerAuth.appUser?.managedGroupIds ?? const <String>[];
 
   String selectedRole = user.role;
   List<String> selectedGroupIds = List.of(user.groupIds);
@@ -918,7 +1037,10 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                             ),
                             Text(
                               user.email,
-                              style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                              style: TextStyle(
+                                color: colors.textSecondary,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),
@@ -926,7 +1048,10 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                     ],
                   ),
                   const SizedBox(height: 20),
-                  Text('Rol', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+                  Text(
+                    'Rol',
+                    style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                  ),
                   const SizedBox(height: 6),
                   if (isViewerSuperAdmin)
                     DropdownButtonFormField<String>(
@@ -935,20 +1060,27 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                       items: [
                         DropdownMenuItem(
                           value: AppRoles.superAdmin,
-                          child: Text(AuthService.roleLabel(AppRoles.superAdmin)),
+                          child: Text(
+                            AuthService.roleLabel(AppRoles.superAdmin),
+                          ),
                         ),
                         DropdownMenuItem(
                           value: AppRoles.adminEquipo,
-                          child: Text(AuthService.roleLabel(AppRoles.adminEquipo)),
+                          child: Text(
+                            AuthService.roleLabel(AppRoles.adminEquipo),
+                          ),
                         ),
                         DropdownMenuItem(
                           value: AppRoles.trabajadorNormal,
-                          child: Text(AuthService.roleLabel(AppRoles.trabajadorNormal)),
+                          child: Text(
+                            AuthService.roleLabel(AppRoles.trabajadorNormal),
+                          ),
                         ),
                       ],
                       onChanged: (value) async {
                         if (value == null || value == selectedRole) return;
-                        if (user.id == currentUserId && value != AppRoles.superAdmin) {
+                        if (user.id == currentUserId &&
+                            value != AppRoles.superAdmin) {
                           final confirm = await showConfirmDialog(
                             sheetContext,
                             title: 'Cambiar tu propio rol',
@@ -965,12 +1097,17 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                           await userRepo.updateRole(user.id, value);
                           setState(() => selectedRole = value);
                           if (sheetContext.mounted) {
-                            SnackbarUtils.showSuccess(sheetContext, 'Rol actualizado');
+                            SnackbarUtils.showSuccess(
+                              sheetContext,
+                              'Rol actualizado',
+                            );
                           }
                         } catch (e) {
                           if (sheetContext.mounted) {
                             SnackbarUtils.showError(
-                                sheetContext, SnackbarUtils.firebaseErrorMessage(e));
+                              sheetContext,
+                              SnackbarUtils.firebaseErrorMessage(e),
+                            );
                           }
                         }
                       },
@@ -986,17 +1123,61 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                       _ManagedGroupsField(
                         groups: catalog.groups,
                         selected: selectedManagedGroupIds,
+                        label: 'Administra los equipos',
+                        dialogHint:
+                            'Equipos que esta persona podrá gestionar: ver y editar a '
+                            'sus miembros y sus tareas. Al menos uno.',
                         onChanged: (v) async {
                           try {
                             await userRepo.updateManagedGroupIds(user.id, v);
                             setState(() => selectedManagedGroupIds = v);
                             if (sheetContext.mounted) {
-                              SnackbarUtils.showSuccess(sheetContext, 'Equipos actualizados');
+                              SnackbarUtils.showSuccess(
+                                sheetContext,
+                                'Equipos actualizados',
+                              );
                             }
                           } catch (e) {
                             if (sheetContext.mounted) {
                               SnackbarUtils.showError(
-                                  sheetContext, SnackbarUtils.firebaseErrorMessage(e));
+                                sheetContext,
+                                SnackbarUtils.firebaseErrorMessage(e),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      // El campo que faltaba: a qué equipos pertenece, no
+                      // cuáles administra. Sin esto, la ficha de Julieth
+                      // mostraba SOPORTE entre sus equipos —porque lo
+                      // administra— mientras no era miembro, y por eso no
+                      // aparecía para asignarle tareas de SOPORTE.
+                      _ManagedGroupsField(
+                        groups: catalog.groups,
+                        selected: selectedGroupIds,
+                        allowEmpty: true,
+                        label: 'Pertenece a los equipos',
+                        dialogHint:
+                            'Equipos de los que esta persona es miembro. Determina qué '
+                            'tareas ve, qué notificaciones recibe y a quién se le '
+                            'pueden asignar tareas.',
+                        onChanged: (v) async {
+                          try {
+                            await userRepo.setGroupIds(user.id, v);
+                            setState(() => selectedGroupIds = v);
+                            if (sheetContext.mounted) {
+                              SnackbarUtils.showSuccess(
+                                sheetContext,
+                                'Equipos actualizados',
+                              );
+                            }
+                          } catch (e) {
+                            if (sheetContext.mounted) {
+                              SnackbarUtils.showError(
+                                sheetContext,
+                                SnackbarUtils.firebaseErrorMessage(e),
+                              );
                             }
                           }
                         },
@@ -1011,7 +1192,9 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                           } catch (e) {
                             if (sheetContext.mounted) {
                               SnackbarUtils.showError(
-                                  sheetContext, SnackbarUtils.firebaseErrorMessage(e));
+                                sheetContext,
+                                SnackbarUtils.firebaseErrorMessage(e),
+                              );
                             }
                           }
                         },
@@ -1019,28 +1202,43 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                     ] else
                       Text(
                         'Administra: ${selectedManagedGroupIds.map((id) => catalog.groupName(id)).join(", ")}',
-                        style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                        style: TextStyle(
+                          color: colors.textSecondary,
+                          fontSize: 12,
+                        ),
                       ),
                   ] else ...[
                     _ManagedGroupsField(
                       groups: isViewerSuperAdmin
                           ? catalog.groups
                           : catalog.groups
-                              .where((g) => viewerManagedGroupIds.contains(g.id))
-                              .toList(),
+                                .where(
+                                  (g) => viewerManagedGroupIds.contains(g.id),
+                                )
+                                .toList(),
                       selected: selectedGroupIds,
                       allowEmpty: isViewerSuperAdmin,
+                      label: 'Pertenece a los equipos',
+                      dialogHint:
+                          'Equipos de los que esta persona es miembro. Determina qué '
+                          'tareas ve, qué notificaciones recibe y a quién se le '
+                          'pueden asignar tareas.',
                       onChanged: (v) async {
                         try {
                           await userRepo.setGroupIds(user.id, v);
                           setState(() => selectedGroupIds = v);
                           if (sheetContext.mounted) {
-                            SnackbarUtils.showSuccess(sheetContext, 'Equipos actualizados');
+                            SnackbarUtils.showSuccess(
+                              sheetContext,
+                              'Equipos actualizados',
+                            );
                           }
                         } catch (e) {
                           if (sheetContext.mounted) {
                             SnackbarUtils.showError(
-                                sheetContext, SnackbarUtils.firebaseErrorMessage(e));
+                              sheetContext,
+                              SnackbarUtils.firebaseErrorMessage(e),
+                            );
                           }
                         }
                       },
@@ -1062,12 +1260,16 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                         await authService.sendPasswordResetEmail(user.email);
                         if (sheetContext.mounted) {
                           SnackbarUtils.showSuccess(
-                              sheetContext, 'Correo de restablecimiento enviado');
+                            sheetContext,
+                            'Correo de restablecimiento enviado',
+                          );
                         }
                       } catch (e) {
                         if (sheetContext.mounted) {
                           SnackbarUtils.showError(
-                              sheetContext, SnackbarUtils.firebaseErrorMessage(e));
+                            sheetContext,
+                            SnackbarUtils.firebaseErrorMessage(e),
+                          );
                         }
                       }
                     },
@@ -1085,7 +1287,8 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                         final confirm = await showConfirmDialog(
                           sheetContext,
                           title: 'Desactivar usuario',
-                          message: '¿Deseas desactivar este usuario?\n\n'
+                          message:
+                              '¿Deseas desactivar este usuario?\n\n'
                               'El usuario dejará de tener acceso a CheCu, '
                               'no recibirá nuevas tareas ni notificaciones.',
                           confirmLabel: 'Desactivar',
@@ -1096,12 +1299,17 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                           await userRepo.setActive(user.id, false);
                           setState(() => isUserActive = false);
                           if (sheetContext.mounted) {
-                            SnackbarUtils.showSuccess(sheetContext, 'Usuario desactivado');
+                            SnackbarUtils.showSuccess(
+                              sheetContext,
+                              'Usuario desactivado',
+                            );
                           }
                         } catch (e) {
                           if (sheetContext.mounted) {
                             SnackbarUtils.showError(
-                                sheetContext, SnackbarUtils.firebaseErrorMessage(e));
+                              sheetContext,
+                              SnackbarUtils.firebaseErrorMessage(e),
+                            );
                           }
                         }
                       },
@@ -1118,7 +1326,8 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                         final confirm = await showConfirmDialog(
                           sheetContext,
                           title: 'Reactivar usuario',
-                          message: '¿Deseas reactivar este usuario?\n\n'
+                          message:
+                              '¿Deseas reactivar este usuario?\n\n'
                               'Recuperará acceso a la plataforma.',
                           confirmLabel: 'Reactivar',
                         );
@@ -1127,12 +1336,17 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                           await userRepo.setActive(user.id, true);
                           setState(() => isUserActive = true);
                           if (sheetContext.mounted) {
-                            SnackbarUtils.showSuccess(sheetContext, 'Usuario reactivado');
+                            SnackbarUtils.showSuccess(
+                              sheetContext,
+                              'Usuario reactivado',
+                            );
                           }
                         } catch (e) {
                           if (sheetContext.mounted) {
                             SnackbarUtils.showError(
-                                sheetContext, SnackbarUtils.firebaseErrorMessage(e));
+                              sheetContext,
+                              SnackbarUtils.firebaseErrorMessage(e),
+                            );
                           }
                         }
                       },
@@ -1142,84 +1356,103 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                     // Permanent delete stays super_admin-only, mirroring
                     // firestore.rules and the deleteUserPermanently function.
                     if (isViewerSuperAdmin) ...[
-                    const SizedBox(height: 10),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: colors.error,
-                        side: BorderSide(color: colors.error),
-                      ),
-                      onPressed: () async {
-                        final history = await taskRepo.getUserTaskHistory(
-                          user.id,
-                          completedStatusId: catalog.completedStatusId,
-                          rescheduledStatusId: catalog.rescheduledStatusId,
-                        );
-
-                        if (history.hasHistory) {
-                          if (!sheetContext.mounted) return;
-                          await showInfoDialog(
-                            sheetContext,
-                            title: 'No es posible eliminar este usuario',
-                            message: 'Se encontraron registros históricos asociados:\n\n'
-                                '• Tareas asignadas: ${history.assigned}\n'
-                                '• Tareas completadas: ${history.completed}\n'
-                                '• Tareas reprogramadas: ${history.rescheduled}\n\n'
-                                'Para conservar la integridad de los datos, '
-                                'desactiva el usuario en lugar de eliminarlo.',
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: colors.error,
+                          side: BorderSide(color: colors.error),
+                        ),
+                        onPressed: () async {
+                          final history = await taskRepo.getUserTaskHistory(
+                            user.id,
+                            completedStatusId: catalog.completedStatusId,
+                            rescheduledStatusId: catalog.rescheduledStatusId,
                           );
-                          return;
-                        }
 
-                        if (!sheetContext.mounted) return;
-                        final confirm = await showConfirmDialog(
-                          sheetContext,
-                          title: 'Eliminar permanentemente',
-                          message:
-                              'Esta acción eliminará a ${user.name} de forma '
-                              'permanente y no se puede deshacer. ¿Deseas continuar?',
-                          confirmLabel: 'Eliminar',
-                          destructive: true,
-                        );
-                        if (!confirm) return;
+                          if (history.hasHistory) {
+                            if (!sheetContext.mounted) return;
+                            await showInfoDialog(
+                              sheetContext,
+                              title: 'No es posible eliminar este usuario',
+                              message:
+                                  'Se encontraron registros históricos asociados:\n\n'
+                                  '• Tareas asignadas: ${history.assigned}\n'
+                                  '• Tareas completadas: ${history.completed}\n'
+                                  '• Tareas reprogramadas: ${history.rescheduled}\n\n'
+                                  'Para conservar la integridad de los datos, '
+                                  'desactiva el usuario en lugar de eliminarlo.',
+                            );
+                            return;
+                          }
 
-                        try {
-                          await authService.deleteUserPermanently(user.id);
-                          if (sheetContext.mounted) Navigator.of(sheetContext).pop();
-                          if (context.mounted) {
-                            SnackbarUtils.showSuccess(
-                                context, 'Usuario eliminado permanentemente');
+                          if (!sheetContext.mounted) return;
+                          final confirm = await showConfirmDialog(
+                            sheetContext,
+                            title: 'Eliminar permanentemente',
+                            message:
+                                'Esta acción eliminará a ${user.name} de forma '
+                                'permanente y no se puede deshacer. ¿Deseas continuar?',
+                            confirmLabel: 'Eliminar',
+                            destructive: true,
+                          );
+                          if (!confirm) return;
+
+                          try {
+                            await authService.deleteUserPermanently(user.id);
+                            if (sheetContext.mounted) {
+                              Navigator.of(sheetContext).pop();
+                            }
+                            if (context.mounted) {
+                              SnackbarUtils.showSuccess(
+                                context,
+                                'Usuario eliminado permanentemente',
+                              );
+                            }
+                          } on FirebaseFunctionsException catch (e) {
+                            if (sheetContext.mounted) {
+                              SnackbarUtils.showError(
+                                sheetContext,
+                                e.message ?? 'No se pudo eliminar el usuario',
+                              );
+                            }
+                          } catch (e) {
+                            if (sheetContext.mounted) {
+                              SnackbarUtils.showError(
+                                sheetContext,
+                                SnackbarUtils.firebaseErrorMessage(e),
+                              );
+                            }
                           }
-                        } on FirebaseFunctionsException catch (e) {
-                          if (sheetContext.mounted) {
-                            SnackbarUtils.showError(
-                                sheetContext, e.message ?? 'No se pudo eliminar el usuario');
-                          }
-                        } catch (e) {
-                          if (sheetContext.mounted) {
-                            SnackbarUtils.showError(
-                                sheetContext, SnackbarUtils.firebaseErrorMessage(e));
-                          }
-                        }
-                      },
-                      icon: const Icon(LucideIcons.trash2),
-                      label: const Text('Eliminar permanentemente'),
-                    ),
+                        },
+                        icon: const Icon(LucideIcons.trash2),
+                        label: const Text('Eliminar permanentemente'),
+                      ),
                     ],
                   ],
                   const SizedBox(height: 12),
                   InkWell(
-                    onTap: () => setState(() => tokensExpanded = !tokensExpanded),
+                    onTap: () =>
+                        setState(() => tokensExpanded = !tokensExpanded),
                     child: Row(
                       children: [
-                        Icon(LucideIcons.smartphone, color: colors.primary, size: 16),
+                        Icon(
+                          LucideIcons.smartphone,
+                          color: colors.primary,
+                          size: 16,
+                        ),
                         const SizedBox(width: 8),
                         Text(
                           'Tokens FCM (${user.fcmTokens.length})',
-                          style: TextStyle(color: colors.textPrimary, fontSize: 13),
+                          style: TextStyle(
+                            color: colors.textPrimary,
+                            fontSize: 13,
+                          ),
                         ),
                         const Spacer(),
                         Icon(
-                          tokensExpanded ? LucideIcons.chevronDown : LucideIcons.chevronRight,
+                          tokensExpanded
+                              ? LucideIcons.chevronDown
+                              : LucideIcons.chevronRight,
                           color: colors.textSecondary,
                           size: 16,
                         ),
@@ -1231,7 +1464,10 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                     if (user.fcmTokens.isEmpty)
                       Text(
                         'Este usuario no tiene dispositivos registrados.',
-                        style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                        style: TextStyle(
+                          color: colors.textSecondary,
+                          fontSize: 12,
+                        ),
                       )
                     else
                       for (final token in user.fcmTokens)
@@ -1293,7 +1529,8 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                       autofocus: true,
                       style: TextStyle(color: colors.textPrimary),
                       decoration: const InputDecoration(labelText: 'Nombre'),
-                      validator: (v) => Validators.required(v, fieldName: 'El nombre'),
+                      validator: (v) =>
+                          Validators.required(v, fieldName: 'El nombre'),
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -1308,7 +1545,9 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                       controller: passwordController,
                       obscureText: true,
                       style: TextStyle(color: colors.textPrimary),
-                      decoration: const InputDecoration(labelText: 'Contraseña temporal'),
+                      decoration: const InputDecoration(
+                        labelText: 'Contraseña temporal',
+                      ),
                       validator: Validators.password,
                     ),
                     const SizedBox(height: 12),
@@ -1319,15 +1558,21 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                       items: [
                         DropdownMenuItem(
                           value: AppRoles.trabajadorNormal,
-                          child: Text(AuthService.roleLabel(AppRoles.trabajadorNormal)),
+                          child: Text(
+                            AuthService.roleLabel(AppRoles.trabajadorNormal),
+                          ),
                         ),
                         DropdownMenuItem(
                           value: AppRoles.adminEquipo,
-                          child: Text(AuthService.roleLabel(AppRoles.adminEquipo)),
+                          child: Text(
+                            AuthService.roleLabel(AppRoles.adminEquipo),
+                          ),
                         ),
                         DropdownMenuItem(
                           value: AppRoles.superAdmin,
-                          child: Text(AuthService.roleLabel(AppRoles.superAdmin)),
+                          child: Text(
+                            AuthService.roleLabel(AppRoles.superAdmin),
+                          ),
                         ),
                       ],
                       onChanged: (v) => setState(() => role = v ?? role),
@@ -1338,6 +1583,22 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                         groups: catalog.groups,
                         selected: managedGroupIds,
                         onChanged: (v) => setState(() => managedGroupIds = v),
+                        label: 'Administra los equipos',
+                        dialogHint:
+                            'Equipos que esta persona podrá gestionar: ver y editar a '
+                            'sus miembros y sus tareas. Al menos uno.',
+                      ),
+                      const SizedBox(height: 12),
+                      _ManagedGroupsField(
+                        groups: catalog.groups,
+                        selected: groupIds,
+                        allowEmpty: true,
+                        onChanged: (v) => setState(() => groupIds = v),
+                        label: 'Pertenece a los equipos',
+                        dialogHint:
+                            'Equipos de los que esta persona es miembro. Determina qué '
+                            'tareas ve, qué notificaciones recibe y a quién se le '
+                            'pueden asignar tareas.',
                       ),
                       const SizedBox(height: 12),
                       _PermissionsChecklist(
@@ -1350,6 +1611,11 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                         selected: groupIds,
                         allowEmpty: true,
                         onChanged: (v) => setState(() => groupIds = v),
+                        label: 'Pertenece a los equipos',
+                        dialogHint:
+                            'Equipos de los que esta persona es miembro. Determina qué '
+                            'tareas ve, qué notificaciones recibe y a quién se le '
+                            'pueden asignar tareas.',
                       ),
                   ],
                 ),
@@ -1357,7 +1623,9 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
             ),
             actions: [
               TextButton(
-                onPressed: isSaving ? null : () => Navigator.of(dialogContext).pop(),
+                onPressed: isSaving
+                    ? null
+                    : () => Navigator.of(dialogContext).pop(),
                 child: const Text('Cancelar'),
               ),
               ElevatedButton(
@@ -1365,9 +1633,12 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                     ? null
                     : () async {
                         if (!formKey.currentState!.validate()) return;
-                        if (role == AppRoles.adminEquipo && managedGroupIds.isEmpty) {
+                        if (role == AppRoles.adminEquipo &&
+                            managedGroupIds.isEmpty) {
                           SnackbarUtils.showError(
-                              dialogContext, 'Selecciona al menos un equipo para el administrador');
+                            dialogContext,
+                            'Selecciona al menos un equipo para el administrador',
+                          );
                           return;
                         }
                         setState(() => isSaving = true);
@@ -1384,12 +1655,17 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                           );
                           if (dialogContext.mounted) {
                             Navigator.of(dialogContext).pop();
-                            SnackbarUtils.showSuccess(context, 'Usuario creado correctamente');
+                            SnackbarUtils.showSuccess(
+                              context,
+                              'Usuario creado correctamente',
+                            );
                           }
                         } catch (e) {
                           if (dialogContext.mounted) {
                             SnackbarUtils.showError(
-                                dialogContext, SnackbarUtils.firebaseErrorMessage(e));
+                              dialogContext,
+                              SnackbarUtils.firebaseErrorMessage(e),
+                            );
                           }
                           setState(() => isSaving = false);
                         }

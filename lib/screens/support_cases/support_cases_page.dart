@@ -15,6 +15,8 @@ import '../../models/support_case_tag_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../providers/support_case_panel_provider.dart';
+import '../../widgets/kpi_icon_card.dart';
+import 'support_cases_summary.dart';
 import '../../services/catalog_repository.dart';
 import '../../services/support_case_repository.dart';
 import '../../widgets/confirm_dialog.dart';
@@ -26,7 +28,7 @@ import 'support_case_detail_view.dart';
 import 'support_case_kanban_view.dart';
 import 'support_case_tags_sheet.dart';
 
-enum _ViewMode { tabla, kanban }
+enum _ViewMode { tabla, kanban, resumen }
 
 enum _QuickFilter {
   todos,
@@ -41,6 +43,17 @@ enum _QuickFilter {
 }
 
 extension on _QuickFilter {
+  /// Los cuatro que son exactamente una columna del Kanban.
+  ///
+  /// En vista Kanban sobran: el tablero ya separa por estado, y peor aún,
+  /// elegir uno vacía las otras tres columnas — se ven tres "Sin casos" que
+  /// parecen datos y son sólo el filtro puesto.
+  bool get esColumnaKanban =>
+      this == _QuickFilter.pendientes ||
+      this == _QuickFilter.enProceso ||
+      this == _QuickFilter.esperandoCliente ||
+      this == _QuickFilter.resueltos;
+
   String get label {
     switch (this) {
       case _QuickFilter.todos:
@@ -55,10 +68,13 @@ extension on _QuickFilter {
         return 'Resueltos';
       case _QuickFilter.altaPrioridad:
         return 'Alta prioridad';
+      // "+5 días" y no "Más de 5 días": son los dos filtros más anchos de
+      // los nueve y entre ambos se llevaban 140 px de la fila, que es
+      // justamente lo que faltaba para que cupieran todos. Dicen lo mismo.
       case _QuickFilter.mas5dias:
-        return 'Más de 5 días';
+        return '+5 días';
       case _QuickFilter.mas10dias:
-        return 'Más de 10 días';
+        return '+10 días';
       case _QuickFilter.misCasos:
         return 'Mis casos';
     }
@@ -236,7 +252,11 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
         final filtered = _applyFiltersAndSort(all, myUid);
 
         final canDelete = auth.hasPermission(AppPermissions.manageSupportCases);
-        final list = (!isMobile && _viewMode == _ViewMode.kanban)
+        // El Resumen recibe los casos ya filtrados, igual que la tabla y el
+        // tablero: un filtro cambia las tres vistas de la misma forma.
+        final list = (!isMobile && _viewMode == _ViewMode.resumen)
+            ? SupportCasesSummary(cases: filtered)
+            : (!isMobile && _viewMode == _ViewMode.kanban)
             ? SupportCaseKanbanView(
                 cases: filtered,
                 onTap: (id) => _openDetail(context, id),
@@ -266,7 +286,15 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
               ? () => _openManageTags(context)
               : null,
           viewMode: isMobile ? null : _viewMode,
-          onViewModeChanged: (v) => setState(() => _viewMode = v),
+          onViewModeChanged: (v) => setState(() {
+            _viewMode = v;
+            // Si venía filtrando por un estado, ese chip desaparece al entrar
+            // al Kanban. Dejarlo puesto escondería casos detrás de un filtro
+            // invisible, asi que se suelta.
+            if (v == _ViewMode.kanban && _filter.esColumnaKanban) {
+              _filter = _QuickFilter.todos;
+            }
+          }),
         );
 
         if (isMobile) {
@@ -280,7 +308,15 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
 
         return LayoutBuilder(
           builder: (context, constraints) {
-            final sideBySide = constraints.maxWidth >= 900 && panel.isOpen;
+            // En Resumen no se abre el panel para *leer* un caso: dejaría
+            // la gráfica en un tercio de pantalla, que es donde deja de
+            // leerse. Crear uno sí lo abre — bloquearlo también dejaba el
+            // botón "Nuevo caso" sin hacer absolutamente nada desde esta
+            // vista, que es peor que una gráfica estrecha un rato.
+            final sideBySide =
+                constraints.maxWidth >= 900 &&
+                panel.isOpen &&
+                (panel.creating || _viewMode != _ViewMode.resumen);
             final listColumn = Column(
               children: [
                 header,
@@ -418,217 +454,256 @@ class _CasesHeader extends StatelessWidget {
                 icon: Icon(LucideIcons.tag, color: colors.primary, size: 20),
               ),
             ),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _KpiCard(
-                icon: LucideIcons.fileText,
-                label: 'Casos abiertos',
-                value: open.length,
-                color: colors.primary,
-              ),
-              _KpiCard(
-                icon: LucideIcons.alertTriangle,
-                label: 'Urgentes',
-                value: urgentes.length,
-                color: Colors.red,
-              ),
-              _KpiCard(
-                icon: LucideIcons.sunrise,
-                label: 'Más de 5 días',
-                value: mas5.length,
-                color: Colors.orange,
-              ),
-              _KpiCard(
-                icon: LucideIcons.alarmClock,
-                label: 'Más de 10 días',
-                value: mas10.length,
-                color: Colors.red,
-              ),
-              _KpiCard(
-                icon: LucideIcons.checkCircle2,
-                label: 'Resueltos hoy',
-                value: resueltosHoy.length,
-                color: Colors.green,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: searchController,
-                  style: TextStyle(color: colors.textPrimary, fontSize: 14),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    hintText:
-                        'Buscar por cliente, asunto, descripción o número de caso',
-                    prefixIcon: Icon(
-                      LucideIcons.search,
-                      color: colors.primary,
-                      size: 18,
-                    ),
-                  ),
-                  onChanged: onQueryChanged,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final angosto = constraints.maxWidth < 640;
+
+              // La fila de arriba sólo funciona si sobra ancho de verdad. Los
+              // tres controles de la derecha piden unos 600 px que no ceden, y
+              // las cinco tarjetas se reparten el resto: por debajo de esto
+              // les tocan menos de 90 px cada una y se quedan en "Ca…", "Ur…",
+              // con la cifra tapada. No es un caso raro — pasa siempre que se
+              // abre el panel del detalle, que deja la lista en unos 960 px.
+              final holgado = constraints.maxWidth >= 1200;
+
+              final indicadores = <Widget>[
+                KpiIconCard(
+                  icon: LucideIcons.fileText,
+                  label: 'Casos abiertos',
+                  value: '${open.length}',
+                  color: colors.primary,
+                  labelAbove: true,
                 ),
-              ),
-              const SizedBox(width: 8),
-              DropdownButton<_SortBy>(
-                value: sortBy,
-                underline: const SizedBox.shrink(),
-                onChanged: (v) => v != null ? onSortChanged(v) : null,
-                items: const [
-                  DropdownMenuItem(
-                    value: _SortBy.recientes,
-                    child: Text('Más recientes'),
+                KpiIconCard(
+                  icon: LucideIcons.alertTriangle,
+                  label: 'Urgentes',
+                  value: '${urgentes.length}',
+                  color: Colors.red,
+                  labelAbove: true,
+                ),
+                KpiIconCard(
+                  icon: LucideIcons.sunrise,
+                  label: 'Más de 5 días',
+                  value: '${mas5.length}',
+                  color: Colors.orange,
+                  labelAbove: true,
+                ),
+                KpiIconCard(
+                  icon: LucideIcons.alarmClock,
+                  label: 'Más de 10 días',
+                  value: '${mas10.length}',
+                  color: Colors.red,
+                  labelAbove: true,
+                ),
+                KpiIconCard(
+                  icon: LucideIcons.checkCircle2,
+                  label: 'Resueltos hoy',
+                  value: '${resueltosHoy.length}',
+                  color: Colors.green,
+                  labelAbove: true,
+                ),
+              ];
+
+              final buscador = TextField(
+                controller: searchController,
+                style: TextStyle(color: colors.textPrimary, fontSize: 14),
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: 'Buscar caso, cliente o número',
+                  prefixIcon: Icon(
+                    LucideIcons.search,
+                    color: colors.primary,
+                    size: 18,
                   ),
-                  DropdownMenuItem(
-                    value: _SortBy.antiguos,
-                    child: Text('Más antiguos'),
-                  ),
-                  DropdownMenuItem(
-                    value: _SortBy.prioridad,
-                    child: Text('Prioridad'),
-                  ),
-                  DropdownMenuItem(
-                    value: _SortBy.dias,
-                    child: Text('Días sin resolver'),
-                  ),
-                ],
-              ),
-              if (availableTags.isNotEmpty) ...[
-                const SizedBox(width: 8),
-                DropdownButton<String?>(
-                  value: tagFilter,
+                ),
+                onChanged: onQueryChanged,
+              );
+
+              final controles = <Widget>[
+                DropdownButton<_SortBy>(
+                  value: sortBy,
                   underline: const SizedBox.shrink(),
-                  hint: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        LucideIcons.tag,
-                        size: 14,
-                        color: colors.textSecondary,
+                  onChanged: (v) => v != null ? onSortChanged(v) : null,
+                  items: const [
+                    DropdownMenuItem(
+                      value: _SortBy.recientes,
+                      child: Text('Más recientes'),
+                    ),
+                    DropdownMenuItem(
+                      value: _SortBy.antiguos,
+                      child: Text('Más antiguos'),
+                    ),
+                    DropdownMenuItem(
+                      value: _SortBy.prioridad,
+                      child: Text('Prioridad'),
+                    ),
+                    DropdownMenuItem(
+                      value: _SortBy.dias,
+                      child: Text('Días sin resolver'),
+                    ),
+                  ],
+                ),
+                if (availableTags.isNotEmpty)
+                  DropdownButton<String?>(
+                    value: tagFilter,
+                    underline: const SizedBox.shrink(),
+                    hint: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          LucideIcons.tag,
+                          size: 14,
+                          color: colors.textSecondary,
+                        ),
+                        const SizedBox(width: 4),
+                        const Text('Etiqueta'),
+                      ],
+                    ),
+                    onChanged: onTagFilterChanged,
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Todas las etiquetas'),
                       ),
-                      const SizedBox(width: 4),
-                      const Text('Etiqueta'),
+                      for (final tag in availableTags)
+                        DropdownMenuItem<String?>(value: tag, child: Text(tag)),
                     ],
                   ),
-                  onChanged: onTagFilterChanged,
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('Todas las etiquetas'),
+                if (viewMode != null)
+                  SegmentedButton<_ViewMode>(
+                    segments: const [
+                      ButtonSegment(
+                        value: _ViewMode.tabla,
+                        label: Text('Tabla'),
+                        icon: Icon(LucideIcons.list, size: 15),
+                      ),
+                      ButtonSegment(
+                        value: _ViewMode.kanban,
+                        label: Text('Kanban'),
+                        icon: Icon(LucideIcons.columns, size: 15),
+                      ),
+                      ButtonSegment(
+                        value: _ViewMode.resumen,
+                        label: Text('Resumen'),
+                        icon: Icon(LucideIcons.barChart2, size: 15),
+                      ),
+                    ],
+                    selected: {viewMode!},
+                    onSelectionChanged: (s) => onViewModeChanged(s.first),
+                    style: const ButtonStyle(
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
                     ),
-                    for (final tag in availableTags)
-                      DropdownMenuItem<String?>(value: tag, child: Text(tag)),
-                  ],
-                ),
-              ],
-              if (viewMode != null) ...[
-                const SizedBox(width: 8),
-                SegmentedButton<_ViewMode>(
-                  segments: const [
-                    ButtonSegment(
-                      value: _ViewMode.tabla,
-                      label: Text('Tabla'),
-                      icon: Icon(LucideIcons.list, size: 15),
-                    ),
-                    ButtonSegment(
-                      value: _ViewMode.kanban,
-                      label: Text('Kanban'),
-                      icon: Icon(LucideIcons.columns, size: 15),
-                    ),
-                  ],
-                  selected: {viewMode!},
-                  onSelectionChanged: (s) => onViewModeChanged(s.first),
-                  style: const ButtonStyle(
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
                   ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final f in _QuickFilter.values) ...[
-                  _FilterChip(
-                    label: f.label,
-                    selected: filter == f,
-                    onTap: () => onFilterChanged(f),
+              ];
+
+              final chips = <Widget>[
+                for (final f in _QuickFilter.values)
+                  // En Kanban estos cuatro son las columnas de abajo: repetirlos
+                  // no agrega nada, y elegir uno vacía las otras tres.
+                  if (!(viewMode == _ViewMode.kanban && f.esColumnaKanban))
+                    _FilterChip(
+                      label: f.label,
+                      selected: filter == f,
+                      onTap: () => onFilterChanged(f),
+                    ),
+              ];
+
+              if (angosto) {
+                // En un teléfono no hay ancho que repartir: cada grupo se lleva
+                // su propia tira, y la que no cabe se desliza de lado en vez de
+                // apilarse y comerse media pantalla antes del primer caso.
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _TiraHorizontal(children: indicadores),
+                    const SizedBox(height: 12),
+                    _TiraHorizontal(children: controles),
+                    const SizedBox(height: 8),
+                    buscador,
+                    const SizedBox(height: 8),
+                    _TiraHorizontal(children: chips),
+                  ],
+                );
+              }
+
+              if (!holgado) {
+                // Ancho intermedio —el panel del detalle abierto, o la ventana
+                // a media pantalla—. Los indicadores recuperan su tamaño
+                // natural y se deslizan si no caben todos, que es preferible a
+                // verlos aplastados; los controles bajan a la fila del
+                // buscador, donde sí tienen sitio.
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _TiraHorizontal(children: indicadores),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(child: buscador),
+                        const SizedBox(width: 12),
+                        for (var i = 0; i < controles.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 8),
+                          controles[i],
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 8, runSpacing: 8, children: chips),
+                  ],
+                );
+              }
+
+              // Escritorio holgado: dos filas en vez de tres. Los indicadores
+              // dejaban toda su derecha vacía y los filtros rápidos gastaban
+              // una fila entera para cinco botones; juntándolos se recupera el
+              // alto de una fila completa para los casos, que es lo que se
+              // viene a ver.
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      // Las cinco se reparten en partes iguales lo que
+                      // dejan libre los controles de la derecha. Con su ancho
+                      // fijo de 148 px pedían 772 y los controles unos 500:
+                      // en una ventana de 1265 px no caben, y lo que sobraba
+                      // se pintaba encima del desplegable. Repartiendo, se
+                      // encogen lo justo y de paso llenan la fila en vez de
+                      // dejar el hueco que había antes a su derecha.
+                      for (var i = 0; i < indicadores.length; i++) ...[
+                        if (i > 0) const SizedBox(width: 8),
+                        Expanded(child: indicadores[i]),
+                      ],
+                      const SizedBox(width: 16),
+                      for (var i = 0; i < controles.length; i++) ...[
+                        if (i > 0) const SizedBox(width: 8),
+                        controles[i],
+                      ],
+                    ],
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      // Ancho fijo: los filtros conservan su tamaño y el
+                      // espacio lo cede el buscador, que es de donde sobra.
+                      // 320 y no 360 porque con los nueve filtros de la vista
+                      // Tabla la fila quedaba corta por unos 40 px — y cuando
+                      // no caben, el último se va a una segunda línea.
+                      SizedBox(width: 320, child: buscador),
+                      const SizedBox(width: 12),
+                      // `Wrap` y no una tira deslizable: con las nueve
+                      // opciones de la vista Tabla no caben en la fila, y
+                      // deslizándose el último quedaba cortado contra el borde
+                      // sin nada que indicara que seguía habiendo filtros. Si
+                      // no caben, bajan de línea y se ven todos.
+                      Expanded(
+                        child: Wrap(spacing: 8, runSpacing: 8, children: chips),
+                      ),
+                    ],
+                  ),
                 ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _KpiCard extends StatelessWidget {
-  const _KpiCard({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String label;
-  final int value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Container(
-      width: 148,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 18),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '$value',
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: colors.textSecondary, fontSize: 11),
-                ),
-              ],
-            ),
+              );
+            },
           ),
         ],
       ),
@@ -679,7 +754,10 @@ class _FilterChip extends StatelessWidget {
 /// Shared by the table row and (in the future, if needed) any other quick
 /// delete entry point — same confirm+delete flow the detail view already
 /// has, just reachable without opening it first.
-Future<void> confirmDeleteSupportCase(
+/// Devuelve si el caso quedó realmente eliminado — el gesto de deslizar lo
+/// necesita para decidir si la fila desaparece o vuelve a su sitio: si el
+/// usuario cancela, o si el borrado falla, la fila tiene que seguir ahí.
+Future<bool> confirmDeleteSupportCase(
   BuildContext context,
   SupportCaseModel c,
 ) async {
@@ -692,14 +770,16 @@ Future<void> confirmDeleteSupportCase(
     confirmLabel: 'Eliminar',
     destructive: true,
   );
-  if (!confirm || !context.mounted) return;
+  if (!confirm || !context.mounted) return false;
   try {
     await context.read<SupportCaseRepository>().delete(c.id);
     if (context.mounted) SnackbarUtils.showSuccess(context, 'Caso eliminado');
+    return true;
   } catch (e) {
     if (context.mounted) {
       SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
     }
+    return false;
   }
 }
 
@@ -730,13 +810,41 @@ class _CaseList extends StatelessWidget {
       separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final c = cases[index];
-        return _CaseRow(
+        final angosto = context.isMobile;
+        final fila = _CaseRow(
           caseModel: c,
           selected: c.id == selectedCaseId,
           onTap: () => onTap(c.id),
-          onDelete: canDelete
+          // El bote de basura sólo en pantalla ancha. En un teléfono, con
+          // filas de dedo y sin "deshacer" detrás, un toque errado borra un
+          // caso — y el icono estaba pegado a la insignia de días, que es
+          // justo donde cae la vista.
+          onDelete: (canDelete && !angosto)
               ? () => confirmDeleteSupportCase(context, c)
               : null,
+        );
+
+        if (!angosto || !canDelete) return fila;
+
+        // Deslizar para eliminar: el gesto que ya se espera en una lista de
+        // teléfono, y que además pide confirmación antes de hacer nada. No
+        // queda como única vía — el detalle del caso sigue teniendo su propio
+        // botón de eliminar, que es donde alguien que no conozca el gesto va a
+        // buscarlo.
+        return Dismissible(
+          key: ValueKey(c.id),
+          direction: DismissDirection.endToStart,
+          confirmDismiss: (_) => confirmDeleteSupportCase(context, c),
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20),
+            decoration: BoxDecoration(
+              color: context.colors.error.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+            ),
+            child: Icon(LucideIcons.trash2, color: context.colors.error),
+          ),
+          child: fila,
         );
       },
     );
@@ -757,6 +865,36 @@ String _initialsFor(String name) {
   if (parts.isEmpty) return '?';
   if (parts.length == 1) return parts[0].substring(0, 1).toUpperCase();
   return (parts[0].substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
+}
+
+/// Una fila de widgets que se desliza de lado en vez de envolverse o salirse.
+///
+/// La usan los indicadores, los desplegables y los filtros rápidos: en los tres
+/// el problema era el mismo — en pantalla angosta se apilaban o se salían por
+/// el borde, y en el segundo caso ni siquiera se alcanzaba a ver que faltaba
+/// algo.
+class _TiraHorizontal extends StatelessWidget {
+  const _TiraHorizontal({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      // Sin recorte, lo que no cabe no se corta: se pinta encima del vecino.
+      // Una tarjeta a medias avisa de que la tira se desliza; una tarjeta
+      // montada sobre el desplegable de al lado parece un error, y lo era.
+      child: Row(
+        children: [
+          for (var i = 0; i < children.length; i++) ...[
+            if (i > 0) const SizedBox(width: 8),
+            children[i],
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class _CaseRow extends StatelessWidget {
@@ -789,19 +927,24 @@ class _CaseRow extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: selected
-              ? colors.primary.withValues(alpha: 0.08)
+              ? colors.primary.withValues(alpha: 0.07)
               : colors.surface,
           borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-          border: Border.all(
-            color: selected
-                ? colors.primary
-                : priorityColor.withValues(alpha: 0.25),
-          ),
+          border: Border.all(color: selected ? colors.primary : colors.divider),
         ),
+        clipBehavior: Clip.antiAlias,
         child: LayoutBuilder(
           builder: (context, constraints) {
+            // Debajo de esto la fila de una sola línea deja de funcionar, y no
+            // por poco: las insignias piden un ancho fijo de unos 250 px entre
+            // todas, mientras el cliente y el asunto viven en un `Expanded` que
+            // se lleva lo que sobre. En un teléfono no sobra nada, así que lo
+            // único que la pantalla sacrificaba era justo lo que hace falta
+            // para saber de qué caso se trata.
+            final apilado = constraints.maxWidth < 560;
             final showContact = constraints.maxWidth >= 520;
             final showDate = constraints.maxWidth >= 720;
+
             return IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -821,97 +964,17 @@ class _CaseRow extends StatelessWidget {
                         horizontal: 12,
                         vertical: 10,
                       ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          CircleAvatar(
-                            radius: 18,
-                            backgroundColor: avatarColor.withValues(
-                              alpha: 0.85,
-                            ),
-                            child: Text(
-                              _initialsFor(c.clientName),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            flex: 3,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'CS-${c.caseNumber.toString().padLeft(4, '0')} · ${c.clientName}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: colors.textPrimary,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                                Text(
-                                  c.subject,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: colors.textSecondary,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                if (showContact && c.contactName.isNotEmpty)
-                                  Text(
-                                    c.contactName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: colors.textSecondary.withValues(
-                                        alpha: 0.8,
-                                      ),
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          StatusBadge(status: c.status, dense: true),
-                          const SizedBox(width: 6),
-                          PriorityBadge(priority: c.priority, dense: true),
-                          if (showDate) ...[
-                            const SizedBox(width: 10),
-                            Text(
+                      child: apilado
+                          ? _apilada(context, c, avatarColor, isResolved)
+                          : _enLinea(
+                              context,
+                              c,
+                              avatarColor,
+                              isResolved,
                               formattedDate,
-                              style: TextStyle(
-                                color: colors.textSecondary,
-                                fontSize: 12,
-                              ),
+                              showContact: showContact,
+                              showDate: showDate,
                             ),
-                          ],
-                          const SizedBox(width: 10),
-                          DaysOpenBadge(
-                            days: c.daysOpen(),
-                            resolved: isResolved,
-                            dense: true,
-                          ),
-                          if (onDelete != null)
-                            IconButton(
-                              tooltip: 'Eliminar',
-                              iconSize: 16,
-                              visualDensity: VisualDensity.compact,
-                              icon: Icon(
-                                LucideIcons.trash2,
-                                color: colors.error,
-                              ),
-                              onPressed: onDelete,
-                            ),
-                        ],
-                      ),
                     ),
                   ),
                 ],
@@ -922,6 +985,175 @@ class _CaseRow extends StatelessWidget {
       ),
     );
   }
+
+  /// Diseño angosto: tres renglones en vez de una línea.
+  ///
+  /// El cliente y el asunto ocupan el ancho completo, los días quedan a la
+  /// derecha del primer renglón —es lo que se escanea— y las insignias bajan a
+  /// su propio renglón, donde no le quitan espacio a nada.
+  Widget _apilada(
+    BuildContext context,
+    SupportCaseModel c,
+    Color avatarColor,
+    bool isResolved,
+  ) {
+    final colors = context.colors;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _avatar(avatarColor, c.clientName),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'CS-${c.caseNumber.toString().padLeft(4, '0')} · ${c.clientName}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  DaysOpenBadge(
+                    days: c.daysOpen(),
+                    resolved: isResolved,
+                    dense: true,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                c.subject,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: colors.textSecondary, fontSize: 13),
+              ),
+              if (c.contactName.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  c.contactName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colors.textSecondary.withValues(alpha: 0.8),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  StatusBadge(status: c.status, dense: true),
+                  PriorityBadge(priority: c.priority, dense: true),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Diseño ancho: la línea única de siempre, sin cambios de fondo.
+  Widget _enLinea(
+    BuildContext context,
+    SupportCaseModel c,
+    Color avatarColor,
+    bool isResolved,
+    String formattedDate, {
+    required bool showContact,
+    required bool showDate,
+  }) {
+    final colors = context.colors;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _avatar(avatarColor, c.clientName),
+        const SizedBox(width: 10),
+        Expanded(
+          flex: 3,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'CS-${c.caseNumber.toString().padLeft(4, '0')} · ${c.clientName}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+              Text(
+                c.subject,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: colors.textSecondary, fontSize: 12),
+              ),
+              if (showContact && c.contactName.isNotEmpty)
+                Text(
+                  c.contactName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colors.textSecondary.withValues(alpha: 0.8),
+                    fontSize: 11,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        StatusBadge(status: c.status, dense: true),
+        const SizedBox(width: 6),
+        PriorityBadge(priority: c.priority, dense: true),
+        if (showDate) ...[
+          const SizedBox(width: 10),
+          Text(
+            formattedDate,
+            style: TextStyle(color: colors.textSecondary, fontSize: 12),
+          ),
+        ],
+        const SizedBox(width: 10),
+        DaysOpenBadge(days: c.daysOpen(), resolved: isResolved, dense: true),
+        if (onDelete != null)
+          IconButton(
+            tooltip: 'Eliminar',
+            iconSize: 16,
+            visualDensity: VisualDensity.compact,
+            icon: Icon(LucideIcons.trash2, color: colors.error),
+            onPressed: onDelete,
+          ),
+      ],
+    );
+  }
+
+  Widget _avatar(Color color, String name) => CircleAvatar(
+    radius: 18,
+    backgroundColor: color.withValues(alpha: 0.85),
+    child: Text(
+      _initialsFor(name),
+      style: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+        fontSize: 12,
+      ),
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------

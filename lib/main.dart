@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'app.dart';
+import 'core/constants/app_constants.dart';
 import 'firebase_options.dart';
 import 'services/app_check_service.dart';
 import 'services/notification_service.dart';
@@ -28,6 +29,10 @@ Future<void> main() async {
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
   );
+
+  // Antes de runApp: AppUpdateService la lee apenas se crean los providers
+  // para decidir si hay una version mas nueva publicada.
+  await AppConstants.loadVersion();
 
   await initializeDateFormatting('es');
   await NotificationService.instance.initialize();

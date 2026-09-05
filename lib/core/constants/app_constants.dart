@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 /// User roles, stored in `users/{userId}.role`.
 class AppRoles {
@@ -118,7 +119,33 @@ class AppConstants {
 
   static const String appName = 'CheCu';
   static const String appTagline = 'Chequeo y Cumplimiento de tareas';
-  static const String appVersion = '1.4';
+
+  /// Versión de la app, tomada de `pubspec.yaml` al arrancar.
+  ///
+  /// Antes era un número escrito a mano aquí, y se quedó en '1.4' mientras el
+  /// `pubspec` seguía en 1.0.0 y el APK salía marcado como 1.0.0: tres cifras
+  /// distintas para la misma compilación. Peor que cosmético — este valor es
+  /// contra el que [AppUpdateService] compara `systemConfig/settings.appVersion`
+  /// para avisar de una actualización, así que una constante vieja hace que
+  /// nadie se entere de que hay versión nueva.
+  ///
+  /// Ahora sólo se cambia en `pubspec.yaml`, que es lo mismo que Android e iOS
+  /// ya usaban. El valor de aquí es sólo el respaldo si la lectura falla.
+  static String appVersion = '1.5.0';
+
+  /// Lee la versión real de la compilación. Llamar en `main()` antes de
+  /// `runApp`, para que nada la lea antes de tiempo.
+  static Future<void> loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (info.version.isNotEmpty) appVersion = info.version;
+    } catch (_) {
+      // En web esto es una petición a version.json; si falla, se queda el
+      // respaldo de arriba. Que no se vea la versión no puede tumbar el
+      // arranque de la app.
+    }
+  }
+
   static const String appDeveloper = 'CustoDesk 2026';
 
   /// Fixed institutional brand colors (Sprint 7.3.2A/B). Used by screens
