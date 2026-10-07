@@ -22,6 +22,7 @@ import '../../../widgets/form_section_card.dart';
 import 'client_picker_field.dart';
 import 'hour_grid_selector.dart';
 import 'reminder_picker.dart';
+import '../../../core/utils/time_selection.dart';
 
 /// Inline "crear tarea" form embedded directly on Home (tablet/desktop) —
 /// same fields, validators and save logic as [AddEditTaskPage]'s create
@@ -139,13 +140,21 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
     if (picked != null) setState(() => _selectedDate = picked);
   }
 
-  /// Resets every field to its default — used both by the explicit
-  /// "Limpiar" button and automatically after a successful save.
+  /// Deja el formulario como recién abierto — lo usa el botón "Limpiar" y
+  /// también el guardado, al terminar.
+  ///
+  /// El `reset()` va PRIMERO, y ese orden es el arreglo. `FormState.reset()`
+  /// no vacía los campos: los devuelve a su valor inicial, y para un
+  /// `TextFormField` con `controller` ese valor inicial es el texto que el
+  /// controlador tenía en la última reconstrucción. Al llamarlo después de
+  /// `clear()`, volvía a escribir el nombre del cliente que se acababa de
+  /// borrar. Por eso "Limpiar" no limpiaba y el panel quedaba con los datos
+  /// de la tarea anterior después de crearla.
   void _clearForm() {
+    _formKey.currentState?.reset();
     _clientNameController.clear();
     _clientPhoneController.clear();
     _observationsController.clear();
-    _formKey.currentState?.reset();
     setState(() {
       _clientId = null;
       _selectedDate = widget.initialDate ?? DateTime.now();
@@ -290,9 +299,11 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
     _groupId ??=
         (assignedUserGroupIds.isNotEmpty ? assignedUserGroupIds.first : null) ??
         (currentUser.groupIds.isNotEmpty ? currentUser.groupIds.first : null);
-    // Time-selection mode now lives per-team (GroupModel.timeSelectionMode)
-    // instead of the old single global systemConfig toggle.
-    final useFreePicker = catalog.groupById(_groupId)?.useFreePicker ?? false;
+    // El modo vive en el equipo, y cuando todavía no hay equipo elegido sale
+    // de los que existan. Ver `useFreeHours`: el `?? false` que había aquí le
+    // mostraba la rejilla de horas a un super usuario —que no pertenece a
+    // ningún equipo— aunque ningún equipo la usara.
+    final useFreePicker = useFreeHours(catalog.groups, _groupId);
     if (_selectedHour == null &&
         !useFreePicker &&
         catalog.availableHours.isNotEmpty) {
@@ -495,41 +506,18 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
     return FormSectionCard(
       icon: LucideIcons.calendarPlus,
       title: 'Nueva tarea',
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextButton(
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            onPressed: _isSaving ? null : _clearForm,
-            child: const Text('Limpiar', style: TextStyle(fontSize: 12)),
-          ),
-          const SizedBox(width: 4),
-          ElevatedButton(
-            onPressed: _isSaving ? null : _save,
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: _isSaving
-                ? SizedBox(
-                    height: 14,
-                    width: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: colors.background,
-                    ),
-                  )
-                : const Text(
-                    'Crear tarea',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-          ),
-        ],
+      // "Limpiar" se queda arriba y sólo baja "Crear tarea": son acciones
+      // distintas. Limpiar se busca cuando uno se arrepiente de lo que
+      // escribió —normalmente al principio—, y crear cuando ya terminó, que
+      // es abajo.
+      trailing: TextButton(
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        onPressed: _isSaving ? null : _clearForm,
+        child: const Text('Limpiar', style: TextStyle(fontSize: 12)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -681,6 +669,28 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
                 padding: const EdgeInsets.only(bottom: 40),
                 child: Icon(LucideIcons.pencil, color: colors.primary),
               ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          // Al final del formulario y no en la cabecera: arriba quedaba por
+          // encima del primer campo, así que al terminar de llenar había que
+          // volver al principio del panel a buscarlo. Aquí el botón está
+          // donde uno acaba de escribir.
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _isSaving ? null : _save,
+              icon: _isSaving
+                  ? SizedBox(
+                      height: 16,
+                      width: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: colors.background,
+                      ),
+                    )
+                  : const Icon(LucideIcons.plus, size: 18),
+              label: Text(_isSaving ? 'Creando…' : 'Crear tarea'),
             ),
           ),
         ],

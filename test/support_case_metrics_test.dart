@@ -78,10 +78,7 @@ void main() {
   group('oldestOpenDays', () {
     test('ignora los resueltos por viejos que sean', () {
       final casos = [
-        caso(
-          reportado: DateTime(2020, 1, 1),
-          resuelto: DateTime(2020, 1, 2),
-        ),
+        caso(reportado: DateTime(2020, 1, 1), resuelto: DateTime(2020, 1, 2)),
       ];
       expect(oldestOpenDays(casos), isNull);
     });
@@ -89,61 +86,146 @@ void main() {
     test('devuelve los días del abierto más viejo', () {
       final hace10 = DateTime.now().subtract(const Duration(days: 10));
       final hace3 = DateTime.now().subtract(const Duration(days: 3));
-      expect(oldestOpenDays([caso(reportado: hace3), caso(reportado: hace10)]),
-          10);
+      expect(
+        oldestOpenDays([caso(reportado: hace3), caso(reportado: hace10)]),
+        10,
+      );
     });
   });
 
-  group('weekStart', () {
-    test('cualquier día de la semana cae en su lunes', () {
-      for (var i = 0; i < 7; i++) {
-        expect(weekStart(lunes.add(Duration(days: i))), lunes);
-      }
+  group('inPeriod', () {
+    test('los dos extremos están incluidos', () {
+      final a = DateTime(2026, 9, 1);
+      final b = DateTime(2026, 9, 6);
+      expect(inPeriod(a, a, b), isTrue);
+      expect(inPeriod(b, a, b), isTrue);
+      expect(inPeriod(DateTime(2026, 8, 31), a, b), isFalse);
+      expect(inPeriod(DateTime(2026, 9, 7), a, b), isFalse);
     });
 
-    test('el domingo pertenece a la semana que termina, no a la siguiente', () {
-      expect(weekStart(DateTime(2026, 8, 30)), DateTime(2026, 8, 24));
-    });
-
-    test('descarta la hora', () {
-      expect(weekStart(DateTime(2026, 9, 2, 23, 59)), lunes);
+    test('la hora no saca a un caso de su día', () {
+      // Un caso reportado a las 23:50 del último día del periodo tiene que
+      // entrar: comparar con la hora puesta lo dejaría fuera.
+      expect(
+        inPeriod(
+          DateTime(2026, 9, 6, 23, 50),
+          DateTime(2026, 9, 1),
+          DateTime(2026, 9, 6),
+        ),
+        isTrue,
+      );
     });
   });
 
-  group('weeklyFlow', () {
-    test('devuelve una semana por cada una pedida, en orden', () {
-      final f = weeklyFlow([], now: lunes, weeks: 4);
-      expect(f.length, 4);
-      expect(f.first.start, DateTime(2026, 8, 10));
-      expect(f.last.start, lunes);
+  group('dailyFlow', () {
+    test('devuelve un día por cada uno del periodo, en orden', () {
+      final f = dailyFlow(
+        [],
+        start: DateTime(2026, 9, 1),
+        end: DateTime(2026, 9, 6),
+      );
+      expect(f.length, 6);
+      expect(f.first.day, DateTime(2026, 9, 1));
+      expect(f.last.day, DateTime(2026, 9, 6));
     });
 
-    test('las semanas sin nada valen cero, no se saltan', () {
-      // Saltarse una semana muerta haría que la línea siguiera de largo como
-      // si no hubiera pasado nada raro. El cero es el dato.
-      final f = weeklyFlow([caso(reportado: lunes)], now: lunes, weeks: 3);
-      expect(f.map((w) => w.opened), [0, 0, 1]);
+    test('cruza el cambio de mes sin saltarse ni repetir días', () {
+      final f = dailyFlow(
+        [],
+        start: DateTime(2026, 8, 30),
+        end: DateTime(2026, 9, 2),
+      );
+      expect(f.map((d) => d.day), [
+        DateTime(2026, 8, 30),
+        DateTime(2026, 8, 31),
+        DateTime(2026, 9, 1),
+        DateTime(2026, 9, 2),
+      ]);
+    });
+
+    test('un periodo de un solo día devuelve ese día', () {
+      final f = dailyFlow(
+        [],
+        start: DateTime(2026, 9, 6),
+        end: DateTime(2026, 9, 6),
+      );
+      expect(f.length, 1);
+    });
+
+    test('un periodo al revés no devuelve nada en vez de colgarse', () {
+      // El bucle avanza hasta pasar el final; con el final antes del inicio y
+      // sin esta guarda no terminaría nunca.
+      final f = dailyFlow(
+        [],
+        start: DateTime(2026, 9, 6),
+        end: DateTime(2026, 9, 1),
+      );
+      expect(f, isEmpty);
+    });
+
+    test('los días sin nada valen cero, no se saltan', () {
+      final f = dailyFlow(
+        [caso(reportado: DateTime(2026, 9, 3))],
+        start: DateTime(2026, 9, 1),
+        end: DateTime(2026, 9, 4),
+      );
+      expect(f.map((d) => d.opened), [0, 0, 1, 0]);
     });
 
     test('entra por fecha de reporte y sale por fecha de resolución', () {
       // El error fácil sería contar las dos series por la misma fecha: las
       // líneas se moverían juntas y el gráfico no diría nada.
       final c = caso(
-        reportado: DateTime(2026, 8, 25), // semana del 24
-        resuelto: DateTime(2026, 9, 2), // semana del 31
+        reportado: DateTime(2026, 9, 1, 10),
+        resuelto: DateTime(2026, 9, 4, 16),
       );
-      final f = weeklyFlow([c], now: lunes, weeks: 2);
-      expect(f[0].start, DateTime(2026, 8, 24));
-      expect(f[0].opened, 1);
-      expect(f[0].resolved, 0);
-      expect(f[1].opened, 0);
-      expect(f[1].resolved, 1);
+      final f = dailyFlow(
+        [c],
+        start: DateTime(2026, 9, 1),
+        end: DateTime(2026, 9, 4),
+      );
+      expect(f.map((d) => d.opened), [1, 0, 0, 0]);
+      expect(f.map((d) => d.resolved), [0, 0, 0, 1]);
     });
 
-    test('lo que queda fuera de la ventana no se cuenta', () {
+    test('lo que queda fuera del periodo no se cuenta', () {
       final viejo = caso(reportado: DateTime(2026, 1, 1));
-      final f = weeklyFlow([viejo], now: lunes, weeks: 4);
-      expect(f.every((w) => w.opened == 0), isTrue);
+      final f = dailyFlow(
+        [viejo],
+        start: DateTime(2026, 9, 1),
+        end: DateTime(2026, 9, 6),
+      );
+      expect(f.every((d) => d.opened == 0), isTrue);
+    });
+  });
+
+  group('reportedIn / resolvedIn', () {
+    test('un caso resuelto en el periodo cuenta aunque entrara antes', () {
+      // Es lo que hace honesta la cifra de "resueltos": el trabajo sacado este
+      // mes incluye casos que llegaron el mes pasado.
+      final c = caso(
+        reportado: DateTime(2026, 7, 10),
+        resuelto: DateTime(2026, 9, 3),
+      );
+      final desde = DateTime(2026, 9, 1);
+      final hasta = DateTime(2026, 9, 6);
+      expect(resolvedIn([c], desde, hasta), hasLength(1));
+      expect(reportedIn([c], desde, hasta), isEmpty);
+    });
+
+    test('un caso abierto nunca aparece entre los resueltos', () {
+      final c = caso(reportado: DateTime(2026, 9, 2));
+      expect(
+        resolvedIn([c], DateTime(2026, 9, 1), DateTime(2026, 9, 6)),
+        isEmpty,
+      );
+    });
+  });
+
+  group('formatDay', () {
+    test('día y mes abreviado', () {
+      expect(formatDay(DateTime(2026, 9, 6)), '6 sep');
+      expect(formatDay(DateTime(2026, 1, 31)), '31 ene');
     });
   });
 

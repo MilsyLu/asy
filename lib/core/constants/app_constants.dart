@@ -32,6 +32,25 @@ class AppPermissions {
   /// above which gates the whole module.
   static const String manageSupportCases = 'manageSupportCases';
 
+  /// Descargar los listados de VinApp (Descargar Archivos).
+  ///
+  /// Se comporta distinto al resto: cualquier administrador lo tiene siempre,
+  /// sin que haya que marcárselo, y un trabajador sólo si se lo activan. Por
+  /// eso no está en [all] —la lista de casillas de un administrador— sino en
+  /// [grantableToWorkers].
+  static const String downloadFiles = 'downloadFiles';
+
+  /// Permisos que todo administrador tiene por ser administrador.
+  static const Set<String> alwaysForAdmins = {downloadFiles};
+
+  /// Los únicos permisos que se le pueden conceder a un trabajador.
+  ///
+  /// Es una lista cerrada a propósito. Las reglas de Firestore dejan que un
+  /// administrador de equipo edite cualquier campo de un trabajador suyo,
+  /// incluido `permissions`; sin este límite, escribirle `manageUsers` en el
+  /// documento le daría el módulo de usuarios en pantalla.
+  static const Set<String> grantableToWorkers = {downloadFiles};
+
   static const List<String> all = [
     manageUsers,
     manageTasks,
@@ -44,6 +63,7 @@ class AppPermissions {
   ];
 
   static const Map<String, String> labels = {
+    downloadFiles: 'Descargar archivos de VinApp',
     manageUsers: 'Gestionar usuarios',
     manageTasks: 'Gestionar tareas',
     manageTeams: 'Gestionar equipos',

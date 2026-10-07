@@ -51,10 +51,7 @@ Future<void> exportReportExcel({
   // `Excel.createExcel` seeds a blank "Sheet1"; it is only in the way.
   excel.delete('Sheet1');
 
-  final bytes = excel.encode();
-  if (bytes == null) {
-    throw StateError('No se pudo generar el archivo de Excel.');
-  }
+  final bytes = excelBytes(excel);
 
   // Resumen is left as plain cells on purpose: it is a cover page of
   // label/value pairs, not a list, and a filter dropdown over "Periodo" and

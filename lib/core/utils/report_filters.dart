@@ -67,7 +67,7 @@ class ReportFilters {
     final query = search.trim();
     if (query.isEmpty) return true;
 
-    if (_fold(task.clientName).contains(_fold(query))) return true;
+    if (foldAccents(task.clientName).contains(foldAccents(query))) return true;
 
     // Phones are typed with spaces, dashes and sometimes a country code, and
     // searched the same way — comparing them as written almost never matches.
@@ -117,7 +117,12 @@ class ReportFilters {
 /// Lowercase and strip the accents Spanish names carry, so searching "cafe"
 /// finds "Café" and "panaderia" finds "panadería". Nobody types the accent
 /// when they are looking for something.
-String _fold(String value) {
+///
+/// Pública porque la reutiliza el formateador de los reportes de VinApp, que
+/// decide el formato de cada columna por el nombre de su encabezado y tiene
+/// que reconocer "TELÉFONO" igual que "TELEFONO". Copiarla habría sido otra
+/// regla viviendo por duplicado.
+String foldAccents(String value) {
   final lower = value.toLowerCase();
   final buffer = StringBuffer();
   for (final rune in lower.runes) {

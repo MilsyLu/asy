@@ -28,6 +28,14 @@ class SupportCaseStatus {
 
   static const String nuevo = 'Nuevo';
   static const String enProceso = 'En proceso';
+
+  /// El caso ya se escaló al equipo técnico y se espera respuesta de ellos.
+  ///
+  /// Va entre "En proceso" y "Esperando cliente" porque es el mismo tipo de
+  /// espera, sólo que del otro lado: uno espera a tecnología, el otro al
+  /// cliente. Sigue contando como abierto — el reloj de días no se detiene
+  /// porque el caso esté en manos de otro.
+  static const String reportado = 'Reportado';
   static const String esperandoCliente = 'Esperando cliente';
   static const String resuelto = 'Resuelto';
 
@@ -37,16 +45,26 @@ class SupportCaseStatus {
   static const List<String> all = [
     nuevo,
     enProceso,
+    reportado,
     esperandoCliente,
     resuelto,
   ];
 
-  static const List<String> openStates = [nuevo, enProceso, esperandoCliente];
+  static const List<String> openStates = [
+    nuevo,
+    enProceso,
+    reportado,
+    esperandoCliente,
+  ];
   static const List<String> closedStates = [resuelto];
 
   static const Map<String, Color> colors = {
     nuevo: Colors.blue,
     enProceso: Colors.purple,
+    // Naranja: el caso está parado esperando a alguien de afuera. Es el mismo
+    // aviso que dan los días acumulados, y se distingue de un vistazo del
+    // morado de "En proceso", que sí está en manos nuestras.
+    reportado: Colors.orange,
     esperandoCliente: Colors.teal,
     resuelto: Colors.green,
   };

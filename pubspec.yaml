@@ -50,6 +50,9 @@ dependencies:
   # Versión de la app leída de este mismo pubspec (ver AppConstants.appVersion)
   package_info_plus: ^10.2.1
 
+  # Descarga de los reportes de VinApp (ver vinapp_download_service.dart)
+  http: ^1.2.2
+
   # State management
   provider: ^6.1.2
 

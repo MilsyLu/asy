@@ -12,7 +12,7 @@
  * "Pendiente" while the stored value stayed "Nuevo" precisely so this list
  * would keep matching.
  */
-const OPEN_STATUSES = ["Nuevo", "En proceso", "Esperando cliente"];
+const OPEN_STATUSES = ["Nuevo", "En proceso", "Reportado", "Esperando cliente"];
 
 /** Whether [status] is one a case can still be worked on. */
 function isOpen(status) {

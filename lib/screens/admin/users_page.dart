@@ -485,6 +485,17 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
                     'tareas ve, qué notificaciones recibe y a quién se le '
                     'pueden asignar tareas.',
               ),
+              const SizedBox(height: 12),
+              // Un trabajador no tiene permisos de administración, pero
+              // sí se le puede abrir un módulo suelto. Hoy sólo
+              // "Descargar archivos", que por defecto ve cualquier
+              // administrador y él no.
+              _PermissionsChecklist(
+                titulo: 'Accesos adicionales',
+                claves: AppPermissions.grantableToWorkers.toList(),
+                value: _permissions,
+                onChanged: (v) => setState(() => _permissions = v),
+              ),
             ],
             const SizedBox(height: 16),
             ElevatedButton(
@@ -592,10 +603,23 @@ class _ManagedGroupsField extends StatelessWidget {
 
 /// Checklist of [AppPermissions] toggles for an admin_equipo user.
 class _PermissionsChecklist extends StatelessWidget {
-  const _PermissionsChecklist({required this.value, required this.onChanged});
+  const _PermissionsChecklist({
+    required this.value,
+    required this.onChanged,
+    this.titulo = 'Permisos',
+    this.claves = AppPermissions.all,
+  });
 
   final Map<String, bool> value;
   final ValueChanged<Map<String, bool>> onChanged;
+
+  /// Encabezado de la sección. Un trabajador no tiene "Permisos" en el sentido
+  /// de un administrador, así que su lista se llama distinto.
+  final String titulo;
+
+  /// Qué permisos se ofrecen. Un trabajador sólo puede recibir los de
+  /// [AppPermissions.grantableToWorkers].
+  final List<String> claves;
 
   @override
   Widget build(BuildContext context) {
@@ -604,10 +628,10 @@ class _PermissionsChecklist extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Permisos',
+          titulo,
           style: TextStyle(color: colors.textSecondary, fontSize: 12),
         ),
-        for (final key in AppPermissions.all)
+        for (final key in claves)
           CheckboxListTile(
             contentPadding: EdgeInsets.zero,
             controlAffinity: ListTileControlAffinity.leading,
@@ -1243,6 +1267,35 @@ Future<void> _showUserDetailSheet(BuildContext context, AppUser user) async {
                         }
                       },
                     ),
+                    const SizedBox(height: 12),
+                    // Un trabajador no tiene permisos de administración, pero
+                    // sí se le puede abrir un módulo suelto. Hoy sólo
+                    // "Descargar archivos", que por defecto ve cualquier
+                    // administrador y él no.
+                    _PermissionsChecklist(
+                      titulo: 'Accesos adicionales',
+                      claves: AppPermissions.grantableToWorkers.toList(),
+                      value: selectedPermissions,
+                      onChanged: (v) async {
+                        try {
+                          await userRepo.updatePermissions(user.id, v);
+                          setState(() => selectedPermissions = v);
+                          if (sheetContext.mounted) {
+                            SnackbarUtils.showSuccess(
+                              sheetContext,
+                              'Accesos actualizados',
+                            );
+                          }
+                        } catch (e) {
+                          if (sheetContext.mounted) {
+                            SnackbarUtils.showError(
+                              sheetContext,
+                              SnackbarUtils.firebaseErrorMessage(e),
+                            );
+                          }
+                        }
+                      },
+                    ),
                   ],
                   const SizedBox(height: 20),
                   OutlinedButton.icon(
@@ -1606,16 +1659,32 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                         onChanged: (v) => setState(() => permissions = v),
                       ),
                     ] else
-                      _ManagedGroupsField(
-                        groups: catalog.groups,
-                        selected: groupIds,
-                        allowEmpty: true,
-                        onChanged: (v) => setState(() => groupIds = v),
-                        label: 'Pertenece a los equipos',
-                        dialogHint:
-                            'Equipos de los que esta persona es miembro. Determina qué '
-                            'tareas ve, qué notificaciones recibe y a quién se le '
-                            'pueden asignar tareas.',
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _ManagedGroupsField(
+                            groups: catalog.groups,
+                            selected: groupIds,
+                            allowEmpty: true,
+                            onChanged: (v) => setState(() => groupIds = v),
+                            label: 'Pertenece a los equipos',
+                            dialogHint:
+                                'Equipos de los que esta persona es miembro. Determina qué '
+                                'tareas ve, qué notificaciones recibe y a quién se le '
+                                'pueden asignar tareas.',
+                          ),
+                          const SizedBox(height: 12),
+                          // Un trabajador no tiene permisos de administración, pero
+                          // sí se le puede abrir un módulo suelto. Hoy sólo
+                          // "Descargar archivos", que por defecto ve cualquier
+                          // administrador y él no.
+                          _PermissionsChecklist(
+                            titulo: 'Accesos adicionales',
+                            claves: AppPermissions.grantableToWorkers.toList(),
+                            value: permissions,
+                            onChanged: (v) => setState(() => permissions = v),
+                          ),
+                        ],
                       ),
                   ],
                 ),

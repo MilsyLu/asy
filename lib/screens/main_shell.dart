@@ -39,6 +39,7 @@ import 'profile/profile_page.dart';
 import 'profile/settings_page.dart';
 import 'reports/reports_page.dart';
 import 'support_cases/support_cases_page.dart';
+import 'tools/file_downloads_page.dart';
 import 'tools/qr_generator_page.dart';
 import 'trash/trash_page.dart';
 import 'week/week_page.dart';
@@ -542,6 +543,15 @@ class _MainShellState extends State<MainShell> {
       label: 'Generador de QR',
       page: QrGeneratorPage(showAppBar: false),
     ),
+    // Trae los listados de VinApp (clientes, recetas, adiciones) y los
+    // entrega formateados. Todo administrador lo ve; un trabajador sólo si se
+    // le activa el acceso desde su ficha en Usuarios.
+    if (auth.hasPermission(AppPermissions.downloadFiles))
+      const _ShellEntry(
+        icon: LucideIcons.download,
+        label: 'Descargar Archivos',
+        page: FileDownloadsPage(showAppBar: false),
+      ),
     const _ShellEntry(
       icon: LucideIcons.settings,
       label: 'Configuración',

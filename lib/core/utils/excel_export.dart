@@ -28,3 +28,21 @@ void writeHeader(Sheet sheet, List<String> headers, {List<double>? widths}) {
     );
   }
 }
+
+/// Los bytes del libro, sin efectos secundarios.
+///
+/// Siempre `encode()`, nunca `save()`. En web, `Excel.save()` no se limita a
+/// devolver los bytes: además dispara por su cuenta una descarga del navegador
+/// llamada "FlutterExcel.xlsx". Quien después entrega el archivo con su nombre
+/// real termina bajando dos: el bueno y uno anónimo del mismo peso.
+///
+/// Esta función existe para que esa trampa tenga un solo sitio donde evitarse,
+/// igual que `deliverFile` con la descarga en web. Pasó una vez con el
+/// descargador de VinApp después de que Reportes ya lo hiciera bien.
+List<int> excelBytes(Excel excel) {
+  final bytes = excel.encode();
+  if (bytes == null) {
+    throw StateError('No se pudo generar el archivo de Excel.');
+  }
+  return bytes;
+}

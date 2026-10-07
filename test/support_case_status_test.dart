@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskflow_executive/core/constants/support_case_constants.dart';
 
@@ -14,7 +16,8 @@ void main() {
     expect(
       SupportCaseStatus.nuevo,
       'Nuevo',
-      reason: 'es la cadena que está en la base de datos y en la Cloud '
+      reason:
+          'es la cadena que está en la base de datos y en la Cloud '
           'Function de recordatorios; cambiarla rompe los casos existentes',
     );
   });
@@ -31,6 +34,7 @@ void main() {
   test('los demás estados se muestran tal como están guardados', () {
     for (final s in [
       SupportCaseStatus.enProceso,
+      SupportCaseStatus.reportado,
       SupportCaseStatus.esperandoCliente,
       SupportCaseStatus.resuelto,
     ]) {
@@ -48,4 +52,48 @@ void main() {
   test('"Nuevo" sigue contando como caso abierto', () {
     expect(SupportCaseStatus.isOpen(SupportCaseStatus.nuevo), isTrue);
   });
+
+  test('"Reportado" cuenta como abierto: el reloj no se detiene', () {
+    // Está en manos de tecnología, no resuelto. Si contara como cerrado
+    // saldría del indicador de casos abiertos y dejaría de sumar días — un
+    // caso escalado y olvidado se volvería invisible, que es exactamente lo
+    // contrario de lo que hace falta.
+    expect(SupportCaseStatus.isOpen(SupportCaseStatus.reportado), isTrue);
+    expect(SupportCaseStatus.all.contains(SupportCaseStatus.reportado), isTrue);
+    expect(SupportCaseStatus.colors[SupportCaseStatus.reportado], isNotNull);
+  });
+
+  test(
+    'las Cloud Functions conocen exactamente los mismos estados abiertos',
+    () {
+      // Esta regla vive por duplicado —aquí y en `supportCaseStatus.js`, que
+      // decide de qué casos mandar recordatorio— porque son dos lenguajes. Ya
+      // pasó una vez que una copia se quedó vieja y los recordatorios seguían
+      // llegando de casos resueltos. La prueba no puede unirlas, pero sí puede
+      // gritar en cuanto se separen: agregar un estado aquí y olvidarlo allá
+      // deja esta prueba en rojo.
+      final js = File('functions/src/supportCaseStatus.js').readAsStringSync();
+      final linea = RegExp(
+        r'const OPEN_STATUSES = \[(.*?)\];',
+        dotAll: true,
+      ).firstMatch(js);
+      expect(
+        linea,
+        isNotNull,
+        reason: 'no se encontró OPEN_STATUSES en el .js',
+      );
+
+      final enJs = RegExp(
+        r'"([^"]*)"',
+      ).allMatches(linea!.group(1)!).map((m) => m.group(1)!).toList();
+
+      expect(
+        enJs,
+        SupportCaseStatus.openStates,
+        reason:
+            'agrega el estado nuevo también en functions/src/'
+            'supportCaseStatus.js, o los recordatorios lo ignorarán',
+      );
+    },
+  );
 }

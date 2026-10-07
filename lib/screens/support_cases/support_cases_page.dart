@@ -34,6 +34,7 @@ enum _QuickFilter {
   todos,
   pendientes,
   enProceso,
+  reportado,
   esperandoCliente,
   resueltos,
   altaPrioridad,
@@ -51,6 +52,7 @@ extension on _QuickFilter {
   bool get esColumnaKanban =>
       this == _QuickFilter.pendientes ||
       this == _QuickFilter.enProceso ||
+      this == _QuickFilter.reportado ||
       this == _QuickFilter.esperandoCliente ||
       this == _QuickFilter.resueltos;
 
@@ -62,6 +64,8 @@ extension on _QuickFilter {
         return 'Pendientes';
       case _QuickFilter.enProceso:
         return 'En proceso';
+      case _QuickFilter.reportado:
+        return 'Reportado';
       case _QuickFilter.esperandoCliente:
         return 'Esperando cliente';
       case _QuickFilter.resueltos:
@@ -91,6 +95,8 @@ extension on _QuickFilter {
         return c.status == SupportCaseStatus.nuevo;
       case _QuickFilter.enProceso:
         return c.status == SupportCaseStatus.enProceso;
+      case _QuickFilter.reportado:
+        return c.status == SupportCaseStatus.reportado;
       case _QuickFilter.esperandoCliente:
         return c.status == SupportCaseStatus.esperandoCliente;
       case _QuickFilter.resueltos:
@@ -162,6 +168,13 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
   String? _tagFilter;
   _SortBy _sortBy = _SortBy.recientes;
   _ViewMode _viewMode = _ViewMode.tabla;
+
+  // El periodo del Resumen vive aquí y no dentro de él para que sobreviva a
+  // cambiar de vista: elegir "Últimos 7 días", pasar a la Tabla y volver no
+  // debería devolverlo a su valor por defecto.
+  PeriodoResumen _periodo = PeriodoResumen.preset(
+    PeriodoResumen.indicePorDefecto,
+  );
 
   @override
   void dispose() {
@@ -255,7 +268,11 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
         // El Resumen recibe los casos ya filtrados, igual que la tabla y el
         // tablero: un filtro cambia las tres vistas de la misma forma.
         final list = (!isMobile && _viewMode == _ViewMode.resumen)
-            ? SupportCasesSummary(cases: filtered)
+            ? SupportCasesSummary(
+                cases: filtered,
+                periodo: _periodo,
+                onPeriodoChanged: (p) => setState(() => _periodo = p),
+              )
             : (!isMobile && _viewMode == _ViewMode.kanban)
             ? SupportCaseKanbanView(
                 cases: filtered,

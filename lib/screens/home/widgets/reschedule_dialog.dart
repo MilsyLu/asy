@@ -5,11 +5,13 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../core/utils/snackbar_utils.dart';
+import '../../../core/utils/time_selection.dart';
 import '../../../core/utils/validators.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/catalog_provider.dart';
 import '../../../services/task_repository.dart';
+import '../../../services/task_scheduling_service.dart';
 import '../../../widgets/confirm_dialog.dart';
 
 /// Quick-action dialog used by [TaskCard] to change a task's date/hour.
@@ -21,10 +23,19 @@ Future<void> showRescheduleDialog(BuildContext context, TaskModel task) async {
   // who rescheduled without reaching for a BuildContext after an await.
   final currentUserId = context.read<AuthProvider>().appUser?.id;
 
+  // El modo de hora es del equipo de la tarea, igual que al crearla. Este
+  // diálogo no lo miraba: enseñaba siempre las franjas configuradas, así que
+  // reprogramar una tarea de un equipo con horario libre obligaba a moverla a
+  // una de cuatro horas que a ese equipo no le aplican. Y peor, si la hora
+  // actual no estaba entre ellas, la cambiaba sola al abrirse.
+  final libre = useFreeHours(catalog.groups, task.groupId);
+
   DateTime selectedDate = AppDateUtils.parseDateKey(task.date);
-  String? selectedHour = catalog.availableHours.any((h) => h.hour == task.hour)
-      ? task.hour
-      : (catalog.availableHours.isNotEmpty ? catalog.availableHours.first.hour : task.hour);
+  String? selectedHour = initialRescheduleHour(
+    libre: libre,
+    currentHour: task.hour,
+    catalogHours: TaskSchedulingService.catalogHours(catalog),
+  );
 
   final result = await showDialog<bool>(
     context: context,
@@ -48,8 +59,12 @@ Future<void> showRescheduleDialog(BuildContext context, TaskModel task) async {
                     final picked = await showDatePicker(
                       context: context,
                       initialDate: selectedDate,
-                      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                      lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+                      firstDate: DateTime.now().subtract(
+                        const Duration(days: 365),
+                      ),
+                      lastDate: DateTime.now().add(
+                        const Duration(days: 365 * 2),
+                      ),
                     );
                     if (picked != null) {
                       setState(() => selectedDate = picked);
@@ -58,24 +73,63 @@ Future<void> showRescheduleDialog(BuildContext context, TaskModel task) async {
                   child: InputDecorator(
                     decoration: InputDecoration(
                       labelText: 'Nueva fecha',
-                      prefixIcon: Icon(LucideIcons.calendar, color: colors.primary),
+                      prefixIcon: Icon(
+                        LucideIcons.calendar,
+                        color: colors.primary,
+                      ),
                     ),
                     child: Text(AppDateUtils.formatShortDate(selectedDate)),
                   ),
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: selectedHour,
-                  decoration: InputDecoration(
-                    labelText: 'Nueva hora',
-                    prefixIcon: Icon(LucideIcons.clock, color: colors.primary),
+                if (libre)
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showTimePicker(
+                        context: context,
+                        initialTime: TaskSchedulingService.parseHourString(
+                          selectedHour ?? task.hour,
+                        ),
+                      );
+                      if (picked == null) return;
+                      setState(() {
+                        selectedHour = TaskSchedulingService.formatTimeOfDay(
+                          picked,
+                        );
+                      });
+                    },
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: 'Nueva hora',
+                        prefixIcon: Icon(
+                          LucideIcons.clock,
+                          color: colors.primary,
+                        ),
+                      ),
+                      child: Text(selectedHour ?? 'Seleccionar hora'),
+                    ),
+                  )
+                else
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedHour,
+                    decoration: InputDecoration(
+                      labelText: 'Nueva hora',
+                      prefixIcon: Icon(
+                        LucideIcons.clock,
+                        color: colors.primary,
+                      ),
+                    ),
+                    dropdownColor: colors.surface,
+                    items: catalog.availableHours
+                        .map(
+                          (h) => DropdownMenuItem(
+                            value: h.hour,
+                            child: Text(h.hour),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) => setState(() => selectedHour = v),
                   ),
-                  dropdownColor: colors.surface,
-                  items: catalog.availableHours
-                      .map((h) => DropdownMenuItem(value: h.hour, child: Text(h.hour)))
-                      .toList(),
-                  onChanged: (v) => setState(() => selectedHour = v),
-                ),
               ],
             ),
             actions: [
@@ -152,7 +206,9 @@ Future<void> _confirmReschedule({
   if (rescheduledStatusId == null) {
     if (!context.mounted) return;
     SnackbarUtils.showError(
-        context, 'No existe un estado "Reprogramada" configurado');
+      context,
+      'No existe un estado "Reprogramada" configurado',
+    );
     return;
   }
 

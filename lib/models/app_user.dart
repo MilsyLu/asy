@@ -92,10 +92,26 @@ class AppUser {
   bool get isAdminOfAnyKind => isSuperAdmin || isScopedAdmin;
 
   /// True if this user has [key] (one of [AppPermissions]'s constants).
-  /// A `super_admin` implicitly has every permission; only an `admin_equipo`
-  /// reads from [permissions] at all.
-  bool hasPermission(String key) =>
-      isSuperAdmin || (isScopedAdmin && permissions[key] == true);
+  ///
+  /// Un `super_admin` los tiene todos. Un `admin_equipo` lee [permissions],
+  /// salvo los de [AppPermissions.alwaysForAdmins], que tiene por el hecho de
+  /// ser administrador y no hace falta marcarle.
+  ///
+  /// Un trabajador no tenía ninguno. Ahora puede tener los de
+  /// [AppPermissions.grantableToWorkers] si se los activan — hoy sólo
+  /// "Descargar archivos". La lista es cerrada aquí y no en la pantalla: lo
+  /// que un administrador de equipo puede escribir en el documento de un
+  /// trabajador no lo limitan las reglas de Firestore, así que el límite tiene
+  /// que estar donde se decide el acceso.
+  bool hasPermission(String key) {
+    if (isSuperAdmin) return true;
+    if (isScopedAdmin) {
+      return AppPermissions.alwaysForAdmins.contains(key) ||
+          permissions[key] == true;
+    }
+    return AppPermissions.grantableToWorkers.contains(key) &&
+        permissions[key] == true;
+  }
 
   /// True if this user may manage/see data scoped to [groupId]. A
   /// `super_admin` manages every group; an `admin_equipo` only the ones in

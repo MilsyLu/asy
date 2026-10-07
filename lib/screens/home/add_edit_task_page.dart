@@ -25,6 +25,7 @@ import '../../widgets/gold_button.dart';
 import 'widgets/client_picker_field.dart';
 import 'widgets/hour_grid_selector.dart';
 import 'widgets/reminder_picker.dart';
+import '../../core/utils/time_selection.dart';
 
 /// Form used to both create and edit a task.
 ///
@@ -404,9 +405,11 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     _groupId ??=
         (assignedUserGroupIds.isNotEmpty ? assignedUserGroupIds.first : null) ??
         (currentUser.groupIds.isNotEmpty ? currentUser.groupIds.first : null);
-    // Time-selection mode now lives per-team (GroupModel.timeSelectionMode)
-    // instead of the old single global systemConfig toggle.
-    final useFreePicker = catalog.groupById(_groupId)?.useFreePicker ?? false;
+    // El modo vive en el equipo, y cuando todavía no hay equipo elegido sale
+    // de los que existan. Ver `useFreeHours`: el `?? false` que había aquí le
+    // mostraba la rejilla de horas a un super usuario —que no pertenece a
+    // ningún equipo— aunque ningún equipo la usara.
+    final useFreePicker = useFreeHours(catalog.groups, _groupId);
     if (_selectedHour == null &&
         !useFreePicker &&
         catalog.availableHours.isNotEmpty) {

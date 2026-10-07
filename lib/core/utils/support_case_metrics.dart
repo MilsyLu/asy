@@ -54,77 +54,120 @@ Duration? averageResolutionTime(Iterable<SupportCaseModel> cases) {
   return n == 0 ? null : Duration(minutes: suma ~/ n);
 }
 
-/// Una semana del gráfico de entradas contra salidas.
-class SupportWeek {
-  const SupportWeek({
-    required this.start,
+/// Un día del gráfico de entradas contra salidas.
+class SupportDay {
+  const SupportDay({
+    required this.day,
     required this.opened,
     required this.resolved,
   });
 
-  /// Lunes de la semana.
-  final DateTime start;
+  /// El día, sin hora.
+  final DateTime day;
 
-  /// Casos reportados dentro de la semana.
+  /// Casos reportados ese día.
   final int opened;
 
-  /// Casos resueltos dentro de la semana — no necesariamente los mismos.
+  /// Casos resueltos ese día — no necesariamente los mismos.
   final int resolved;
 }
 
-/// El lunes de la semana a la que pertenece [d], sin hora.
-DateTime weekStart(DateTime d) {
-  final dia = DateTime(d.year, d.month, d.day);
-  return dia.subtract(Duration(days: dia.weekday - DateTime.monday));
+/// [d] sin la hora.
+DateTime dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+/// Si [d] cae dentro de [start]–[end], ambos días incluidos.
+bool inPeriod(DateTime d, DateTime start, DateTime end) {
+  final dia = dayOnly(d);
+  return !dia.isBefore(dayOnly(start)) && !dia.isAfter(dayOnly(end));
 }
 
-/// Cuántos casos entraron y cuántos se resolvieron en cada una de las últimas
-/// [weeks] semanas, de la más vieja a la más reciente.
+/// Los casos reportados dentro del periodo.
+List<SupportCaseModel> reportedIn(
+  Iterable<SupportCaseModel> cases,
+  DateTime start,
+  DateTime end,
+) => [
+  for (final c in cases)
+    if (inPeriod(c.reportedAt, start, end)) c,
+];
+
+/// Los casos resueltos dentro del periodo.
 ///
-/// Las dos series se cuentan por fechas distintas a propósito: un caso entra la
-/// semana en que lo reportaron y sale la semana en que se resolvió, que casi
-/// nunca es la misma. Contar ambas por la fecha de creación —el error fácil—
-/// dibujaría dos líneas que se mueven juntas y no dirían nada.
+/// No son los mismos que [reportedIn]: un caso reportado en julio y resuelto
+/// en septiembre cuenta como salida de septiembre. Contar ambas cosas por la
+/// misma fecha —el error fácil— haría que las dos series se movieran juntas y
+/// el gráfico no diría nada.
+List<SupportCaseModel> resolvedIn(
+  Iterable<SupportCaseModel> cases,
+  DateTime start,
+  DateTime end,
+) => [
+  for (final c in cases)
+    if (c.resolvedAt != null && inPeriod(c.resolvedAt!, start, end)) c,
+];
+
+/// Cuántos casos entraron y cuántos se resolvieron cada día del periodo, del
+/// más viejo al más reciente.
 ///
-/// Las semanas sin nada aparecen en cero en vez de desaparecer: un hueco
-/// saltado convierte una semana muerta en una línea que sigue de largo.
-List<SupportWeek> weeklyFlow(
+/// Los días sin nada aparecen en cero en vez de desaparecer: un hueco saltado
+/// convierte un día muerto en una línea que sigue de largo.
+List<SupportDay> dailyFlow(
   Iterable<SupportCaseModel> cases, {
-  required DateTime now,
-  int weeks = 8,
+  required DateTime start,
+  required DateTime end,
 }) {
-  final actual = weekStart(now);
-  final primera = actual.subtract(Duration(days: 7 * (weeks - 1)));
+  final desde = dayOnly(start);
+  final hasta = dayOnly(end);
+  if (hasta.isBefore(desde)) return const [];
 
   final entradas = <DateTime, int>{};
   final salidas = <DateTime, int>{};
 
   for (final c in cases) {
-    final entrada = weekStart(c.reportedAt);
-    if (!entrada.isBefore(primera) && !entrada.isAfter(actual)) {
-      entradas[entrada] = (entradas[entrada] ?? 0) + 1;
+    if (inPeriod(c.reportedAt, desde, hasta)) {
+      final d = dayOnly(c.reportedAt);
+      entradas[d] = (entradas[d] ?? 0) + 1;
     }
     final resuelto = c.resolvedAt;
-    if (resuelto != null) {
-      final salida = weekStart(resuelto);
-      if (!salida.isBefore(primera) && !salida.isAfter(actual)) {
-        salidas[salida] = (salidas[salida] ?? 0) + 1;
-      }
+    if (resuelto != null && inPeriod(resuelto, desde, hasta)) {
+      final d = dayOnly(resuelto);
+      salidas[d] = (salidas[d] ?? 0) + 1;
     }
   }
 
-  return [
-    for (var i = 0; i < weeks; i++)
-      () {
-        final semana = primera.add(Duration(days: 7 * i));
-        return SupportWeek(
-          start: semana,
-          opened: entradas[semana] ?? 0,
-          resolved: salidas[semana] ?? 0,
-        );
-      }(),
-  ];
+  // Se avanza con aritmética de calendario y no sumando 24 horas: en un país
+  // con cambio de hora, sumar días como duraciones desplaza el reloj y termina
+  // saltándose o repitiendo un día.
+  final dias = <SupportDay>[];
+  for (
+    var d = desde;
+    !d.isAfter(hasta);
+    d = DateTime(d.year, d.month, d.day + 1)
+  ) {
+    dias.add(
+      SupportDay(day: d, opened: entradas[d] ?? 0, resolved: salidas[d] ?? 0),
+    );
+  }
+  return dias;
 }
+
+const _meses = [
+  'ene',
+  'feb',
+  'mar',
+  'abr',
+  'may',
+  'jun',
+  'jul',
+  'ago',
+  'sep',
+  'oct',
+  'nov',
+  'dic',
+];
+
+/// Un día suelto: "6 sep".
+String formatDay(DateTime d) => '${d.day} ${_meses[d.month - 1]}';
 
 /// Texto corto para una duración: "3 h", "2,4 días".
 ///
