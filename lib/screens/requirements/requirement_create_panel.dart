@@ -50,10 +50,21 @@ Future<void> showRequirementEditSheet(
 /// fecha de recepción, quién lo recibió, el número— aquí no se pregunta: lo
 /// pone la app. Por eso no hay campo de fecha ni de número.
 class RequirementCreatePanel extends StatefulWidget {
-  const RequirementCreatePanel({super.key, this.existente});
+  const RequirementCreatePanel({
+    super.key,
+    this.existente,
+    this.enPanel = false,
+  });
 
   /// Null = alta nueva. Con valor, el formulario corrige ese requerimiento.
   final RequirementModel? existente;
+
+  /// Embebido en el panel lateral de la pantalla, no dentro de una ventana.
+  ///
+  /// Cambia dos cosas: al guardar no cierra nada —se queda listo para el
+  /// siguiente, como el "Nueva tarea" de la Agenda diaria— y no muestra el
+  /// botón Cancelar, que no tendría qué cancelar.
+  final bool enPanel;
 
   @override
   State<RequirementCreatePanel> createState() => _RequirementCreatePanelState();
@@ -113,6 +124,25 @@ class _RequirementCreatePanelState extends State<RequirementCreatePanel> {
   void dispose() {
     _descripcion.dispose();
     super.dispose();
+  }
+
+  /// Deja el formulario como recién abierto, para el siguiente requerimiento.
+  ///
+  /// El `reset()` va primero: `FormState.reset()` no vacía los campos, los
+  /// devuelve a su valor inicial, que para un campo con controlador es el
+  /// texto de la última reconstrucción. Llamándolo después de `clear()`
+  /// reescribe lo que se acaba de borrar — es exactamente lo que hacía que
+  /// "Limpiar" no limpiara en el panel de Nueva tarea.
+  void _limpiar() {
+    _formKey.currentState?.reset();
+    _descripcion.clear();
+    setState(() {
+      _clientes.clear();
+      _origen = RequirementOrigin.cliente;
+      _tipo = RequirementType.solicitudes;
+      _modulo = RequirementModule.all.last;
+      _prioridad = RequirementPriority.sinPrioridad;
+    });
   }
 
   Future<void> _elegirClientes() async {
@@ -239,7 +269,11 @@ class _RequirementCreatePanelState extends State<RequirementCreatePanel> {
         );
       }
       if (!mounted) return;
-      Navigator.of(context).pop();
+      if (widget.enPanel) {
+        _limpiar();
+      } else {
+        Navigator.of(context).pop();
+      }
       SnackbarUtils.showSuccess(
         context,
         _editando ? 'Requerimiento actualizado' : 'Requerimiento registrado',
@@ -388,15 +422,17 @@ class _RequirementCreatePanelState extends State<RequirementCreatePanel> {
               const SizedBox(height: AppSpacing.lg),
               Row(
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _guardando
-                          ? null
-                          : () => Navigator.of(context).pop(),
-                      child: const Text('Cancelar'),
+                  if (!widget.enPanel) ...[
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _guardando
+                            ? null
+                            : () => Navigator.of(context).pop(),
+                        child: const Text('Cancelar'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
+                    const SizedBox(width: 10),
+                  ],
                   Expanded(
                     flex: 2,
                     child: FilledButton.icon(

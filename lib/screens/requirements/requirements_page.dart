@@ -140,7 +140,11 @@ class _RequirementsPageState extends State<RequirementsPage> {
 
         return LayoutBuilder(
           builder: (context, c) {
-            final conPanel = c.maxWidth >= 1000 && _seleccionado != null;
+            // El panel de la derecha está siempre, como el "Nueva tarea" de
+            // la Agenda diaria: sin clic previo, listo para escribir. Cuando
+            // se abre un requerimiento muestra su detalle, y al cerrarlo
+            // vuelve al formulario en vez de dejar el hueco vacío.
+            final conPanel = c.maxWidth >= 1000;
             final columna = Column(
               children: [
                 cabecera,
@@ -153,13 +157,18 @@ class _RequirementsPageState extends State<RequirementsPage> {
               children: [
                 Expanded(flex: 3, child: columna),
                 const VerticalDivider(width: 1),
-                Expanded(
-                  flex: 2,
-                  child: RequirementDetailView(
-                    key: ValueKey(_seleccionado),
-                    requirementId: _seleccionado!,
-                    onClose: () => setState(() => _seleccionado = null),
-                  ),
+                // Ancho fijo: con `Expanded` el formulario crecía con la
+                // pantalla y en un monitor grande los campos quedaban
+                // larguísimos, mientras la lista perdía sitio.
+                SizedBox(
+                  width: 420,
+                  child: _seleccionado != null
+                      ? RequirementDetailView(
+                          key: ValueKey(_seleccionado),
+                          requirementId: _seleccionado!,
+                          onClose: () => setState(() => _seleccionado = null),
+                        )
+                      : const RequirementCreatePanel(enPanel: true),
                 ),
               ],
             );
