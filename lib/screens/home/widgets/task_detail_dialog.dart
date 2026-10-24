@@ -19,6 +19,7 @@ import '../../../widgets/task_type_chip.dart';
 import '../../../widgets/trash_dialog.dart';
 import '../add_edit_task_page.dart';
 import 'reschedule_dialog.dart';
+import '../../../core/utils/reschedule_summary.dart';
 
 /// Returns a human-readable label for the reminder stored in [task].
 ///
@@ -75,6 +76,14 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
       isPending;
   final canComplete = !isCompleted;
   final canReschedule = !isCompleted;
+  // El recorrido completo va aquí y no en la tarjeta: la tarjeta sólo tiene
+  // sitio para el último salto, y esta ventana es adonde se viene a averiguar.
+  final recorrido = rescheduleChain(
+    history: task.rescheduleHistory,
+    rescheduledCount: task.rescheduledCount,
+    currentDate: task.date,
+    currentHour: task.hour,
+  );
 
   return showDialog<void>(
     context: context,
@@ -166,6 +175,14 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
                   label: 'Hora',
                   value: task.hour,
                 ),
+                if (recorrido != null) ...[
+                  const SizedBox(height: 12),
+                  TaskDetailRow(
+                    icon: LucideIcons.history,
+                    label: 'Reprogramaciones',
+                    value: recorrido,
+                  ),
+                ],
                 const SizedBox(height: 12),
                 TaskDetailRow(
                   icon: LucideIcons.userCheck,

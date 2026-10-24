@@ -8,6 +8,7 @@ import '../../models/support_case_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/support_case_repository.dart';
 import '../../widgets/support_case_badges.dart';
+import '../../widgets/single_column_grid.dart';
 
 /// Tablet/desktop-only alternate view: one column per [SupportCaseStatus],
 /// dragging a card to another column calls `updateStatus` (already logs the
@@ -41,6 +42,33 @@ class SupportCaseKanbanView extends StatelessWidget {
       return flexible
           ? Expanded(child: column)
           : SizedBox(width: _columnWidth, child: column);
+    }
+
+    // Con un filtro puesto —una etiqueta, "Alta prioridad", un encargado—
+    // lo normal es que sólo una columna tenga casos y las demás queden
+    // vacías al lado. Ahí el tablero no muestra ningún flujo y lo que uno
+    // vino a ver se apretuja en una tira. Misma decisión que en
+    // Requerimientos, y por eso la rejilla es la misma pieza.
+    final porEstado = {
+      for (final e in SupportCaseStatus.all)
+        e: cases.where((c) => c.status == e).toList(),
+    };
+    final conCasos = [
+      for (final e in porEstado.entries)
+        if (e.value.isNotEmpty) e,
+    ];
+    if (conCasos.length == 1) {
+      final unica = conCasos.first;
+      return SingleColumnGrid(
+        titulo: SupportCaseStatus.columnLabelFor(unica.key),
+        color: SupportCaseStatus.colorFor(unica.key),
+        cantidad: unica.value.length,
+        altoTarjeta: 132,
+        itemBuilder: (_, i) => _KanbanCard(
+          caseModel: unica.value[i],
+          onTap: () => onTap(unica.value[i].id),
+        ),
+      );
     }
 
     return LayoutBuilder(

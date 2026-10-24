@@ -18,6 +18,16 @@ class FirestoreCollections {
   static const String supportCaseHistory = 'history';
   static const String supportCaseTags = 'supportCaseTags';
 
+  /// Requerimientos: lo que los clientes piden que VinApp haga. Reemplaza la
+  /// hoja de cálculo que se compartía con el área de soporte.
+  static const String requirements = 'requirements';
+  static const String requirementCounters = 'requirementCounters';
+  static const String requirementEvents = 'events';
+
+  /// El equipo técnico al que se asignan los requerimientos. No son usuarios
+  /// de CheCu: están del otro lado, construyendo VinApp.
+  static const String developers = 'developers';
+
   // Global system configuration
   static const String systemConfig = 'systemConfig';
   static const String systemConfigSettings = 'settings';

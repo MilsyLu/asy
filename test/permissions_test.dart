@@ -71,14 +71,31 @@ void main() {
       expect(colado.hasPermission(AppPermissions.viewReports), isFalse);
     });
 
-    test('la lista de concedibles no incluye nada de administración', () {
-      for (final k in AppPermissions.grantableToWorkers) {
+    test('ninguno de los que abren un módulo es concedible', () {
+      // Esta prueba decía antes "nada de lo concedible está en
+      // AppPermissions.all", y se puso roja al agregar manageRequirements —
+      // que sí está en las dos listas, a propósito: Michel pidió poder darle
+      // la aprobación de requerimientos a quien quiera, tenga el rol que
+      // tenga. El supuesto estaba mal; lo que hay que proteger no es "que no
+      // esté en all", sino que nadie reciba por esta vía un permiso que abre
+      // un módulo de administración entero.
+      const jamas = [
+        AppPermissions.manageUsers,
+        AppPermissions.manageTeams,
+        AppPermissions.manageCatalogs,
+        AppPermissions.manageClients,
+        AppPermissions.manageTasks,
+        AppPermissions.viewReports,
+        AppPermissions.managePrinterConfigs,
+        AppPermissions.manageSupportCases,
+      ];
+      for (final k in jamas) {
         expect(
-          AppPermissions.all.contains(k),
+          AppPermissions.grantableToWorkers.contains(k),
           isFalse,
           reason:
-              '$k es un permiso de administrador y no debería poder '
-              'concedérsele a un trabajador',
+              '$k abre un módulo de administración: no puede estar '
+              'entre los que se le pueden conceder a un trabajador',
         );
       }
     });

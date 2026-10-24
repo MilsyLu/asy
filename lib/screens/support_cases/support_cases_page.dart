@@ -28,6 +28,9 @@ import 'support_case_detail_view.dart';
 import 'support_case_kanban_view.dart';
 import 'support_case_tags_sheet.dart';
 
+/// Valor del filtro de encargado que pide los casos sin asignar.
+const String kSinEncargado = '__sin_encargado__';
+
 enum _ViewMode { tabla, kanban, resumen }
 
 enum _QuickFilter {
@@ -165,6 +168,13 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
   final _searchController = TextEditingController();
   String _query = '';
   _QuickFilter _filter = _QuickFilter.todos;
+
+  /// Encargado por el que se filtra. `null` = todos.
+  ///
+  /// [kSinEncargado] es el centinela de "sin asignar": un `null` ahí
+  /// significaría "no filtrar", así que los casos sin encargado necesitan un
+  /// valor propio para poder pedirse.
+  String? _assigneeFilter;
   String? _tagFilter;
   _SortBy _sortBy = _SortBy.recientes;
   _ViewMode _viewMode = _ViewMode.tabla;
@@ -185,11 +195,21 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
   List<SupportCaseModel> _applyFiltersAndSort(
     List<SupportCaseModel> all,
     String? myUid,
+    String Function(String?) nombreDe,
   ) {
     final q = _query.trim().toLowerCase();
     var result = all.where((c) => _filter.matches(c, myUid)).toList();
     if (_tagFilter != null) {
       result = result.where((c) => c.tags.contains(_tagFilter)).toList();
+    }
+    if (_assigneeFilter != null) {
+      result = result.where((c) {
+        final sinAsignar =
+            c.assignedUserId == null || c.assignedUserId!.isEmpty;
+        return _assigneeFilter == kSinEncargado
+            ? sinAsignar
+            : c.assignedUserId == _assigneeFilter;
+      }).toList();
     }
     if (q.isNotEmpty) {
       result = result.where((c) {
@@ -198,6 +218,9 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
             c.subject.toLowerCase().contains(q) ||
             c.description.toLowerCase().contains(q) ||
             c.status.toLowerCase().contains(q) ||
+            // El encargado también: escribir "natalia" en el buscador es lo
+            // primero que uno intenta, y antes no devolvía nada.
+            nombreDe(c.assignedUserId).toLowerCase().contains(q) ||
             c.tags.any((t) => t.toLowerCase().contains(q)) ||
             'cs-${c.caseNumber.toString().padLeft(4, '0')}'.contains(q);
       }).toList();
@@ -245,6 +268,9 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
   @override
   Widget build(BuildContext context) {
     final repo = context.watch<SupportCaseRepository>();
+    // Para el desplegable de encargado y para que el buscador reconozca un
+    // nombre de persona, no sólo de cliente.
+    final catalog = context.watch<CatalogProvider>();
     final auth = context.watch<AuthProvider>();
     final myUid = auth.appUser?.id;
     final isMobile = context.isMobile;
@@ -262,7 +288,7 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const LoadingIndicator();
         final all = snapshot.data!;
-        final filtered = _applyFiltersAndSort(all, myUid);
+        final filtered = _applyFiltersAndSort(all, myUid, catalog.userName);
 
         final canDelete = auth.hasPermission(AppPermissions.manageSupportCases);
         // El Resumen recibe los casos ya filtrados, igual que la tabla y el
@@ -293,6 +319,8 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
           onFilterChanged: (f) => setState(() => _filter = f),
           tagFilter: _tagFilter,
           onTagFilterChanged: (t) => setState(() => _tagFilter = t),
+          assigneeFilter: _assigneeFilter,
+          onAssigneeFilterChanged: (v) => setState(() => _assigneeFilter = v),
           sortBy: _sortBy,
           onSortChanged: (s) => setState(() => _sortBy = s),
           // Sólo en celular: en escritorio ambos viven en la barra superior
@@ -401,6 +429,8 @@ class _CasesHeader extends StatelessWidget {
     required this.onFilterChanged,
     required this.tagFilter,
     required this.onTagFilterChanged,
+    required this.assigneeFilter,
+    required this.onAssigneeFilterChanged,
     required this.sortBy,
     required this.onSortChanged,
     required this.onManageTags,
@@ -421,6 +451,10 @@ class _CasesHeader extends StatelessWidget {
   final String? tagFilter;
   final ValueChanged<String?> onTagFilterChanged;
 
+  /// Null = todos los encargados; [kSinEncargado] = sólo los sin asignar.
+  final String? assigneeFilter;
+  final ValueChanged<String?> onAssigneeFilterChanged;
+
   final _SortBy sortBy;
   final ValueChanged<_SortBy> onSortChanged;
 
@@ -437,6 +471,30 @@ class _CasesHeader extends StatelessWidget {
     final colors = context.colors;
     final today = DateTime.now();
     final availableTags = all.expand((c) => c.tags).toSet().toList()..sort();
+
+    // (id, nombre, cuántos casos). El conteo va en la opción para que se vea
+    // de una vez cuánto carga cada quien, sin tener que elegir y contar.
+    final porEncargado = <String, int>{};
+    for (final c in all) {
+      final id = (c.assignedUserId == null || c.assignedUserId!.isEmpty)
+          ? kSinEncargado
+          : c.assignedUserId!;
+      porEncargado[id] = (porEncargado[id] ?? 0) + 1;
+    }
+    final catalogo = context.watch<CatalogProvider>();
+    final encargados =
+        porEncargado.entries
+            .map(
+              (e) => (
+                e.key,
+                e.key == kSinEncargado
+                    ? 'Sin encargado'
+                    : catalogo.userName(e.key),
+                e.value,
+              ),
+            )
+            .toList()
+          ..sort((a, b) => a.$2.compareTo(b.$2));
     final open = all.where((c) => SupportCaseStatus.isOpen(c.status));
     final urgentes = open.where(
       (c) =>
@@ -560,6 +618,38 @@ class _CasesHeader extends StatelessWidget {
                     ),
                   ],
                 ),
+                // Encargado. Sólo se ofrecen las personas que de verdad
+                // tienen algún caso: una lista con los seis usuarios de la
+                // empresa haría elegir entre nombres que no devuelven nada.
+                if (encargados.isNotEmpty)
+                  DropdownButton<String?>(
+                    value: assigneeFilter,
+                    underline: const SizedBox.shrink(),
+                    hint: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          LucideIcons.userCheck,
+                          size: 14,
+                          color: colors.textSecondary,
+                        ),
+                        const SizedBox(width: 4),
+                        const Text('Encargado'),
+                      ],
+                    ),
+                    onChanged: onAssigneeFilterChanged,
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Todos los encargados'),
+                      ),
+                      for (final e in encargados)
+                        DropdownMenuItem<String?>(
+                          value: e.$1,
+                          child: Text('${e.$2} (${e.$3})'),
+                        ),
+                    ],
+                  ),
                 if (availableTags.isNotEmpty)
                   DropdownButton<String?>(
                     value: tagFilter,

@@ -221,6 +221,8 @@ Future<void> _confirmReschedule({
       newHour: newHour,
       rescheduledStatusId: rescheduledStatusId,
       currentRescheduledCount: task.rescheduledCount,
+      previousDate: task.date,
+      previousHour: task.hour,
       rescheduledBy: currentUserId,
       reminderTime: reminderStillValid ? task.reminderTime : null,
       clearReminder: !reminderStillValid && task.reminderTime != null,

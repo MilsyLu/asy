@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/responsive/app_spacing.dart';
 import '../../../core/theme/theme_colors.dart';
+import '../../../core/utils/reschedule_summary.dart';
 import '../../../core/utils/task_type_colors.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/catalog_provider.dart';
@@ -42,6 +43,11 @@ class CompactTaskCard extends StatelessWidget {
     final accent = accentColor ?? taskStatusColor(colors, statusName);
     final typeColor =
         catalog.taskTypeById(task.taskTypeId)?.parsedColor ?? colors.primary;
+    final reprogramacion = rescheduleSummary(
+      history: task.rescheduleHistory,
+      rescheduledCount: task.rescheduledCount,
+      currentDate: task.date,
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -59,12 +65,17 @@ class CompactTaskCard extends StatelessWidget {
               width: 4,
               decoration: BoxDecoration(
                 color: typeColor,
-                borderRadius: const BorderRadius.horizontal(left: Radius.circular(10)),
+                borderRadius: const BorderRadius.horizontal(
+                  left: Radius.circular(10),
+                ),
               ),
             ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -82,7 +93,10 @@ class CompactTaskCard extends StatelessWidget {
                           ),
                         ),
                         const Spacer(),
-                        _CompactStatusChip(statusName: statusName, color: accent),
+                        _CompactStatusChip(
+                          statusName: statusName,
+                          color: accent,
+                        ),
                       ],
                     ),
                     const SizedBox(height: 5),
@@ -106,13 +120,44 @@ class CompactTaskCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             '${catalog.taskTypeName(task.taskTypeId)} · ${catalog.userName(task.assignedUserId)}',
-                            style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                            style: TextStyle(
+                              color: colors.textSecondary,
+                              fontSize: 12,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
                     ),
+                    // De dónde venía, si se movió. "Reprogramada" por sí
+                    // solo no decía ni la fecha anterior ni si de verdad
+                    // cambió de día.
+                    if (reprogramacion != null) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(
+                            LucideIcons.history,
+                            size: 12,
+                            color: colors.textSecondary,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              reprogramacion,
+                              style: TextStyle(
+                                color: colors.textSecondary,
+                                fontSize: 11,
+                                fontStyle: FontStyle.italic,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -141,7 +186,11 @@ class _CompactStatusChip extends StatelessWidget {
       ),
       child: Text(
         statusName,
-        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -156,8 +205,12 @@ class _CompactStatusChip extends StatelessWidget {
 /// duplicating logic.
 Color taskStatusColor(AppColorsExtension colors, String statusName) {
   final lower = statusName.toLowerCase();
-  if (lower == AppStatusNames.pendiente.toLowerCase()) return colors.statusPending;
+  if (lower == AppStatusNames.pendiente.toLowerCase()) {
+    return colors.statusPending;
+  }
   if (lower == AppStatusNames.completada.toLowerCase()) return colors.success;
-  if (lower == AppStatusNames.reprogramada.toLowerCase()) return colors.statusRescheduled;
+  if (lower == AppStatusNames.reprogramada.toLowerCase()) {
+    return colors.statusRescheduled;
+  }
   return colors.textSecondary;
 }

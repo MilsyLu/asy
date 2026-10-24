@@ -45,7 +45,7 @@ class ClientTaskHistory {
 /// firestore.rules independently re-verifies this (see `sameEmpresa()`).
 class TaskRepository {
   TaskRepository({required this.empresaId, FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
   final String empresaId;
@@ -64,10 +64,12 @@ class TaskRepository {
         .where('date', isEqualTo: dateKey)
         .orderBy('hour')
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => TaskModel.fromDoc(d))
-            .where((t) => !t.isDeleted)
-            .toList());
+        .map(
+          (snap) => snap.docs
+              .map((d) => TaskModel.fromDoc(d))
+              .where((t) => !t.isDeleted)
+              .toList(),
+        );
   }
 
   /// Tasks scheduled within an inclusive date range (`YYYY-MM-DD` keys),
@@ -82,10 +84,12 @@ class TaskRepository {
         .orderBy('date')
         .orderBy('hour')
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => TaskModel.fromDoc(d))
-            .where((t) => !t.isDeleted)
-            .toList());
+        .map(
+          (snap) => snap.docs
+              .map((d) => TaskModel.fromDoc(d))
+              .where((t) => !t.isDeleted)
+              .toList(),
+        );
   }
 
   Future<List<TaskModel>> getTasksInRange(DateTime start, DateTime end) async {
@@ -138,7 +142,8 @@ class TaskRepository {
   }
 
   Future<String> createTask(TaskModel task) async {
-    final data = task.toMap(withServerTimestamp: true)..['empresaId'] = empresaId;
+    final data = task.toMap(withServerTimestamp: true)
+      ..['empresaId'] = empresaId;
     final doc = await _tasksCollection.add(data);
     return doc.id;
   }
@@ -160,8 +165,9 @@ class TaskRepository {
     String? completedStatusId,
     String? rescheduledStatusId,
   }) async {
-    final snap =
-        await _collection.where('assignedUserId', isEqualTo: userId).get();
+    final snap = await _collection
+        .where('assignedUserId', isEqualTo: userId)
+        .get();
     var completed = 0;
     var rescheduled = 0;
     for (final doc in snap.docs) {
@@ -213,7 +219,10 @@ class TaskRepository {
 
   /// Marks a task as deleted without removing it from Firestore.
   Future<void> softDeleteTask(
-      String taskId, String deletedBy, String deletedByName) {
+    String taskId,
+    String deletedBy,
+    String deletedByName,
+  ) {
     return _tasksCollection.doc(taskId).update({
       'isDeleted': true,
       'deletedAt': Timestamp.fromDate(DateTime.now()),
@@ -245,7 +254,9 @@ class TaskRepository {
   Future<void> permanentlyDeleteTasks(List<String> taskIds) async {
     const chunkSize = 400;
     for (var i = 0; i < taskIds.length; i += chunkSize) {
-      final end = i + chunkSize > taskIds.length ? taskIds.length : i + chunkSize;
+      final end = i + chunkSize > taskIds.length
+          ? taskIds.length
+          : i + chunkSize;
       final chunk = taskIds.sublist(i, end);
       final batch = _firestore.batch();
       for (final id in chunk) {
@@ -268,7 +279,9 @@ class TaskRepository {
   /// Stream of soft-deleted tasks within an inclusive date range.
   /// Requires composite index (empresaId ASC, isDeleted ASC, date ASC).
   Stream<List<TaskModel>> watchDeletedTasksByDateRange(
-      DateTime start, DateTime end) {
+    DateTime start,
+    DateTime end,
+  ) {
     final startKey = AppDateUtils.formatDateKey(start);
     final endKey = AppDateUtils.formatDateKey(end);
     return _collection
@@ -297,12 +310,25 @@ class TaskRepository {
     required String rescheduledStatusId,
     required int currentRescheduledCount,
     required String? rescheduledBy,
+    required String previousDate,
+    required String previousHour,
     DateTime? reminderTime,
     bool clearReminder = false,
   }) {
     return _tasksCollection.doc(taskId).update({
       'date': newDate,
       'hour': newHour,
+      // De dónde venía, antes de que las dos líneas de arriba lo borren. Es
+      // lo único que permite responder "¿y qué fecha tenía antes?", que hasta
+      // ahora no tenía respuesta en ninguna parte.
+      'rescheduleHistory': FieldValue.arrayUnion([
+        {
+          'fromDate': previousDate,
+          'fromHour': previousHour,
+          'at': Timestamp.fromDate(DateTime.now()),
+          'by': rescheduledBy,
+        },
+      ]),
       'statusId': rescheduledStatusId,
       'rescheduledCount': currentRescheduledCount + 1,
       // Required (though nullable): this repository has no access to the

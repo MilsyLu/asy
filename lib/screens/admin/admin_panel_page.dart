@@ -9,6 +9,7 @@ import '../../core/theme/theme_colors.dart';
 import '../../providers/auth_provider.dart';
 import 'available_hours_page.dart';
 import 'clients_page.dart';
+import 'developers_page.dart';
 import 'groups_page.dart';
 import 'statuses_page.dart';
 import 'task_types_page.dart';
@@ -19,7 +20,11 @@ import 'users_page.dart';
 /// [AppPermissions] (Equipos→manageTeams, Tipos de tarea/Estados/Horarios→
 /// manageCatalogs, Usuarios→manageUsers, Clientes→manageClients).
 class AdminPanelPage extends StatelessWidget {
-  const AdminPanelPage({super.key, this.showAppBar = true, this.onModuleSelected});
+  const AdminPanelPage({
+    super.key,
+    this.showAppBar = true,
+    this.onModuleSelected,
+  });
 
   /// Set to false when this page lives inside the main shell's [IndexedStack]
   /// so the outer shell's AppBar is used instead of rendering a second one.
@@ -38,9 +43,13 @@ class AdminPanelPage extends StatelessWidget {
     final hPad = isDesktop
         ? AppSpacing.pagePaddingDesktop
         : isTablet
-            ? AppSpacing.pagePaddingTablet
-            : AppSpacing.pagePaddingMobile;
-    final crossAxisCount = isDesktop ? 3 : isTablet ? 2 : 1;
+        ? AppSpacing.pagePaddingTablet
+        : AppSpacing.pagePaddingMobile;
+    final crossAxisCount = isDesktop
+        ? 3
+        : isTablet
+        ? 2
+        : 1;
 
     final modules = <_AdminModuleData>[
       _AdminModuleData(
@@ -97,6 +106,15 @@ class AdminPanelPage extends StatelessWidget {
         builder: (_) => const ClientsPage(),
         requiredPermission: AppPermissions.manageClients,
       ),
+      _AdminModuleData(
+        icon: LucideIcons.userCog,
+        title: 'Equipo técnico',
+        subtitle: 'A quién se le asignan los requerimientos.',
+        moduleKey: 'desarrolladores',
+        accentColor: const Color(0xFF7C5CD6),
+        builder: (_) => const DevelopersPage(),
+        requiredPermission: AppPermissions.manageRequirements,
+      ),
     ].where((m) => auth.hasPermission(m.requiredPermission)).toList();
 
     final body = SingleChildScrollView(
@@ -132,9 +150,9 @@ class AdminPanelPage extends StatelessWidget {
                     if (onModuleSelected != null) {
                       onModuleSelected!(module.moduleKey);
                     } else {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: module.builder),
-                      );
+                      Navigator.of(
+                        context,
+                      ).push(MaterialPageRoute(builder: module.builder));
                     }
                   },
                 );

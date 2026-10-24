@@ -1,6 +1,51 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/utils/date_utils.dart';
 
+/// Una reprogramación: de dónde venía la tarea antes de moverla.
+///
+/// `rescheduleTask` sobrescribe `date` y `hour`, así que sin esto la fecha
+/// anterior desaparecía. Quedaba sólo `rescheduledCount` —cuántas veces se
+/// movió— y no había forma de saber desde dónde: la etiqueta "Reprogramada"
+/// decía que algo había pasado sin decir qué.
+class RescheduleEntry {
+  const RescheduleEntry({
+    required this.fromDate,
+    required this.fromHour,
+    this.at,
+    this.by,
+  });
+
+  /// Fecha que tenía antes, "YYYY-MM-DD".
+  final String fromDate;
+
+  /// Hora que tenía antes, "HH:MM".
+  final String fromHour;
+
+  /// Cuándo se movió.
+  ///
+  /// La pone el dispositivo que reprograma y no el servidor: Firestore no
+  /// admite `serverTimestamp()` dentro de un `arrayUnion`. Para leer "antes
+  /// 5 oct 10:00" sobra, pero no sirve para auditar al minuto.
+  final DateTime? at;
+
+  /// Quién la movió (id de usuario).
+  final String? by;
+
+  factory RescheduleEntry.fromMap(Map<String, dynamic> map) => RescheduleEntry(
+    fromDate: map['fromDate'] as String? ?? '',
+    fromHour: map['fromHour'] as String? ?? '',
+    at: (map['at'] as Timestamp?)?.toDate(),
+    by: map['by'] as String?,
+  );
+
+  Map<String, dynamic> toMap() => {
+    'fromDate': fromDate,
+    'fromHour': fromHour,
+    'at': at != null ? Timestamp.fromDate(at!) : null,
+    'by': by,
+  };
+}
+
 /// Represents a document in the `tasks` collection.
 class TaskModel {
   final String id;
@@ -9,6 +54,7 @@ class TaskModel {
   final String? taskTypeId;
   final String clientName;
   final String clientPhone;
+
   /// Links this task to a `clients/{id}` record. Nullable: legacy tasks
   /// (created before the Clientes feature) never have one, and even new
   /// tasks may briefly not until save-time auto-linking resolves it. See
@@ -22,6 +68,12 @@ class TaskModel {
   final DateTime? createdAt;
   final DateTime? completedAt;
   final int rescheduledCount;
+
+  /// De dónde venía en cada reprogramación, de la más vieja a la más
+  /// reciente. Vacío en las tareas anteriores a que esto existiera: su pasado
+  /// ya se había sobrescrito y no se puede reconstruir.
+  final List<RescheduleEntry> rescheduleHistory;
+
   final String date; // "YYYY-MM-DD"
   final String? groupId;
   final bool visibleToAllGroups;
@@ -62,6 +114,7 @@ class TaskModel {
     this.createdAt,
     this.completedAt,
     this.rescheduledCount = 0,
+    this.rescheduleHistory = const [],
     this.groupId,
     this.visibleToAllGroups = false,
     this.isDeleted = false,
@@ -98,6 +151,11 @@ class TaskModel {
       createdAt: (map['createdAt'] as Timestamp?)?.toDate(),
       completedAt: (map['completedAt'] as Timestamp?)?.toDate(),
       rescheduledCount: (map['rescheduledCount'] as num?)?.toInt() ?? 0,
+      rescheduleHistory: [
+        for (final e
+            in (map['rescheduleHistory'] as List<dynamic>? ?? const []))
+          if (e is Map<String, dynamic>) RescheduleEntry.fromMap(e),
+      ],
       date: map['date'] as String? ?? '',
       groupId: map['groupId'] as String?,
       visibleToAllGroups: map['visibleToAllGroups'] as bool? ?? false,
@@ -125,15 +183,18 @@ class TaskModel {
       'clientId': clientId,
       'statusId': statusId,
       'observations': observations,
-      'reminderTime':
-          reminderTime != null ? Timestamp.fromDate(reminderTime!) : null,
+      'reminderTime': reminderTime != null
+          ? Timestamp.fromDate(reminderTime!)
+          : null,
       'reminderSent': reminderSent,
       'createdAt': withServerTimestamp
           ? FieldValue.serverTimestamp()
           : (createdAt != null ? Timestamp.fromDate(createdAt!) : null),
-      'completedAt':
-          completedAt != null ? Timestamp.fromDate(completedAt!) : null,
+      'completedAt': completedAt != null
+          ? Timestamp.fromDate(completedAt!)
+          : null,
       'rescheduledCount': rescheduledCount,
+      'rescheduleHistory': [for (final e in rescheduleHistory) e.toMap()],
       'date': date,
       'groupId': groupId,
       'visibleToAllGroups': visibleToAllGroups,
@@ -163,6 +224,7 @@ class TaskModel {
     DateTime? completedAt,
     bool? clearCompletedAt,
     int? rescheduledCount,
+    List<RescheduleEntry>? rescheduleHistory,
     String? date,
     String? groupId,
     bool? visibleToAllGroups,
@@ -179,7 +241,9 @@ class TaskModel {
       id: id,
       hour: hour ?? this.hour,
       assignedUserId: assignedUserId ?? this.assignedUserId,
-      taskTypeId: clearTaskTypeId == true ? null : (taskTypeId ?? this.taskTypeId),
+      taskTypeId: clearTaskTypeId == true
+          ? null
+          : (taskTypeId ?? this.taskTypeId),
       clientName: clientName ?? this.clientName,
       clientPhone: clientPhone ?? this.clientPhone,
       clientId: clearClientId == true ? null : (clientId ?? this.clientId),
@@ -190,19 +254,20 @@ class TaskModel {
           : (reminderTime ?? this.reminderTime),
       reminderSent: reminderSent ?? this.reminderSent,
       createdAt: createdAt,
-      completedAt:
-          clearCompletedAt == true ? null : (completedAt ?? this.completedAt),
+      completedAt: clearCompletedAt == true
+          ? null
+          : (completedAt ?? this.completedAt),
       rescheduledCount: rescheduledCount ?? this.rescheduledCount,
+      rescheduleHistory: rescheduleHistory ?? this.rescheduleHistory,
       date: date ?? this.date,
       groupId: groupId ?? this.groupId,
       visibleToAllGroups: visibleToAllGroups ?? this.visibleToAllGroups,
       isDeleted: isDeleted ?? this.isDeleted,
-      deletedAt:
-          clearDeletedAt == true ? null : (deletedAt ?? this.deletedAt),
-      deletedBy:
-          clearDeletedBy == true ? null : (deletedBy ?? this.deletedBy),
-      deletedByName:
-          clearDeletedByName == true ? null : (deletedByName ?? this.deletedByName),
+      deletedAt: clearDeletedAt == true ? null : (deletedAt ?? this.deletedAt),
+      deletedBy: clearDeletedBy == true ? null : (deletedBy ?? this.deletedBy),
+      deletedByName: clearDeletedByName == true
+          ? null
+          : (deletedByName ?? this.deletedByName),
       createdBy: createdBy,
       updatedBy: updatedBy,
       empresaId: empresaId,

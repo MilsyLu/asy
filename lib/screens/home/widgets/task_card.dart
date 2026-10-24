@@ -20,6 +20,7 @@ import '../../../widgets/trash_dialog.dart';
 import '../add_edit_task_page.dart';
 import 'reschedule_dialog.dart';
 import 'task_detail_dialog.dart';
+import '../../../core/utils/reschedule_summary.dart';
 
 /// Card representation of a single task, used on Home / Calendar / Week.
 /// Shows a left border colored by the task type (Sprint 5.5), client info,
@@ -46,7 +47,8 @@ class TaskCard extends StatelessWidget {
 
     final isPending = task.statusId == catalog.pendingStatusId;
     final isCompleted = task.statusId == catalog.completedStatusId;
-    final canEdit = (auth.managesGroup(task.groupId) &&
+    final canEdit =
+        (auth.managesGroup(task.groupId) &&
             auth.hasPermission(AppPermissions.manageTasks)) ||
         isPending;
     final canComplete = !isCompleted;
@@ -58,6 +60,11 @@ class TaskCard extends StatelessWidget {
     final colors = context.colors;
     final typeColor =
         catalog.taskTypeById(task.taskTypeId)?.parsedColor ?? colors.primary;
+    final reprogramacion = rescheduleSummary(
+      history: task.rescheduleHistory,
+      rescheduledCount: task.rescheduledCount,
+      currentDate: task.date,
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -75,7 +82,9 @@ class TaskCard extends StatelessWidget {
               width: 4,
               decoration: BoxDecoration(
                 color: typeColor,
-                borderRadius: const BorderRadius.horizontal(left: Radius.circular(10)),
+                borderRadius: const BorderRadius.horizontal(
+                  left: Radius.circular(10),
+                ),
               ),
             ),
             Expanded(
@@ -86,7 +95,11 @@ class TaskCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(LucideIcons.clock, size: 16, color: colors.primary),
+                        Icon(
+                          LucideIcons.clock,
+                          size: 16,
+                          color: colors.primary,
+                        ),
                         const SizedBox(width: 6),
                         Text(
                           task.hour,
@@ -105,18 +118,28 @@ class TaskCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        _StatusChip(statusName: statusName, isCompleted: isCompleted),
+                        _StatusChip(
+                          statusName: statusName,
+                          isCompleted: isCompleted,
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Icon(LucideIcons.userCircle, size: 15, color: colors.textSecondary),
+                        Icon(
+                          LucideIcons.userCircle,
+                          size: 15,
+                          color: colors.textSecondary,
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             task.clientName,
-                            style: TextStyle(color: colors.textPrimary, fontSize: 14),
+                            style: TextStyle(
+                              color: colors.textPrimary,
+                              fontSize: 14,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -128,7 +151,11 @@ class TaskCard extends StatelessWidget {
                         onTap: () => _callClient(context),
                         child: Row(
                           children: [
-                            Icon(LucideIcons.phone, size: 15, color: colors.primary),
+                            Icon(
+                              LucideIcons.phone,
+                              size: 15,
+                              color: colors.primary,
+                            ),
                             const SizedBox(width: 6),
                             Text(
                               Validators.formatPhone(task.clientPhone),
@@ -146,7 +173,10 @@ class TaskCard extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         task.observations,
-                        style: TextStyle(color: colors.textSecondary, fontSize: 13),
+                        style: TextStyle(
+                          color: colors.textSecondary,
+                          fontSize: 13,
+                        ),
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -154,19 +184,36 @@ class TaskCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        Icon(LucideIcons.userCheck, size: 13, color: colors.textSecondary),
+                        Icon(
+                          LucideIcons.userCheck,
+                          size: 13,
+                          color: colors.textSecondary,
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             'Encargado: $assignedName',
-                            style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                            style: TextStyle(
+                              color: colors.textSecondary,
+                              fontSize: 12,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (task.rescheduledCount > 0)
-                          Text(
-                            'Reprogramada x${task.rescheduledCount}',
-                            style: TextStyle(color: colors.error, fontSize: 11),
+                        if (reprogramacion != null)
+                          // Antes decía sólo "Reprogramada x2": el número sin
+                          // el desde no responde ninguna de las preguntas que
+                          // uno se hace al verlo.
+                          Flexible(
+                            child: Text(
+                              reprogramacion,
+                              style: TextStyle(
+                                color: colors.error,
+                                fontSize: 11,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                       ],
                     ),
@@ -186,20 +233,28 @@ class TaskCard extends StatelessWidget {
                             ),
                           if (canReschedule)
                             TextButton.icon(
-                              onPressed: () => showRescheduleDialog(context, task),
+                              onPressed: () =>
+                                  showRescheduleDialog(context, task),
                               icon: const Icon(LucideIcons.repeat, size: 16),
                               label: const Text('Reprogramar'),
                             ),
                           if (canComplete)
                             TextButton.icon(
-                              onPressed: () => completeTaskWithConfirm(context, task),
-                              style: TextButton.styleFrom(foregroundColor: colors.success),
-                              icon: const Icon(LucideIcons.checkCircle, size: 16),
+                              onPressed: () =>
+                                  completeTaskWithConfirm(context, task),
+                              style: TextButton.styleFrom(
+                                foregroundColor: colors.success,
+                              ),
+                              icon: const Icon(
+                                LucideIcons.checkCircle,
+                                size: 16,
+                              ),
                               label: const Text('Completar'),
                             ),
                           TextButton.icon(
                             style: TextButton.styleFrom(
-                                foregroundColor: colors.error),
+                              foregroundColor: colors.error,
+                            ),
                             onPressed: () =>
                                 sendTaskToTrashWithConfirm(context, task),
                             icon: const Icon(LucideIcons.trash2, size: 16),
@@ -232,8 +287,8 @@ class _StatusChip extends StatelessWidget {
     final color = isCompleted
         ? colors.success
         : isReprogramada
-            ? colors.error
-            : colors.primary;
+        ? colors.error
+        : colors.primary;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -244,7 +299,11 @@ class _StatusChip extends StatelessWidget {
       ),
       child: Text(
         statusName,
-        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -253,18 +312,25 @@ class _StatusChip extends StatelessWidget {
 /// Marks [task] as completed after confirmation, showing a success/error
 /// snackbar. Shared by [TaskCard]'s action row and the Home agenda widgets
 /// (quick "Completar" buttons on the next-task card and agenda tiles).
-Future<void> completeTaskWithConfirm(BuildContext context, TaskModel task) async {
+Future<void> completeTaskWithConfirm(
+  BuildContext context,
+  TaskModel task,
+) async {
   final catalog = context.read<CatalogProvider>();
   final repo = context.read<TaskRepository>();
   final completedId = catalog.completedStatusId;
   if (completedId == null) {
-    SnackbarUtils.showError(context, 'No existe un estado "Completada" configurado');
+    SnackbarUtils.showError(
+      context,
+      'No existe un estado "Completada" configurado',
+    );
     return;
   }
   final confirm = await showConfirmDialog(
     context,
     title: 'Completar tarea',
-    message: '¿Marcar la tarea de ${task.clientName} a las ${task.hour} como completada?',
+    message:
+        '¿Marcar la tarea de ${task.clientName} a las ${task.hour} como completada?',
     confirmLabel: 'Completar',
   );
   if (!confirm) return;
@@ -283,7 +349,9 @@ Future<void> completeTaskWithConfirm(BuildContext context, TaskModel task) async
 /// Soft-deletes [task] after showing the standard trash confirmation dialog.
 /// Shared by [TaskCard]'s action row and [showTaskQuickActionsSheet].
 Future<void> sendTaskToTrashWithConfirm(
-    BuildContext context, TaskModel task) async {
+  BuildContext context,
+  TaskModel task,
+) async {
   final auth = context.read<AuthProvider>();
   final repo = context.read<TaskRepository>();
   final user = auth.appUser;
@@ -313,7 +381,8 @@ Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
 
   final isPending = task.statusId == catalog.pendingStatusId;
   final isCompleted = task.statusId == catalog.completedStatusId;
-  final canEdit = (auth.managesGroup(task.groupId) &&
+  final canEdit =
+      (auth.managesGroup(task.groupId) &&
           auth.hasPermission(AppPermissions.manageTasks)) ||
       isPending;
   final canComplete = !isCompleted;
@@ -384,7 +453,9 @@ Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
                   if (completedId == null) {
                     if (context.mounted) {
                       SnackbarUtils.showError(
-                          context, 'No existe un estado "Completada" configurado');
+                        context,
+                        'No existe un estado "Completada" configurado',
+                      );
                     }
                     return;
                   }
@@ -396,7 +467,9 @@ Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
                   } catch (e) {
                     if (context.mounted) {
                       SnackbarUtils.showError(
-                          context, SnackbarUtils.firebaseErrorMessage(e));
+                        context,
+                        SnackbarUtils.firebaseErrorMessage(e),
+                      );
                     }
                   }
                 },

@@ -40,6 +40,13 @@ class AppPermissions {
   /// [grantableToWorkers].
   static const String downloadFiles = 'downloadFiles';
 
+  /// Aprobar, rechazar y asignar requerimientos.
+  ///
+  /// Hoy es de Verónica, que dirige el área y hace las veces de QA. Va en
+  /// [all] y en [grantableToWorkers] para que un super usuario pueda dárselo
+  /// a quien quiera, sin importar el rol que tenga esa persona.
+  static const String manageRequirements = 'manageRequirements';
+
   /// Permisos que todo administrador tiene por ser administrador.
   static const Set<String> alwaysForAdmins = {downloadFiles};
 
@@ -49,7 +56,10 @@ class AppPermissions {
   /// administrador de equipo edite cualquier campo de un trabajador suyo,
   /// incluido `permissions`; sin este límite, escribirle `manageUsers` en el
   /// documento le daría el módulo de usuarios en pantalla.
-  static const Set<String> grantableToWorkers = {downloadFiles};
+  static const Set<String> grantableToWorkers = {
+    downloadFiles,
+    manageRequirements,
+  };
 
   static const List<String> all = [
     manageUsers,
@@ -60,6 +70,7 @@ class AppPermissions {
     viewReports,
     managePrinterConfigs,
     manageSupportCases,
+    manageRequirements,
   ];
 
   static const Map<String, String> labels = {
@@ -72,6 +83,7 @@ class AppPermissions {
     viewReports: 'Ver reportes',
     managePrinterConfigs: 'Gestionar configuración de VinApp Print',
     manageSupportCases: 'Eliminar casos de soporte permanentemente',
+    manageRequirements: 'Aprobar y asignar requerimientos',
   };
 }
 

@@ -39,6 +39,7 @@ import 'profile/profile_page.dart';
 import 'profile/settings_page.dart';
 import 'reports/reports_page.dart';
 import 'support_cases/support_cases_page.dart';
+import 'requirements/requirements_page.dart';
 import 'tools/file_downloads_page.dart';
 import 'tools/qr_generator_page.dart';
 import 'trash/trash_page.dart';
@@ -542,6 +543,22 @@ class _MainShellState extends State<MainShell> {
       icon: LucideIcons.qrCode,
       label: 'Generador de QR',
       page: QrGeneratorPage(showAppBar: false),
+    ),
+    // Lo que los clientes piden que VinApp haga. Abierto a todos: el
+    // requerimiento lo levanta quien atiende al cliente, sea del área que
+    // sea. Aprobarlo y asignarlo sí pide permiso, pero eso se controla
+    // dentro, no escondiendo la pantalla.
+    _ShellEntry(
+      icon: LucideIcons.lightbulb,
+      label: 'Requerimientos',
+      page: const RequirementsPage(showAppBar: false),
+      appBarActions: (context) => [
+        IconButton(
+          tooltip: 'Nuevo requerimiento',
+          icon: Icon(LucideIcons.plus, color: context.colors.primary),
+          onPressed: () => openRequirementCreateForm(context),
+        ),
+      ],
     ),
     // Trae los listados de VinApp (clientes, recetas, adiciones) y los
     // entrega formateados. Todo administrador lo ve; un trabajador sólo si se

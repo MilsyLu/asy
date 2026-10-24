@@ -379,6 +379,55 @@ service cloud.firestore {
     }
 
     // -----------------------------------------------------------------
+    // requirements — lo que los clientes piden que VinApp haga.
+    // -----------------------------------------------------------------
+    // Crear y leer está abierto a cualquiera de la empresa: el requerimiento
+    // lo levanta quien atiende al cliente, sea del área que sea, y esconderlo
+    // sólo lograría que se siguiera anotando por fuera.
+    //
+    // Editarlo es otra cosa: aprobar, rechazar, asignar y mover de estado es
+    // lo que dirige el área, así que pide manageRequirements. Sin esa
+    // separación, cualquiera podría aprobarse a sí mismo lo que acaba de
+    // pedir.
+    match /requirements/{reqId} {
+      allow read: if sameEmpresa(resource.data.empresaId);
+      allow create: if isSignedIn() && request.resource.data.empresaId == myEmpresaId();
+      allow update: if sameEmpresa(resource.data.empresaId)
+        && resource.data.empresaId == request.resource.data.empresaId
+        && (isSuperAdmin() || hasPermission('manageRequirements'));
+      allow delete: if sameEmpresa(resource.data.empresaId)
+        && (isSuperAdmin() || hasPermission('manageRequirements'));
+
+      match /events/{eventId} {
+        allow read: if sameEmpresa(
+          get(/databases/$(database)/documents/requirements/$(reqId)).data.empresaId
+        );
+        // Comentar sí lo puede hacer cualquiera: es la forma de aportar
+        // contexto sin tocar el requerimiento.
+        allow create: if isSignedIn() && sameEmpresa(
+          get(/databases/$(database)/documents/requirements/$(reqId)).data.empresaId
+        );
+      }
+    }
+
+    match /requirementCounters/{empresaId} {
+      allow read, write: if isSignedIn() && empresaId == myEmpresaId();
+    }
+
+    // El equipo técnico. Lo ve cualquiera —hace falta para leer quién tiene
+    // cada requerimiento—, lo administra quien dirige el área.
+    match /developers/{devId} {
+      allow read: if sameEmpresa(resource.data.empresaId);
+      allow create: if request.resource.data.empresaId == myEmpresaId()
+        && (isSuperAdmin() || hasPermission('manageRequirements'));
+      allow update: if resource.data.empresaId == request.resource.data.empresaId
+        && sameEmpresa(resource.data.empresaId)
+        && (isSuperAdmin() || hasPermission('manageRequirements'));
+      allow delete: if sameEmpresa(resource.data.empresaId)
+        && (isSuperAdmin() || hasPermission('manageRequirements'));
+    }
+
+    // -----------------------------------------------------------------
     // systemConfig — global system configuration (Sprint 22). Genuinely
     // platform-wide (one deployed web build, one version banner for every
     // empresa) — deliberately does NOT carry empresaId, unlike every other

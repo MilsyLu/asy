@@ -20,6 +20,7 @@ import 'services/catalog_repository.dart';
 import 'services/notification_navigation.dart';
 import 'services/notification_repository.dart';
 import 'services/printer_config_repository.dart';
+import 'services/requirement_repository.dart';
 import 'services/support_case_repository.dart';
 import 'services/task_repository.dart';
 import 'services/user_repository.dart';
@@ -85,12 +86,28 @@ class TaskFlowApp extends StatelessWidget {
               final empresaId = user.empresaId!;
               return MultiProvider(
                 providers: [
-                  Provider<TaskRepository>(create: (_) => TaskRepository(empresaId: empresaId)),
-                  Provider<CatalogRepository>(create: (_) => CatalogRepository(empresaId: empresaId)),
-                  Provider<UserRepository>(create: (_) => UserRepository(empresaId: empresaId)),
-                  Provider<NotificationRepository>(create: (_) => NotificationRepository()),
-                  Provider<PrinterConfigRepository>(create: (_) => PrinterConfigRepository(empresaId: empresaId)),
-                  Provider<SupportCaseRepository>(create: (_) => SupportCaseRepository(empresaId: empresaId)),
+                  Provider<TaskRepository>(
+                    create: (_) => TaskRepository(empresaId: empresaId),
+                  ),
+                  Provider<CatalogRepository>(
+                    create: (_) => CatalogRepository(empresaId: empresaId),
+                  ),
+                  Provider<UserRepository>(
+                    create: (_) => UserRepository(empresaId: empresaId),
+                  ),
+                  Provider<NotificationRepository>(
+                    create: (_) => NotificationRepository(),
+                  ),
+                  Provider<PrinterConfigRepository>(
+                    create: (_) =>
+                        PrinterConfigRepository(empresaId: empresaId),
+                  ),
+                  Provider<SupportCaseRepository>(
+                    create: (_) => SupportCaseRepository(empresaId: empresaId),
+                  ),
+                  Provider<RequirementRepository>(
+                    create: (_) => RequirementRepository(empresaId: empresaId),
+                  ),
                   // El periodo del Dashboard: lo leen la página (para su
                   // consulta) y la barra superior del shell (para el selector).
                   ChangeNotifierProvider<DashboardRangeController>(
@@ -167,14 +184,17 @@ class _BootSplash extends StatefulWidget {
   State<_BootSplash> createState() => _BootSplashState();
 }
 
-class _BootSplashState extends State<_BootSplash> with SingleTickerProviderStateMixin {
+class _BootSplashState extends State<_BootSplash>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800))
-      ..repeat(reverse: true);
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
   }
 
   @override
@@ -228,7 +248,9 @@ class _BootSplashState extends State<_BootSplash> with SingleTickerProviderState
                     const SizedBox(height: 8),
                     Text(
                       AppConstants.appTagline,
-                      style: TextStyle(color: AppConstants.brandPrimary.withValues(alpha: 0.7)),
+                      style: TextStyle(
+                        color: AppConstants.brandPrimary.withValues(alpha: 0.7),
+                      ),
                     ),
                   ],
                 ),
