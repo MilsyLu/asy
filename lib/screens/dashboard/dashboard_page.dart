@@ -20,11 +20,12 @@ import '../../widgets/loading_indicator.dart';
 import '../../widgets/responsive_sheet.dart';
 import '../home/widgets/compact_task_card.dart' show taskStatusColor;
 import '../home/widgets/task_detail_dialog.dart';
+import '../../widgets/kpi_metric.dart';
 
 /// Spacing system (Sprint 6.3.1): preserved unchanged for mobile.
-const double _kSectionGap = 24;
+const double _kSectionGap = 14;
 const double _kCardGap = 12;
-const double _kCardPadding = 16;
+const double _kCardPadding = 12;
 const double _kCardRadius = AppSpacing.radiusLg;
 
 /// Elements nested *inside* a card sit one step below `_kCardRadius`, so the
@@ -613,10 +614,10 @@ class _DashboardPageState extends State<DashboardPage> {
                     child: Row(
                       children: [
                         Expanded(
-                          child: _KpiSubBlock(
+                          child: KpiMetric(
                             icon: LucideIcons.clipboardList,
                             title: 'Total tareas',
-                            count: s.kpis.total,
+                            value: '${s.kpis.total}',
                             linkLabel: 'Ver tareas →',
                             onTap: () => _showTaskListSheet(
                               context,
@@ -631,10 +632,10 @@ class _DashboardPageState extends State<DashboardPage> {
                         ),
                         Container(width: 1, height: 56, color: colors.divider),
                         Expanded(
-                          child: _KpiSubBlock(
+                          child: KpiMetric(
                             icon: LucideIcons.checkCircle2,
                             title: 'Completadas',
-                            count: s.kpis.completed,
+                            value: '${s.kpis.completed}',
                             accentColor: colors.success,
                             linkLabel: 'Ver completadas →',
                             onTap: () => _showTaskListSheet(
@@ -652,10 +653,10 @@ class _DashboardPageState extends State<DashboardPage> {
                         ),
                         Container(width: 1, height: 56, color: colors.divider),
                         Expanded(
-                          child: _KpiSubBlock(
+                          child: KpiMetric(
                             icon: LucideIcons.clock,
                             title: 'Pendientes',
-                            count: s.kpis.pending,
+                            value: '${s.kpis.pending}',
                             accentColor: colors.statusPending,
                             linkLabel: 'Ver pendientes →',
                             onTap: () => _showTaskListSheet(
@@ -1028,93 +1029,6 @@ class _KpiCardState extends State<_KpiCard> {
   }
 }
 
-/// A single metric (icon/title/count/link), without its own card shell —
-/// three of these sit side by side inside one shared `_DashboardCard` in
-/// desktop Row 1's left column (Total tareas / Completadas / Pendientes),
-/// separated by thin dividers, instead of each being its own full card.
-class _KpiSubBlock extends StatelessWidget {
-  const _KpiSubBlock({
-    required this.icon,
-    required this.title,
-    required this.count,
-    this.accentColor,
-    this.linkLabel,
-    this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final int count;
-  final Color? accentColor;
-  final String? linkLabel;
-
-  /// See [_KpiCard.onTap] — same label, same dead end, same fix.
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final accent = accentColor ?? colors.primary;
-    return MouseRegion(
-      cursor: onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        // Without this the taps land only on the glyphs, not on the gaps
-        // between them, which on a block this sparse is most of it.
-        behavior: HitTestBehavior.opaque,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(AppSpacing.xs),
-              ),
-              child: Icon(icon, color: accent, size: 16),
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: colors.textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 0.2,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              '$count',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: colors.textPrimary,
-                fontSize: 30,
-                fontWeight: FontWeight.bold,
-                height: 1.05,
-              ),
-            ),
-            if (linkLabel != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                linkLabel!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: accent,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// Standalone compliance card: percentage headline + labelled progress bar.
 /// Shown on tablet (below KPI grid) and desktop Row 2 right slot.
 class _ComplianceCard extends StatelessWidget {
@@ -1157,7 +1071,7 @@ class _ComplianceCard extends StatelessWidget {
             '${kpis.compliancePercent}%',
             style: TextStyle(
               color: colors.textPrimary,
-              fontSize: 42,
+              fontSize: 30,
               fontWeight: FontWeight.bold,
               height: 1.05,
             ),
@@ -1235,14 +1149,14 @@ class _AttentionCompactCardState extends State<_AttentionCompactCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(widget.item.emoji, style: const TextStyle(fontSize: 22)),
-                const SizedBox(height: AppSpacing.sm),
+                Text(widget.item.emoji, style: const TextStyle(fontSize: 16)),
+                const SizedBox(height: 2),
                 Text(
                   '${widget.item.count}',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: widget.item.color,
-                    fontSize: 32,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                     height: 1.05,
                   ),
@@ -1442,11 +1356,11 @@ class _HeroSummaryCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: _HeroMetric(value: '${kpis.total}', label: 'tareas'),
+                child: _HeroMetric(value: '\${kpis.total}', label: 'tareas'),
               ),
               Expanded(
                 child: _HeroMetric(
-                  value: '${kpis.completed}',
+                  value: '\${kpis.completed}',
                   label: 'completadas',
                 ),
               ),

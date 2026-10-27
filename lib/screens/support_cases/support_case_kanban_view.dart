@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -10,7 +11,8 @@ import '../../services/support_case_repository.dart';
 import '../../widgets/support_case_badges.dart';
 import '../../widgets/single_column_grid.dart';
 
-/// Tablet/desktop-only alternate view: one column per [SupportCaseStatus],
+/// Tablet/desktop-only alternate view: one column per open
+/// [SupportCaseStatus],
 /// dragging a card to another column calls `updateStatus` (already logs the
 /// change in the timeline, no changes needed there). Table view (the
 /// default) is Michel's own reference screenshot's layout; this is the
@@ -31,7 +33,10 @@ class SupportCaseKanbanView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final columnCount = SupportCaseStatus.all.length;
+    // Sin la columna de Resueltos: eran 49 tarjetas contra las 10 de todas
+    // las demás juntas, y el tablero se leía como si no hubiera trabajo
+    // pendiente. Viven en su propia página (ver _ViewMode.resueltos).
+    final columnCount = SupportCaseStatus.openStates.length;
 
     Widget columnFor(String status, {bool flexible = false}) {
       final column = _KanbanColumn(
@@ -50,7 +55,7 @@ class SupportCaseKanbanView extends StatelessWidget {
     // vino a ver se apretuja en una tira. Misma decisión que en
     // Requerimientos, y por eso la rejilla es la misma pieza.
     final porEstado = {
-      for (final e in SupportCaseStatus.all)
+      for (final e in SupportCaseStatus.openStates)
         e: cases.where((c) => c.status == e).toList(),
     };
     final conCasos = [
@@ -91,7 +96,7 @@ class SupportCaseKanbanView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 for (var i = 0; i < columnCount; i++) ...[
-                  columnFor(SupportCaseStatus.all[i], flexible: true),
+                  columnFor(SupportCaseStatus.openStates[i], flexible: true),
                   if (i < columnCount - 1) const SizedBox(width: _gap),
                 ],
               ],
@@ -102,28 +107,86 @@ class SupportCaseKanbanView extends StatelessWidget {
         // Not enough room — fixed-width columns that scroll horizontally,
         // with a visible scrollbar so it's obvious there's more to the
         // right instead of the last column just looking cut off.
-        return Scrollbar(
-          thumbVisibility: true,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(
-              _horizontalPadding,
-              0,
-              _horizontalPadding,
-              20,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var i = 0; i < columnCount; i++) ...[
-                  columnFor(SupportCaseStatus.all[i]),
-                  if (i < columnCount - 1) const SizedBox(width: _gap),
-                ],
+        return _HorizontalBoard(
+          padding: const EdgeInsets.fromLTRB(
+            _horizontalPadding,
+            0,
+            _horizontalPadding,
+            20,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < columnCount; i++) ...[
+                columnFor(SupportCaseStatus.openStates[i]),
+                if (i < columnCount - 1) const SizedBox(width: _gap),
               ],
-            ),
+            ],
           ),
         );
       },
+    );
+  }
+}
+
+/// Horizontal scroll for the board with a scrollbar that actually moves it.
+///
+/// The scrollbar used to have no controller of its own: it was drawn, but
+/// on desktop a horizontal scroll view never gets the primary controller,
+/// so dragging the thumb did nothing. Both now share [_controller]. The
+/// mouse wheel also scrolls sideways wherever no column needs it (inside a
+/// column with more cards than fit, it still scrolls that column).
+class _HorizontalBoard extends StatefulWidget {
+  const _HorizontalBoard({required this.padding, required this.child});
+
+  final EdgeInsets padding;
+  final Widget child;
+
+  @override
+  State<_HorizontalBoard> createState() => _HorizontalBoardState();
+}
+
+class _HorizontalBoardState extends State<_HorizontalBoard> {
+  final _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_controller.hasClients) return;
+    // A trackpad or shift+wheel already scrolls sideways on its own.
+    if (event.scrollDelta.dx != 0) return;
+    final position = _controller.position;
+    final target = (position.pixels + event.scrollDelta.dy)
+        .clamp(position.minScrollExtent, position.maxScrollExtent);
+    if (target == position.pixels) return;
+    // Through the resolver, not directly: a column whose cards can still
+    // scroll registers first (it is deeper in the hit test) and keeps the
+    // wheel; only when nothing under the pointer wants it does the board
+    // move sideways.
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      if (_controller.hasClients) _controller.jumpTo(target);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerSignal: _onPointerSignal,
+      child: Scrollbar(
+        controller: _controller,
+        thumbVisibility: true,
+        interactive: true,
+        child: SingleChildScrollView(
+          controller: _controller,
+          scrollDirection: Axis.horizontal,
+          padding: widget.padding,
+          child: widget.child,
+        ),
+      ),
     );
   }
 }

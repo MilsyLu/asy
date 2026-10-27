@@ -15,6 +15,7 @@ const { checkSupportCaseReminders } = require("./src/checkSupportCaseReminders")
 const { checkSupportCaseCustomReminders } = require("./src/checkSupportCaseCustomReminders");
 const { createTeamAsScopedAdmin } = require("./src/createTeamAsScopedAdmin");
 const { syncEmpresaClaim } = require("./src/syncEmpresaClaim");
+const { generarCartaDigital, listarCartasDigitales, borrarCartaDigital, verCarta } = require("./src/cartaDigital");
 
 exports.onTaskCreate = onTaskCreate;
 exports.onTaskUpdate = onTaskUpdate;
@@ -29,3 +30,7 @@ exports.checkSupportCaseReminders = checkSupportCaseReminders;
 exports.checkSupportCaseCustomReminders = checkSupportCaseCustomReminders;
 exports.createTeamAsScopedAdmin = createTeamAsScopedAdmin;
 exports.syncEmpresaClaim = syncEmpresaClaim;
+exports.generarCartaDigital = generarCartaDigital;
+exports.listarCartasDigitales = listarCartasDigitales;
+exports.borrarCartaDigital = borrarCartaDigital;
+exports.verCarta = verCarta;

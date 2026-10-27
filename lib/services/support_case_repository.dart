@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart' show DateUtils;
 
 import '../core/constants/firestore_paths.dart';
 import '../core/constants/support_case_constants.dart';
@@ -8,10 +9,14 @@ import '../models/support_case_model.dart';
 import '../models/support_case_tag_model.dart';
 
 /// CRUD for `supportCases`, empresaId-scoped like `CatalogRepository`/
-/// `PrinterConfigRepository`. Unlike those, [description] is never mutated
-/// after creation — every status/priority/assignee change and every comment
-/// is appended to the `history` subcollection instead (see
+/// `PrinterConfigRepository`. Every status/priority/assignee change and every
+/// comment is appended to the `history` subcollection (see
 /// [SupportCaseHistoryEntry]), so a case's timeline is always complete.
+///
+/// The case's own text (cliente, asunto, descripción…) can be corrected with
+/// [updateDetails] — a typo in the client's name otherwise stayed on the card
+/// forever — but the previous value of every edited field is written to the
+/// history, so the original report is never lost.
 class SupportCaseRepository {
   SupportCaseRepository({required this.empresaId, FirebaseFirestore? firestore})
       : _firestore = firestore ?? FirebaseFirestore.instance;
@@ -249,6 +254,69 @@ class SupportCaseRepository {
       authorId: authorId,
       authorName: authorName,
     );
+  }
+
+  /// Corrects the case's own fields. Only what actually changed is written,
+  /// and one history entry lists each change with its previous value.
+  /// Returns false when nothing changed (no write, no history entry).
+  Future<bool> updateDetails(
+    SupportCaseModel previous, {
+    required String clientName,
+    required String? clientId,
+    required String contactName,
+    required String contactPhone,
+    required String subject,
+    required String description,
+    required DateTime reportedAt,
+    required String authorId,
+    required String authorName,
+  }) async {
+    final updates = <String, dynamic>{};
+    final changes = <String>[];
+    void field(String key, String label, String before, String after) {
+      if (before.trim() == after.trim()) return;
+      updates[key] = after.trim();
+      changes.add(before.trim().isEmpty
+          ? '$label: "${after.trim()}"'
+          : '$label: "${before.trim()}" → "${after.trim()}"');
+    }
+
+    field('clientName', 'Cliente', previous.clientName, clientName);
+    field('contactName', 'Persona que reportó', previous.contactName, contactName);
+    field('contactPhone', 'Teléfono', previous.contactPhone, contactPhone);
+    field('subject', 'Asunto', previous.subject, subject);
+    if (previous.description.trim() != description.trim()) {
+      // The old description can be long; it goes whole into the history so
+      // the original report stays readable there.
+      updates['description'] = description.trim();
+      changes.add(previous.description.trim().isEmpty
+          ? 'Agregó la descripción.'
+          : 'Cambió la descripción. Antes decía: "${previous.description.trim()}"');
+    }
+    if (!DateUtils.isSameDay(previous.reportedAt, reportedAt)) {
+      updates['reportedAt'] = Timestamp.fromDate(reportedAt);
+      changes.add('Fecha de reporte: ${AppDateUtils.formatShortDate(previous.reportedAt)} '
+          '→ ${AppDateUtils.formatShortDate(reportedAt)}');
+    }
+    if (clientId != previous.clientId) updates['clientId'] = clientId;
+
+    if (changes.isEmpty) {
+      if (updates.isEmpty) return false;
+      // Only the client link moved (same name, now linked): no story to tell.
+      await _collection.doc(previous.id).update(updates);
+      return true;
+    }
+
+    updates['updatedAt'] = FieldValue.serverTimestamp();
+    await _collection.doc(previous.id).update(updates);
+    await _appendHistory(
+      previous.id,
+      type: SupportCaseHistoryType.edited,
+      text: 'Editó el caso.\n${changes.join('\n')}',
+      authorId: authorId,
+      authorName: authorName,
+    );
+    return true;
   }
 
   /// Sets/clears a one-off personal reminder — only [authorId] gets

@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/constants/support_case_constants.dart';
 import '../../core/theme/theme_colors.dart';
+import '../../core/utils/client_linking.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../models/support_case_history_entry.dart';
@@ -14,14 +15,18 @@ import '../../models/support_case_model.dart';
 import '../../models/support_case_tag_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
+import '../../services/catalog_repository.dart';
 import '../../services/storage_service.dart';
 import '../../services/support_case_repository.dart';
+import '../../widgets/client_name_autocomplete.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/support_case_badges.dart';
+import '../requirements/requirement_create_panel.dart';
 
-/// Case detail: editable estado/prioridad/responsable, the original
-/// (never-edited) description, attachments, and the timeline built from
+/// Case detail: editable estado/prioridad/responsable, the case's own data
+/// (correctable via "Editar caso", with the previous values kept in the
+/// history), attachments, and the timeline built from
 /// `supportCases/{id}/history` — plus the comment box that appends to it.
 /// Used both as a right-side panel (desktop/tablet, [showAppBar]=false) and
 /// as a full page (mobile, pushed via [Navigator]).
@@ -343,6 +348,55 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
     }
   }
 
+  /// Convierte el caso en requerimiento.
+  ///
+  /// Pasa muy seguido: el cliente reporta algo como falla, se revisa y
+  /// resulta que la aplicación nunca lo hizo. Eso no se arregla, se
+  /// desarrolla, y hasta ahora había que volver a escribirlo todo a mano en
+  /// Requerimientos y el caso quedaba suelto sin decir a dónde fue a parar.
+  ///
+  /// El formulario llega con el cliente y el texto del caso puestos; lo que
+  /// falta —tipo, módulo, prioridad— son preguntas de desarrollo que el caso
+  /// no responde y las contesta quien convierte. Al guardar, el caso queda
+  /// con una nota en su historia que dice de qué requerimiento se trata.
+  Future<void> _pasarARequerimiento(SupportCaseModel c) async {
+    final repo = context.read<SupportCaseRepository>();
+    final usuario = context.read<AuthProvider>().appUser;
+    final texto = c.description.trim().isEmpty
+        ? c.subject.trim()
+        : '${c.subject.trim()}\n\n${c.description.trim()}';
+
+    final registrado = await showRequirementCreateSheet(
+      context,
+      prefill: RequirementPrefill(
+        descripcion: texto,
+        clientId: c.clientId,
+        clientName: c.clientName,
+        supportCaseId: c.id,
+        supportCaseNumber: c.caseNumber,
+      ),
+    );
+    // El formulario dice si llegó a guardar: cerrarlo con Cancelar no deja
+    // anotada una conversión que nunca ocurrió.
+    if (!registrado || !mounted) return;
+
+    await repo.addComment(
+      c.id,
+      'Este caso pasó a Requerimientos: lo que pedía no es una falla sino '
+      'algo por desarrollar.',
+      authorId: usuario?.id ?? '',
+      authorName: usuario?.name ?? 'Alguien',
+    );
+  }
+
+  Future<void> _editCase(SupportCaseModel c) async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => _EditCaseDialog(supportCase: c),
+    );
+    if (saved == true && mounted) SnackbarUtils.showSuccess(context, 'Caso actualizado');
+  }
+
   Future<void> _confirmDelete(SupportCaseModel c) async {
     final confirm = await showConfirmDialog(
       context,
@@ -474,6 +528,24 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                             ),
                         ],
                       ),
+                    ),
+                    IconButton(
+                      tooltip: 'Editar caso',
+                      icon: Icon(
+                        LucideIcons.pencil,
+                        color: colors.primary,
+                        size: 18,
+                      ),
+                      onPressed: () => _editCase(c),
+                    ),
+                    IconButton(
+                      tooltip: 'Pasar a requerimiento',
+                      icon: Icon(
+                        LucideIcons.lightbulb,
+                        color: colors.primary,
+                        size: 18,
+                      ),
+                      onPressed: () => _pasarARequerimiento(c),
                     ),
                     if (canDelete)
                       IconButton(
@@ -826,6 +898,212 @@ class _AttachmentChip extends StatelessWidget {
   }
 }
 
+/// Corrige los datos del caso: cliente, contacto, asunto, descripción y
+/// fecha de reporte. Estado, prioridad, responsable y etiquetas ya se cambian
+/// directamente en la ficha y no se repiten aquí.
+class _EditCaseDialog extends StatefulWidget {
+  const _EditCaseDialog({required this.supportCase});
+
+  final SupportCaseModel supportCase;
+
+  @override
+  State<_EditCaseDialog> createState() => _EditCaseDialogState();
+}
+
+class _EditCaseDialogState extends State<_EditCaseDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final _clientController = TextEditingController(text: widget.supportCase.clientName);
+  late final _contactController = TextEditingController(text: widget.supportCase.contactName);
+  late final _phoneController = TextEditingController(text: widget.supportCase.contactPhone);
+  late final _subjectController = TextEditingController(text: widget.supportCase.subject);
+  late final _descriptionController =
+      TextEditingController(text: widget.supportCase.description);
+  final _clientFocusNode = FocusNode();
+  late DateTime _reportedAt = widget.supportCase.reportedAt;
+  bool _isSaving = false;
+
+  /// Igual que en "Nuevo caso": elegido de las sugerencias, o el que ya
+  /// tenía el caso mientras no se toque el nombre. Si se cambia el nombre a
+  /// mano, al guardar se resuelve (o se crea) desde el texto final.
+  late String? _clientId = widget.supportCase.clientId;
+  late String _linkedClientName = widget.supportCase.clientName;
+
+  @override
+  void initState() {
+    super.initState();
+    _clientController.addListener(() {
+      if (_clientId != null && _clientController.text != _linkedClientName) {
+        setState(() => _clientId = null);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _clientController.dispose();
+    _contactController.dispose();
+    _phoneController.dispose();
+    _subjectController.dispose();
+    _descriptionController.dispose();
+    _clientFocusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickReportedDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _reportedAt,
+      firstDate: DateTime.now().subtract(const Duration(days: 365 * 2)),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+      helpText: 'Fecha en que se reportó el caso',
+    );
+    if (picked != null) {
+      // Keep the original time of day; only the date is being corrected.
+      setState(() => _reportedAt = DateTime(
+            picked.year,
+            picked.month,
+            picked.day,
+            _reportedAt.hour,
+            _reportedAt.minute,
+          ));
+    }
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    final user = context.read<AuthProvider>().appUser;
+    if (user == null) return;
+    final repo = context.read<SupportCaseRepository>();
+    final catalog = context.read<CatalogProvider>();
+    final catalogRepo = context.read<CatalogRepository>();
+    setState(() => _isSaving = true);
+    try {
+      final clientId = await ClientLinking.forSupportCase(
+        catalog: catalog,
+        repository: catalogRepo,
+        linkedId: _clientId,
+        clientName: _clientController.text,
+        contactPhone: _phoneController.text,
+      );
+      await repo.updateDetails(
+        widget.supportCase,
+        clientName: _clientController.text,
+        clientId: clientId,
+        contactName: _contactController.text,
+        contactPhone: _phoneController.text,
+        subject: _subjectController.text,
+        description: _descriptionController.text,
+        reportedAt: _reportedAt,
+        authorId: user.id,
+        authorName: user.name,
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final catalog = context.watch<CatalogProvider>();
+    return AlertDialog(
+      title: Text(
+        'Editar CS-${widget.supportCase.caseNumber.toString().padLeft(4, '0')}',
+      ),
+      content: SizedBox(
+        width: 440,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClientNameAutocomplete(
+                  clients: catalog.clients,
+                  controller: _clientController,
+                  focusNode: _clientFocusNode,
+                  label: 'Cliente *',
+                  onSelected: (client) => setState(() {
+                    _clientId = client.id;
+                    _linkedClientName = client.name;
+                  }),
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'El cliente es obligatorio' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _contactController,
+                  style: TextStyle(color: colors.textPrimary),
+                  decoration: const InputDecoration(labelText: 'Persona que reportó'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  style: TextStyle(color: colors.textPrimary),
+                  decoration: const InputDecoration(labelText: 'Teléfono'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _subjectController,
+                  style: TextStyle(color: colors.textPrimary),
+                  decoration: const InputDecoration(labelText: 'Asunto *'),
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'El asunto es obligatorio' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _descriptionController,
+                  minLines: 3,
+                  maxLines: 8,
+                  style: TextStyle(color: colors.textPrimary),
+                  decoration: const InputDecoration(labelText: 'Descripción'),
+                ),
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: _pickReportedDate,
+                  child: InputDecorator(
+                    decoration: const InputDecoration(labelText: 'Fecha de reporte'),
+                    child: Text(
+                      AppDateUtils.formatShortDate(_reportedAt),
+                      style: TextStyle(color: colors.textPrimary),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Lo que cambies queda anotado en el seguimiento con el valor anterior.',
+                  style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton(
+          onPressed: _isSaving ? null : _save,
+          child: _isSaving
+              ? const SizedBox(
+                  height: 16,
+                  width: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Guardar'),
+        ),
+      ],
+    );
+  }
+}
+
 class _Timeline extends StatelessWidget {
   const _Timeline({required this.caseId});
 
@@ -843,6 +1121,8 @@ class _Timeline extends StatelessWidget {
         return LucideIcons.userCircle;
       case SupportCaseHistoryType.attachmentAdded:
         return LucideIcons.paperclip;
+      case SupportCaseHistoryType.edited:
+        return LucideIcons.pencil;
       default:
         return LucideIcons.messageSquare;
     }

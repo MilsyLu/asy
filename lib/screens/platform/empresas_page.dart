@@ -11,6 +11,7 @@ import '../../services/empresa_repository.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/responsive_sheet.dart';
+import '../../widgets/password_field.dart';
 
 /// Michel's own screen: list every empresa (tenant), create a new one (with
 /// its first admin account), and activate/deactivate one — e.g. for
@@ -55,7 +56,9 @@ class _EmpresasPageState extends State<EmpresasPage> {
                 prefixIcon: const Icon(Icons.search),
                 filled: true,
                 fillColor: colors.surface,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppSpacing.radiusMd)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                ),
               ),
               onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
             ),
@@ -70,17 +73,20 @@ class _EmpresasPageState extends State<EmpresasPage> {
                       .toList();
                   if (empresas.isEmpty) {
                     return const EmptyState(
-                      message: 'No hay empresas todavía.\nUsa "Nueva empresa" para crear la primera.',
+                      message:
+                          'No hay empresas todavía.\nUsa "Nueva empresa" para crear la primera.',
                       icon: LucideIcons.building2,
                     );
                   }
                   return ListView.separated(
                     padding: const EdgeInsets.only(bottom: 80),
                     itemCount: empresas.length,
-                    separatorBuilder: (context, _) => const SizedBox(height: AppSpacing.sm),
+                    separatorBuilder: (context, _) =>
+                        const SizedBox(height: AppSpacing.sm),
                     itemBuilder: (context, i) => _EmpresaCard(
                       empresa: empresas[i],
-                      onTap: () => _showEmpresaDetailSheet(context, _repo, empresas[i]),
+                      onTap: () =>
+                          _showEmpresaDetailSheet(context, _repo, empresas[i]),
                     ),
                   );
                 },
@@ -113,7 +119,10 @@ class _EmpresaCard extends StatelessWidget {
           child: Row(
             children: [
               CircleAvatar(
-                backgroundColor: (empresa.activo ? colors.success : colors.error).withValues(alpha: 0.15),
+                backgroundColor:
+                    (empresa.activo ? colors.success : colors.error).withValues(
+                      alpha: 0.15,
+                    ),
                 child: Icon(
                   empresa.activo ? LucideIcons.building2 : LucideIcons.building,
                   color: empresa.activo ? colors.success : colors.error,
@@ -127,12 +136,21 @@ class _EmpresaCard extends StatelessWidget {
                   children: [
                     Text(
                       empresa.name,
-                      style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      empresa.activo ? 'Activa' : 'Desactivada${empresa.suspendedReason != null ? ' — ${empresa.suspendedReason}' : ''}',
-                      style: TextStyle(color: empresa.activo ? colors.success : colors.error, fontSize: 13),
+                      empresa.activo
+                          ? 'Activa'
+                          : 'Desactivada${empresa.suspendedReason != null ? ' — ${empresa.suspendedReason}' : ''}',
+                      style: TextStyle(
+                        color: empresa.activo ? colors.success : colors.error,
+                        fontSize: 13,
+                      ),
                     ),
                   ],
                 ),
@@ -146,7 +164,10 @@ class _EmpresaCard extends StatelessWidget {
   }
 }
 
-Future<void> _showCreateEmpresaDialog(BuildContext context, EmpresaRepository repo) async {
+Future<void> _showCreateEmpresaDialog(
+  BuildContext context,
+  EmpresaRepository repo,
+) async {
   final colors = context.colors;
   final formKey = GlobalKey<FormState>();
   final empresaNameController = TextEditingController();
@@ -169,16 +190,26 @@ Future<void> _showCreateEmpresaDialog(BuildContext context, EmpresaRepository re
               children: [
                 TextFormField(
                   controller: empresaNameController,
-                  decoration: const InputDecoration(labelText: 'Nombre de la empresa'),
-                  validator: (v) => Validators.required(v, fieldName: 'El nombre'),
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre de la empresa',
+                  ),
+                  validator: (v) =>
+                      Validators.required(v, fieldName: 'El nombre'),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                Text('Primer administrador', style: TextStyle(color: colors.textSecondary, fontWeight: FontWeight.bold)),
+                Text(
+                  'Primer administrador',
+                  style: TextStyle(
+                    color: colors.textSecondary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.sm),
                 TextFormField(
                   controller: adminNameController,
                   decoration: const InputDecoration(labelText: 'Nombre'),
-                  validator: (v) => Validators.required(v, fieldName: 'El nombre'),
+                  validator: (v) =>
+                      Validators.required(v, fieldName: 'El nombre'),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 TextFormField(
@@ -188,10 +219,9 @@ Future<void> _showCreateEmpresaDialog(BuildContext context, EmpresaRepository re
                   validator: Validators.email,
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                TextFormField(
+                PasswordField(
                   controller: adminPasswordController,
-                  decoration: const InputDecoration(labelText: 'Contraseña temporal'),
-                  obscureText: true,
+                  labelText: 'Contraseña temporal',
                   validator: Validators.password,
                 ),
               ],
@@ -200,7 +230,9 @@ Future<void> _showCreateEmpresaDialog(BuildContext context, EmpresaRepository re
         ),
         actions: [
           TextButton(
-            onPressed: isSaving ? null : () => Navigator.of(dialogContext).pop(),
+            onPressed: isSaving
+                ? null
+                : () => Navigator.of(dialogContext).pop(),
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
@@ -218,22 +250,35 @@ Future<void> _showCreateEmpresaDialog(BuildContext context, EmpresaRepository re
                       );
                       if (dialogContext.mounted) {
                         Navigator.of(dialogContext).pop();
-                        SnackbarUtils.showSuccess(context, 'Empresa creada correctamente');
+                        SnackbarUtils.showSuccess(
+                          context,
+                          'Empresa creada correctamente',
+                        );
                       }
                     } on FirebaseFunctionsException catch (e) {
                       setState(() => isSaving = false);
                       if (dialogContext.mounted) {
-                        SnackbarUtils.showError(dialogContext, e.message ?? 'No se pudo crear la empresa');
+                        SnackbarUtils.showError(
+                          dialogContext,
+                          e.message ?? 'No se pudo crear la empresa',
+                        );
                       }
                     } catch (e) {
                       setState(() => isSaving = false);
                       if (dialogContext.mounted) {
-                        SnackbarUtils.showError(dialogContext, SnackbarUtils.firebaseErrorMessage(e));
+                        SnackbarUtils.showError(
+                          dialogContext,
+                          SnackbarUtils.firebaseErrorMessage(e),
+                        );
                       }
                     }
                   },
             child: isSaving
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
                 : const Text('Crear'),
           ),
         ],
@@ -266,27 +311,46 @@ Future<void> _showEmpresaDetailSheet(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(empresa.name, style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18)),
+            Text(
+              empresa.name,
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              empresa.activo ? 'Esta empresa está activa.' : 'Esta empresa está desactivada.',
-              style: TextStyle(color: empresa.activo ? colors.success : colors.error),
+              empresa.activo
+                  ? 'Esta empresa está activa.'
+                  : 'Esta empresa está desactivada.',
+              style: TextStyle(
+                color: empresa.activo ? colors.success : colors.error,
+              ),
             ),
             if (empresa.suspendedReason != null) ...[
               const SizedBox(height: 4),
-              Text('Motivo: ${empresa.suspendedReason}', style: TextStyle(color: colors.textSecondary)),
+              Text(
+                'Motivo: ${empresa.suspendedReason}',
+                style: TextStyle(color: colors.textSecondary),
+              ),
             ],
             const SizedBox(height: AppSpacing.lg),
             if (empresa.activo) ...[
               TextField(
                 controller: reasonController,
-                decoration: const InputDecoration(labelText: 'Motivo de la desactivación (opcional)'),
+                decoration: const InputDecoration(
+                  labelText: 'Motivo de la desactivación (opcional)',
+                ),
               ),
               const SizedBox(height: AppSpacing.md),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: colors.error, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colors.error,
+                    foregroundColor: Colors.white,
+                  ),
                   icon: const Icon(Icons.block),
                   label: const Text('Desactivar empresa'),
                   onPressed: isSaving
@@ -295,7 +359,8 @@ Future<void> _showEmpresaDetailSheet(
                           final confirmed = await showConfirmDialog(
                             sheetContext,
                             title: 'Desactivar empresa',
-                            message: 'Los usuarios de "${empresa.name}" no podrán iniciar sesión hasta que la reactives. ¿Continuar?',
+                            message:
+                                'Los usuarios de "${empresa.name}" no podrán iniciar sesión hasta que la reactives. ¿Continuar?',
                             destructive: true,
                             confirmLabel: 'Desactivar',
                           );
@@ -305,13 +370,20 @@ Future<void> _showEmpresaDetailSheet(
                             await repo.toggleEmpresa(
                               empresaId: empresa.id,
                               activo: false,
-                              reason: reasonController.text.trim().isEmpty ? null : reasonController.text.trim(),
+                              reason: reasonController.text.trim().isEmpty
+                                  ? null
+                                  : reasonController.text.trim(),
                             );
-                            if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+                            if (sheetContext.mounted) {
+                              Navigator.of(sheetContext).pop();
+                            }
                           } catch (e) {
                             setState(() => isSaving = false);
                             if (sheetContext.mounted) {
-                              SnackbarUtils.showError(sheetContext, SnackbarUtils.firebaseErrorMessage(e));
+                              SnackbarUtils.showError(
+                                sheetContext,
+                                SnackbarUtils.firebaseErrorMessage(e),
+                              );
                             }
                           }
                         },
@@ -321,7 +393,10 @@ Future<void> _showEmpresaDetailSheet(
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: colors.success, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colors.success,
+                    foregroundColor: Colors.white,
+                  ),
                   icon: const Icon(Icons.check_circle_outline),
                   label: const Text('Reactivar empresa'),
                   onPressed: isSaving
@@ -329,12 +404,20 @@ Future<void> _showEmpresaDetailSheet(
                       : () async {
                           setState(() => isSaving = true);
                           try {
-                            await repo.toggleEmpresa(empresaId: empresa.id, activo: true);
-                            if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+                            await repo.toggleEmpresa(
+                              empresaId: empresa.id,
+                              activo: true,
+                            );
+                            if (sheetContext.mounted) {
+                              Navigator.of(sheetContext).pop();
+                            }
                           } catch (e) {
                             setState(() => isSaving = false);
                             if (sheetContext.mounted) {
-                              SnackbarUtils.showError(sheetContext, SnackbarUtils.firebaseErrorMessage(e));
+                              SnackbarUtils.showError(
+                                sheetContext,
+                                SnackbarUtils.firebaseErrorMessage(e),
+                              );
                             }
                           }
                         },

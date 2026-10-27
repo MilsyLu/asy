@@ -21,6 +21,7 @@ import '../../widgets/loading_indicator.dart';
 import '../../widgets/responsive_sheet.dart';
 import '../../widgets/side_panel_shell.dart';
 import '../../widgets/user_avatar.dart';
+import '../../widgets/password_field.dart';
 
 enum _UserStatusFilter { all, active, inactive }
 
@@ -402,13 +403,9 @@ class _CreateUserPanelState extends State<_CreateUserPanel> {
               validator: Validators.email,
             ),
             const SizedBox(height: 12),
-            TextFormField(
+            PasswordField(
               controller: _passwordController,
-              obscureText: true,
-              style: TextStyle(color: colors.textPrimary),
-              decoration: const InputDecoration(
-                labelText: 'Contraseña temporal',
-              ),
+              labelText: 'Contraseña temporal',
               validator: Validators.password,
             ),
             const SizedBox(height: 12),
@@ -1594,13 +1591,9 @@ Future<void> _showCreateUserDialog(BuildContext context) async {
                       validator: Validators.email,
                     ),
                     const SizedBox(height: 12),
-                    TextFormField(
+                    PasswordField(
                       controller: passwordController,
-                      obscureText: true,
-                      style: TextStyle(color: colors.textPrimary),
-                      decoration: const InputDecoration(
-                        labelText: 'Contraseña temporal',
-                      ),
+                      labelText: 'Contraseña temporal',
                       validator: Validators.password,
                     ),
                     const SizedBox(height: 12),

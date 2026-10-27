@@ -63,7 +63,7 @@ class SupportCaseStatus {
     enProceso: Colors.purple,
     // Naranja: el caso está parado esperando a alguien de afuera. Es el mismo
     // aviso que dan los días acumulados, y se distingue de un vistazo del
-    // morado de "En proceso", que sí está en manos nuestras.
+    // morado de "En seguimiento", que sí está en manos nuestras.
     reportado: Colors.orange,
     esperandoCliente: Colors.teal,
     resuelto: Colors.green,
@@ -83,12 +83,24 @@ class SupportCaseStatus {
   /// que la columna siempre quiso decir. De hecho el filtro rápido de esa
   /// misma pantalla ya se llamaba "Pendientes" y filtraba exactamente por este
   /// estado: la pantalla venía llamando a lo mismo de dos formas distintas.
-  static String labelFor(String status) =>
-      status == nuevo ? 'Pendiente' : status;
+  /// Lo mismo vale para [enProceso], que Michel pidió llamar "En
+  /// seguimiento": "En proceso" no distinguía nada —todo caso abierto está en
+  /// proceso de algo— mientras que un caso en seguimiento es uno que alguien
+  /// está empujando ahora mismo. El valor guardado sigue siendo `'En
+  /// proceso'`, que es lo que ya dice cada documento y lo que lee
+  /// `supportCaseStatus.js` para saber qué sigue abierto.
+  static String labelFor(String status) => switch (status) {
+    nuevo => 'Pendiente',
+    enProceso => 'En seguimiento',
+    _ => status,
+  };
 
   /// Igual, para un encabezado de columna que agrupa varios.
-  static String columnLabelFor(String status) =>
-      status == nuevo ? 'Pendientes' : status;
+  static String columnLabelFor(String status) => switch (status) {
+    nuevo => 'Pendientes',
+    enProceso => 'En seguimiento',
+    _ => status,
+  };
 
   static bool isOpen(String status) => openStates.contains(status);
 }

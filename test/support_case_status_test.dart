@@ -31,9 +31,23 @@ void main() {
     );
   });
 
+  test('el valor guardado de "En proceso" no cambió', () {
+    // Michel lo quiso llamar "En seguimiento". Sólo cambia la etiqueta: el
+    // valor está escrito en cada documento y lo lee supportCaseStatus.js
+    // para saber qué sigue abierto. Renombrarlo rompería los dos a la vez.
+    expect(SupportCaseStatus.enProceso, 'En proceso');
+    expect(
+      SupportCaseStatus.labelFor(SupportCaseStatus.enProceso),
+      'En seguimiento',
+    );
+    expect(
+      SupportCaseStatus.columnLabelFor(SupportCaseStatus.enProceso),
+      'En seguimiento',
+    );
+  });
+
   test('los demás estados se muestran tal como están guardados', () {
     for (final s in [
-      SupportCaseStatus.enProceso,
       SupportCaseStatus.reportado,
       SupportCaseStatus.esperandoCliente,
       SupportCaseStatus.resuelto,

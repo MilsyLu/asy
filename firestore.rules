@@ -414,6 +414,25 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && empresaId == myEmpresaId();
     }
 
+    // Módulos de requerimiento que agregó el equipo.
+    //
+    // Agregar uno lo puede hacer cualquiera de la empresa, por la misma razón
+    // que levantar un requerimiento: quien atiende al cliente es quien
+    // descubre que hay una parte del producto que nadie había nombrado, y si
+    // tiene que pedir permiso acaba eligiendo "Otros" y se pierde el dato.
+    // Renombrar o borrar sí dirige el área: borrarlo deja requerimientos
+    // apuntando a un módulo que ya no está en ninguna lista.
+    match /requirementModules/{moduloId} {
+      allow read: if sameEmpresa(resource.data.empresaId);
+      allow create: if isSignedIn()
+        && request.resource.data.empresaId == myEmpresaId()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 60;
+      allow update, delete: if sameEmpresa(resource.data.empresaId)
+        && (isSuperAdmin() || hasPermission('manageRequirements'));
+    }
+
     // El equipo técnico. Lo ve cualquiera —hace falta para leer quién tiene
     // cada requerimiento—, lo administra quien dirige el área.
     match /developers/{devId} {

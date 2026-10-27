@@ -53,6 +53,23 @@ class AppDateUtils {
     return DateFormat('dd/MM/yyyy HH:mm').format(date);
   }
 
+  /// "Buenos días" / "Buenas tardes" / "Buenas noches", según la hora.
+  ///
+  /// Vive aquí porque estaba escrito dos veces —en la Agenda diaria y en la
+  /// barra superior— y las dos copias ya no coincidían: una cambiaba a
+  /// "noches" a las 18 y la otra a las 19.
+  ///
+  /// Recibe la hora en vez de leerla sola para poder probarla, y porque el
+  /// error que arregló fue justamente ése: la Agenda le pasaba `today`, que
+  /// es el *comienzo* del día y por tanto siempre las 00:00. Caía en el
+  /// último caso y saludaba "Buenas noches" a las cuatro de la tarde.
+  static String saludoDelDia(DateTime ahora) {
+    final h = ahora.hour;
+    if (h >= 6 && h < 12) return 'Buenos días';
+    if (h >= 12 && h < 19) return 'Buenas tardes';
+    return 'Buenas noches';
+  }
+
   /// Formats a [DateTime] as 12-hour time with Spanish am/pm, e.g. "07:59 a. m.".
   static String formatTime12h(DateTime dt) {
     final h = dt.hour;

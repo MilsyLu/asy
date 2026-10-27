@@ -18,7 +18,7 @@ import '../models/task_type_model.dart';
 /// data (see firestore.rules' `sameEmpresa()`).
 class CatalogRepository {
   CatalogRepository({required this.empresaId, FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
   final String empresaId;
@@ -33,8 +33,10 @@ class CatalogRepository {
       _groupsCollection.where('empresaId', isEqualTo: empresaId);
 
   Stream<List<GroupModel>> watchGroups() {
-    return _groups.orderBy('name').snapshots().map(
-        (snap) => snap.docs.map((d) => GroupModel.fromDoc(d)).toList());
+    return _groups
+        .orderBy('name')
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => GroupModel.fromDoc(d)).toList());
   }
 
   Future<void> addGroup(String name, String description) {
@@ -46,8 +48,12 @@ class CatalogRepository {
     });
   }
 
-  Future<void> updateGroup(String id, String name, String description,
-      {String? timeSelectionMode}) {
+  Future<void> updateGroup(
+    String id,
+    String name,
+    String description, {
+    String? timeSelectionMode,
+  }) {
     return _groupsCollection.doc(id).update({
       'name': name,
       'description': description,
@@ -56,6 +62,43 @@ class CatalogRepository {
   }
 
   Future<void> deleteGroup(String id) => _groupsCollection.doc(id).delete();
+
+  // ---------------------------------------------------------------------
+  // Requirement modules
+  //
+  // Los de [RequirementModule.all] siguen en el código: son los que había en
+  // la hoja y no se tocan. Aquí sólo viven los que el equipo agrega sobre la
+  // marcha, cuando aparece una parte del producto que nadie había nombrado.
+  // Separarlos así evita tener que sembrar la colección por empresa y que
+  // una empresa nueva abra el desplegable y lo encuentre vacío.
+  // ---------------------------------------------------------------------
+  CollectionReference<Map<String, dynamic>> get _requirementModulesCollection =>
+      _firestore.collection(FirestoreCollections.requirementModules);
+
+  Stream<List<String>> watchRequirementModules() {
+    return _requirementModulesCollection
+        .where('empresaId', isEqualTo: empresaId)
+        .snapshots()
+        .map((snap) {
+          final nombres = [
+            for (final d in snap.docs)
+              if ((d.data()['name'] as String? ?? '').trim().isNotEmpty)
+                (d.data()['name'] as String).trim(),
+          ];
+          // Ordenados aquí y no en la consulta: así no hace falta un índice ni
+          // que cada documento traiga un campo de orden que nadie mantiene.
+          nombres.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+          return nombres;
+        });
+  }
+
+  Future<void> addRequirementModule(String name) {
+    return _requirementModulesCollection.add({
+      'name': name.trim(),
+      'createdAt': FieldValue.serverTimestamp(),
+      'empresaId': empresaId,
+    });
+  }
 
   // ---------------------------------------------------------------------
   // Task types
@@ -67,8 +110,10 @@ class CatalogRepository {
       _taskTypesCollection.where('empresaId', isEqualTo: empresaId);
 
   Stream<List<TaskTypeModel>> watchTaskTypes() {
-    return _taskTypes.orderBy('order').snapshots().map(
-        (snap) => snap.docs.map((d) => TaskTypeModel.fromDoc(d)).toList());
+    return _taskTypes
+        .orderBy('order')
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => TaskTypeModel.fromDoc(d)).toList());
   }
 
   Future<List<TaskTypeModel>> getTaskTypes() async {
@@ -76,8 +121,12 @@ class CatalogRepository {
     return snap.docs.map((d) => TaskTypeModel.fromDoc(d)).toList();
   }
 
-  Future<void> addTaskType(String name, int order,
-      {String? color, List<String> groupIds = const []}) {
+  Future<void> addTaskType(
+    String name,
+    int order, {
+    String? color,
+    List<String> groupIds = const [],
+  }) {
     return _taskTypesCollection.add({
       'name': name,
       'order': order,
@@ -87,8 +136,13 @@ class CatalogRepository {
     });
   }
 
-  Future<void> updateTaskType(String id, String name, int order,
-      {String? color, List<String> groupIds = const []}) {
+  Future<void> updateTaskType(
+    String id,
+    String name,
+    int order, {
+    String? color,
+    List<String> groupIds = const [],
+  }) {
     return _taskTypesCollection.doc(id).update({
       'name': name,
       'order': order,
@@ -110,8 +164,10 @@ class CatalogRepository {
       _statusesCollection.where('empresaId', isEqualTo: empresaId);
 
   Stream<List<StatusModel>> watchStatuses() {
-    return _statuses.orderBy('order').snapshots().map(
-        (snap) => snap.docs.map((d) => StatusModel.fromDoc(d)).toList());
+    return _statuses
+        .orderBy('order')
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => StatusModel.fromDoc(d)).toList());
   }
 
   Future<List<StatusModel>> getStatuses() async {
@@ -119,8 +175,11 @@ class CatalogRepository {
     return snap.docs.map((d) => StatusModel.fromDoc(d)).toList();
   }
 
-  Future<void> addStatus(String name, int order,
-      {List<String> groupIds = const []}) {
+  Future<void> addStatus(
+    String name,
+    int order, {
+    List<String> groupIds = const [],
+  }) {
     return _statusesCollection.add({
       'name': name,
       'order': order,
@@ -129,11 +188,17 @@ class CatalogRepository {
     });
   }
 
-  Future<void> updateStatus(String id, String name, int order,
-      {List<String> groupIds = const []}) {
-    return _statusesCollection
-        .doc(id)
-        .update({'name': name, 'order': order, 'groupIds': groupIds});
+  Future<void> updateStatus(
+    String id,
+    String name,
+    int order, {
+    List<String> groupIds = const [],
+  }) {
+    return _statusesCollection.doc(id).update({
+      'name': name,
+      'order': order,
+      'groupIds': groupIds,
+    });
   }
 
   Future<void> deleteStatus(String id) => _statusesCollection.doc(id).delete();
@@ -148,8 +213,13 @@ class CatalogRepository {
       _availableHoursCollection.where('empresaId', isEqualTo: empresaId);
 
   Stream<List<AvailableHourModel>> watchAvailableHours() {
-    return _availableHours.orderBy('hour').snapshots().map((snap) =>
-        snap.docs.map((d) => AvailableHourModel.fromDoc(d)).toList());
+    return _availableHours
+        .orderBy('hour')
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs.map((d) => AvailableHourModel.fromDoc(d)).toList(),
+        );
   }
 
   Future<List<AvailableHourModel>> getAvailableHours() async {
@@ -157,17 +227,26 @@ class CatalogRepository {
     return snap.docs.map((d) => AvailableHourModel.fromDoc(d)).toList();
   }
 
-  Future<void> addAvailableHour(String hour,
-      {List<String> groupIds = const []}) {
-    return _availableHoursCollection
-        .add({'hour': hour, 'groupIds': groupIds, 'empresaId': empresaId});
+  Future<void> addAvailableHour(
+    String hour, {
+    List<String> groupIds = const [],
+  }) {
+    return _availableHoursCollection.add({
+      'hour': hour,
+      'groupIds': groupIds,
+      'empresaId': empresaId,
+    });
   }
 
-  Future<void> updateAvailableHour(String id, String hour,
-      {List<String> groupIds = const []}) {
-    return _availableHoursCollection
-        .doc(id)
-        .update({'hour': hour, 'groupIds': groupIds});
+  Future<void> updateAvailableHour(
+    String id,
+    String hour, {
+    List<String> groupIds = const [],
+  }) {
+    return _availableHoursCollection.doc(id).update({
+      'hour': hour,
+      'groupIds': groupIds,
+    });
   }
 
   Future<void> deleteAvailableHour(String id) =>
@@ -183,14 +262,20 @@ class CatalogRepository {
       _clientsCollection.where('empresaId', isEqualTo: empresaId);
 
   Stream<List<ClientModel>> watchClients() {
-    return _clients.orderBy('name').snapshots().map(
-        (snap) => snap.docs.map((d) => ClientModel.fromDoc(d)).toList());
+    return _clients
+        .orderBy('name')
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => ClientModel.fromDoc(d)).toList());
   }
 
   /// Returns the new client's id — callers linking a task to it (the
   /// create-or-reuse flow in add_edit_task_page.dart/task_create_panel.dart)
   /// need it immediately, unlike the other `addX` methods above.
-  Future<String> addClient(String name, String phone, {String notes = ''}) async {
+  Future<String> addClient(
+    String name,
+    String phone, {
+    String notes = '',
+  }) async {
     final ref = await _clientsCollection.add({
       'name': name,
       'phone': phone,
@@ -201,8 +286,17 @@ class CatalogRepository {
     return ref.id;
   }
 
-  Future<void> updateClient(String id, String name, String phone, {String notes = ''}) {
-    return _clientsCollection.doc(id).update({'name': name, 'phone': phone, 'notes': notes});
+  Future<void> updateClient(
+    String id,
+    String name,
+    String phone, {
+    String notes = '',
+  }) {
+    return _clientsCollection.doc(id).update({
+      'name': name,
+      'phone': phone,
+      'notes': notes,
+    });
   }
 
   Future<void> deleteClient(String id) => _clientsCollection.doc(id).delete();

@@ -292,6 +292,23 @@ class _RequirementDetailViewState extends State<RequirementDetailView> {
           '${r.source.isEmpty ? '' : ' · ${r.source}'}',
           style: TextStyle(color: colors.textSecondary, fontSize: 12),
         ),
+        // De dónde salió, cuando salió de un caso de soporte. Es la mitad de
+        // la historia: sin esto el requerimiento aparece sin antecedentes y
+        // nadie recuerda qué se le respondió ya al cliente.
+        if (r.vieneDeUnCaso) ...[
+          const SizedBox(height: 6),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.lifeBuoy, size: 13, color: colors.textSecondary),
+              const SizedBox(width: 5),
+              Text(
+                'Viene del caso de soporte ${r.codigoCaso}',
+                style: TextStyle(color: colors.textSecondary, fontSize: 12),
+              ),
+            ],
+          ),
+        ],
         const SizedBox(height: 12),
         if (puedeGestionar) ...[
           _selectorEstado(r, colors),

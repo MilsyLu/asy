@@ -8,12 +8,14 @@ import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
 import '../../models/requirement_model.dart';
+import '../../providers/catalog_provider.dart';
 import '../../services/requirement_repository.dart';
-import '../../widgets/kpi_icon_card.dart';
+import '../../widgets/kpi_metric.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/single_column_grid.dart';
 import 'requirement_create_panel.dart';
 import 'requirement_detail_view.dart';
+import 'requirement_module_dialog.dart';
 import 'requirement_widgets.dart';
 
 /// Abre el formulario de requerimiento nuevo. Lo usa la barra superior.
@@ -267,196 +269,276 @@ class _Cabecera extends StatelessWidget {
         if (r.estaAsignado) r.developerId!: r.developerName,
     };
 
+    // Los indicadores, con el nombre al lado de la cifra y no encima: así el
+    // "15" nunca aparece huérfano. Michel vio la pantalla con el panel de la
+    // derecha abierto, la tira se cortaba después de la primera tarjeta y
+    // quedaba un 15 solo, sin forma de saber 15 de qué.
+    //
+    // Son los mismos bloques del Dashboard y de Reportes (`KpiMetric`), para
+    // no tener una tercera manera de dibujar un indicador en la misma app.
+    final metricas =
+        <
+          ({
+            IconData icono,
+            String nombre,
+            String valor,
+            Color color,
+            String ayuda,
+          })
+        >[
+          (
+            icono: LucideIcons.inbox,
+            nombre: 'Por aprobar',
+            valor: '$sinAprobar',
+            color: Colors.blueGrey,
+            ayuda: 'Recibidos que nadie ha aprobado ni rechazado todavía.',
+          ),
+          (
+            icono: LucideIcons.lightbulb,
+            nombre: 'Abiertos',
+            valor: '${abiertos.length}',
+            color: colors.primary,
+            ayuda: 'Todo lo que no está publicado, comunicado ni rechazado.',
+          ),
+          (
+            icono: LucideIcons.userX,
+            nombre: 'Sin responsable',
+            valor: '$sinAsignar',
+            color: Colors.orange,
+            ayuda: 'Abiertos sin desarrollador asignado.',
+          ),
+          (
+            icono: LucideIcons.hammer,
+            nombre: 'Desarrollo o QA',
+            valor: '$enDesarrollo',
+            color: Colors.purple,
+            ayuda: 'En desarrollo o en pruebas.',
+          ),
+          (
+            icono: LucideIcons.checkCircle2,
+            nombre: 'Publicados',
+            valor: '$publicados',
+            color: Colors.green,
+            ayuda: 'Publicados o ya comunicados al cliente.',
+          ),
+        ];
+
+    final indicadores = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        border: Border.all(color: colors.divider),
+      ),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          Widget bloque(int i) => Tooltip(
+            message: metricas[i].ayuda,
+            child: KpiMetric(
+              icon: metricas[i].icono,
+              title: metricas[i].nombre,
+              value: metricas[i].valor,
+              accentColor: metricas[i].color,
+              dense: true,
+            ),
+          );
+
+          // Cinco nombres con su icono al lado caben repartidos desde unos
+          // 560 px. Por debajo se deslizan, como en Casos de Soporte.
+          if (c.maxWidth >= 560) {
+            return Row(
+              children: [
+                for (var i = 0; i < metricas.length; i++) ...[
+                  if (i > 0)
+                    Container(
+                      width: 1,
+                      height: 34,
+                      color: colors.divider,
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                  Expanded(child: bloque(i)),
+                ],
+              ],
+            );
+          }
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (var i = 0; i < metricas.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 14),
+                  SizedBox(width: 108, child: bloque(i)),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+
+    final selector = vista == null
+        ? null
+        : SegmentedButton<_Vista>(
+            segments: const [
+              ButtonSegment(
+                value: _Vista.tabla,
+                label: Text('Lista'),
+                icon: Icon(LucideIcons.list, size: 14),
+              ),
+              ButtonSegment(
+                value: _Vista.tablero,
+                label: Text('Tablero'),
+                icon: Icon(LucideIcons.columns, size: 14),
+              ),
+            ],
+            selected: {vista!},
+            onSelectionChanged: (s) => onVista(s.first),
+            style: const ButtonStyle(
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+              textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12)),
+            ),
+          );
+
+    final campo = TextField(
+      controller: buscador,
+      style: TextStyle(color: colors.textPrimary, fontSize: 13),
+      decoration: InputDecoration(
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        hintText: 'Buscar cliente, texto, módulo o REQ-…',
+        hintStyle: TextStyle(color: colors.textSecondary, fontSize: 13),
+        prefixIcon: Icon(LucideIcons.search, color: colors.primary, size: 16),
+        prefixIconConstraints: const BoxConstraints(minWidth: 34),
+      ),
+      onChanged: onQuery,
+    );
+
+    final filtros = <Widget>[
+      _filtro(
+        context,
+        'Estado',
+        estado,
+        RequirementStatus.all,
+        onEstado,
+        'Todos los estados',
+      ),
+      _filtro(
+        context,
+        'Módulo',
+        modulo,
+        // Los de siempre más los que haya agregado el equipo: un filtro que
+        // no ofrece un módulo que sí existe esconde requerimientos.
+        context.watch<CatalogProvider>().requirementModules,
+        onModulo,
+        'Todos los módulos',
+        conAgregar: true,
+      ),
+      _desplegable<String?>(
+        context,
+        valor: responsable,
+        titulo: 'Responsable',
+        onChanged: onResponsable,
+        items: [
+          const DropdownMenuItem<String?>(
+            value: null,
+            child: Text('Todos los responsables'),
+          ),
+          for (final e in responsables.entries)
+            DropdownMenuItem<String?>(
+              value: e.key,
+              child: Text('${nombres[e.key] ?? '—'} (${e.value})'),
+            ),
+        ],
+      ),
+      FilterChip(
+        label: const Text('Solo abiertos'),
+        selected: soloAbiertos,
+        onSelected: onSoloAbiertos,
+        labelStyle: const TextStyle(fontSize: 12),
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+      ),
+    ];
+
+    // El conteo iba en su propia línea al final. Es una frase de doce
+    // caracteres: cabe al lado de los filtros y ahorra una fila entera, que
+    // es alto que le falta al tablero de abajo.
+    final conteo = Text(
+      '$mostrados de ${todos.length}',
+      style: TextStyle(color: colors.textSecondary, fontSize: 12),
+    );
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LayoutBuilder(
-            builder: (context, c) {
-              final tarjetas = <Widget>[
-                KpiIconCard(
-                  icon: LucideIcons.inbox,
-                  label: 'Sin aprobar',
-                  value: '$sinAprobar',
-                  color: Colors.blueGrey,
-                  labelAbove: true,
-                ),
-                KpiIconCard(
-                  icon: LucideIcons.lightbulb,
-                  label: 'Abiertos',
-                  value: '${abiertos.length}',
-                  color: colors.primary,
-                  labelAbove: true,
-                ),
-                KpiIconCard(
-                  icon: LucideIcons.userX,
-                  label: 'Sin responsable',
-                  value: '$sinAsignar',
-                  color: Colors.orange,
-                  labelAbove: true,
-                ),
-                KpiIconCard(
-                  icon: LucideIcons.hammer,
-                  label: 'En desarrollo o QA',
-                  value: '$enDesarrollo',
-                  color: Colors.purple,
-                  labelAbove: true,
-                ),
-                KpiIconCard(
-                  icon: LucideIcons.checkCircle2,
-                  label: 'Publicados',
-                  value: '$publicados',
-                  color: Colors.green,
-                  labelAbove: true,
-                ),
-              ];
-              final controles = <Widget>[
-                if (vista != null)
-                  SegmentedButton<_Vista>(
-                    segments: const [
-                      ButtonSegment(
-                        value: _Vista.tabla,
-                        label: Text('Lista'),
-                        icon: Icon(LucideIcons.list, size: 15),
-                      ),
-                      ButtonSegment(
-                        value: _Vista.tablero,
-                        label: Text('Tablero'),
-                        icon: Icon(LucideIcons.columns, size: 15),
-                      ),
-                    ],
-                    selected: {vista!},
-                    onSelectionChanged: (s) => onVista(s.first),
-                    style: const ButtonStyle(
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-              ];
-
-              if (c.maxWidth < 1100) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _Tira(children: tarjetas),
-                    if (controles.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      _Tira(children: controles),
-                    ],
-                  ],
-                );
-              }
-              return Row(
-                children: [
-                  for (var i = 0; i < tarjetas.length; i++) ...[
-                    if (i > 0) const SizedBox(width: 8),
-                    Expanded(child: tarjetas[i]),
-                  ],
-                  if (controles.isNotEmpty) ...[
-                    const SizedBox(width: 16),
-                    ...controles,
-                  ],
-                ],
-              );
-            },
+          // Primera fila: los indicadores y, pegado a ellos, Lista/Tablero.
+          // Antes el selector bajaba a una fila propia para él solo.
+          Row(
+            children: [
+              Expanded(child: indicadores),
+              if (selector != null) ...[const SizedBox(width: 10), selector],
+            ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          // Segunda fila: buscador, filtros y conteo. Eran tres filas.
           LayoutBuilder(
             builder: (context, c) {
-              final angosto = c.maxWidth < 900;
-              final campo = TextField(
-                controller: buscador,
-                style: TextStyle(color: colors.textPrimary, fontSize: 14),
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: 'Buscar por cliente, texto, módulo o REQ-…',
-                  prefixIcon: Icon(
-                    LucideIcons.search,
-                    color: colors.primary,
-                    size: 18,
-                  ),
-                ),
-                onChanged: onQuery,
-              );
-              final filtros = <Widget>[
-                _filtro(
-                  context,
-                  'Estado',
-                  estado,
-                  RequirementStatus.all,
-                  onEstado,
-                  'Todos los estados',
-                ),
-                _filtro(
-                  context,
-                  'Módulo',
-                  modulo,
-                  RequirementModule.all,
-                  onModulo,
-                  'Todos los módulos',
-                ),
-                DropdownButton<String?>(
-                  value: responsable,
-                  underline: const SizedBox.shrink(),
-                  hint: const Text('Responsable'),
-                  onChanged: onResponsable,
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('Todos los responsables'),
-                    ),
-                    for (final e in responsables.entries)
-                      DropdownMenuItem<String?>(
-                        value: e.key,
-                        child: Text('${nombres[e.key] ?? '—'} (${e.value})'),
-                      ),
-                  ],
-                ),
-                FilterChip(
-                  label: const Text('Solo abiertos'),
-                  selected: soloAbiertos,
-                  onSelected: onSoloAbiertos,
-                ),
-              ];
-
+              final angosto = c.maxWidth < 760;
               if (angosto) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     campo,
                     const SizedBox(height: 8),
-                    _Tira(children: filtros),
+                    _Tira(children: [...filtros, conteo]),
                   ],
                 );
               }
               return Row(
                 children: [
-                  SizedBox(width: 320, child: campo),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 250, child: campo),
+                  const SizedBox(width: 10),
                   Expanded(
                     // Centrado: un `FilterChip` es más bajo que un
                     // desplegable, y sin esto se apoyaba en el borde de
                     // arriba y se veía desalineado.
                     child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                      spacing: 10,
+                      runSpacing: 6,
                       crossAxisAlignment: WrapCrossAlignment.center,
-                      children: filtros,
+                      children: [...filtros, conteo],
                     ),
                   ),
                 ],
               );
             },
           ),
-          const SizedBox(height: 8),
-          Text(
-            '$mostrados de ${todos.length} requerimientos',
-            style: TextStyle(color: colors.textSecondary, fontSize: 12),
-          ),
-          const SizedBox(height: 4),
         ],
       ),
+    );
+  }
+
+  Widget _desplegable<T>(
+    BuildContext context, {
+    required T valor,
+    required String titulo,
+    required ValueChanged<T?> onChanged,
+    required List<DropdownMenuItem<T>> items,
+  }) {
+    final colors = context.colors;
+    return DropdownButton<T>(
+      value: valor,
+      underline: const SizedBox.shrink(),
+      isDense: true,
+      iconSize: 18,
+      hint: Text(titulo, style: const TextStyle(fontSize: 13)),
+      style: TextStyle(color: colors.textPrimary, fontSize: 13),
+      onChanged: onChanged,
+      items: items,
     );
   }
 
@@ -466,17 +548,26 @@ class _Cabecera extends StatelessWidget {
     String? valor,
     List<String> opciones,
     ValueChanged<String?> onChanged,
-    String todos,
-  ) {
-    return DropdownButton<String?>(
-      value: valor,
-      underline: const SizedBox.shrink(),
-      hint: Text(titulo),
-      onChanged: onChanged,
+    String todos, {
+    bool conAgregar = false,
+  }) {
+    return _desplegable<String?>(
+      context,
+      valor: opciones.contains(valor) ? valor : null,
+      titulo: titulo,
+      onChanged: (v) async {
+        if (v != kAgregarModulo) {
+          onChanged(v);
+          return;
+        }
+        final creado = await pedirModuloNuevo(context);
+        if (creado != null) onChanged(creado);
+      },
       items: [
         DropdownMenuItem<String?>(value: null, child: Text(todos)),
         for (final o in opciones)
           DropdownMenuItem<String?>(value: o, child: Text(o)),
+        if (conAgregar) agregarModuloItem(context),
       ],
     );
   }
@@ -670,10 +761,28 @@ class _Tablero extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, c) {
-        // Por debajo de esto, repartir el ancho dejaría columnas de menos de
-        // 150 px, donde un nombre de cliente no cabe ni cortado. Ahí sí se
-        // desliza, que es preferible a siete columnas ilegibles.
-        final reparte = c.maxWidth >= 1080;
+        // Antes de deslizar de lado, se quitan las columnas vacías.
+        //
+        // Siete columnas no caben en lo que deja el panel de la derecha, y el
+        // tablero terminaba cortado por la mitad de "En QA" con el resto
+        // fuera de la pantalla. Pero varias de esas columnas están vacías
+        // precisamente por el filtro puesto: con "Solo abiertos", Publicado y
+        // Comunicado al cliente no pueden tener nada nunca. Una columna vacía
+        // que el filtro condena a estar vacía no informa de nada y se está
+        // llevando el ancho que necesitan las que sí tienen tarjetas.
+        //
+        // Vuelven solas en cuanto algo entra en ese estado o se suelta el
+        // filtro, si para entonces caben.
+        const minimo = 170.0;
+        double cabenEn(int n) => n * minimo + (n - 1) * 8;
+
+        final util = c.maxWidth - 32;
+        var visibles = columnas;
+        if (util < cabenEn(columnas.length) &&
+            util >= cabenEn(conItems.length)) {
+          visibles = conItems;
+        }
+        final reparte = util >= cabenEn(visibles.length);
 
         Widget columna(
           ({String titulo, List<RequirementModel> items, Color? color}) col,
@@ -690,24 +799,26 @@ class _Tablero extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (var i = 0; i < columnas.length; i++) ...[
+                for (var i = 0; i < visibles.length; i++) ...[
                   if (i > 0) const SizedBox(width: 8),
-                  Expanded(child: columna(columnas[i])),
+                  Expanded(child: columna(visibles[i])),
                 ],
               ],
             ),
           );
         }
 
+        // Ni quitando las vacías caben: aquí sí se desliza, que es preferible
+        // a columnas donde no cabe ni un nombre de cliente cortado.
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (var i = 0; i < columnas.length; i++) ...[
+              for (var i = 0; i < visibles.length; i++) ...[
                 if (i > 0) const SizedBox(width: 8),
-                SizedBox(width: 260, child: columna(columnas[i])),
+                SizedBox(width: 260, child: columna(visibles[i])),
               ],
             ],
           ),
@@ -782,7 +893,10 @@ class _Columna extends StatelessWidget {
                     style: TextStyle(color: colors.textSecondary, fontSize: 12),
                   )
                 : ListView.builder(
-                    padding: EdgeInsets.zero,
+                    // Un poco de aire al final: sin esto la última tarjeta
+                    // queda partida justo contra el borde de la columna y
+                    // parece cortada en vez de parecer que falta deslizar.
+                    padding: const EdgeInsets.only(bottom: 6),
                     itemCount: items.length,
                     itemBuilder: (_, i) => _Tarjeta(
                       requerimiento: items[i],

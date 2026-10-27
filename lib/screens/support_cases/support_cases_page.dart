@@ -15,7 +15,6 @@ import '../../models/support_case_tag_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../providers/support_case_panel_provider.dart';
-import '../../widgets/kpi_icon_card.dart';
 import 'support_cases_summary.dart';
 import '../../services/catalog_repository.dart';
 import '../../services/support_case_repository.dart';
@@ -31,57 +30,43 @@ import 'support_case_tags_sheet.dart';
 /// Valor del filtro de encargado que pide los casos sin asignar.
 const String kSinEncargado = '__sin_encargado__';
 
-enum _ViewMode { tabla, kanban, resumen }
+/// Las vistas de la pantalla.
+///
+/// [resueltos] es una página aparte y no un filtro: los resueltos son 49 de
+/// los 59 casos y ocupaban la columna más larga del tablero, empujando a las
+/// demás. Lo que uno atiende a diario son los abiertos; lo resuelto se
+/// consulta, no se trabaja. Así que la Tabla y el Kanban muestran sólo lo
+/// abierto y lo resuelto tiene su propio botón.
+enum _ViewMode { tabla, kanban, resumen, resueltos }
 
-enum _QuickFilter {
-  todos,
-  pendientes,
-  enProceso,
-  reportado,
-  esperandoCliente,
-  resueltos,
-  altaPrioridad,
-  mas5dias,
-  mas10dias,
-  misCasos,
-}
+/// Los filtros rápidos que no son el estado.
+///
+/// Los cuatro que sí eran un estado —Pendientes, En seguimiento, Reportado,
+/// Esperando cliente— salieron de aquí y son el desplegable "Estado". Eran
+/// chips sólo en la Tabla: en el Kanban se escondían, porque elegir uno
+/// vaciaba las otras tres columnas. Así que el estado se filtraba de una
+/// forma en una vista y de ninguna en la otra. Ahora se filtra igual en las
+/// dos, desde un solo sitio.
+/// Los filtros rápidos que no son el estado.
+///
+/// "+10 días" estuvo aquí al lado de "+5 días" y sobraba: uno contiene al
+/// otro —todo caso de más de 10 días lleva más de 5—, así que eran dos
+/// botones que casi siempre mostraban el mismo número. Queda el de 5, que es
+/// el que no deja escapar ninguno; para ver los peores de primeros está
+/// ordenar por "Días sin resolver".
+enum _QuickFilter { todos, altaPrioridad, mas5dias, misCasos }
 
 extension on _QuickFilter {
-  /// Los cuatro que son exactamente una columna del Kanban.
-  ///
-  /// En vista Kanban sobran: el tablero ya separa por estado, y peor aún,
-  /// elegir uno vacía las otras tres columnas — se ven tres "Sin casos" que
-  /// parecen datos y son sólo el filtro puesto.
-  bool get esColumnaKanban =>
-      this == _QuickFilter.pendientes ||
-      this == _QuickFilter.enProceso ||
-      this == _QuickFilter.reportado ||
-      this == _QuickFilter.esperandoCliente ||
-      this == _QuickFilter.resueltos;
-
   String get label {
     switch (this) {
       case _QuickFilter.todos:
         return 'Todos';
-      case _QuickFilter.pendientes:
-        return 'Pendientes';
-      case _QuickFilter.enProceso:
-        return 'En proceso';
-      case _QuickFilter.reportado:
-        return 'Reportado';
-      case _QuickFilter.esperandoCliente:
-        return 'Esperando cliente';
-      case _QuickFilter.resueltos:
-        return 'Resueltos';
       case _QuickFilter.altaPrioridad:
         return 'Alta prioridad';
-      // "+5 días" y no "Más de 5 días": son los dos filtros más anchos de
-      // los nueve y entre ambos se llevaban 140 px de la fila, que es
-      // justamente lo que faltaba para que cupieran todos. Dicen lo mismo.
+      // "+5 días" y no "Más de 5 días": dicen lo mismo y el corto deja
+      // sitio en la fila.
       case _QuickFilter.mas5dias:
         return '+5 días';
-      case _QuickFilter.mas10dias:
-        return '+10 días';
       case _QuickFilter.misCasos:
         return 'Mis casos';
     }
@@ -91,26 +76,11 @@ extension on _QuickFilter {
     switch (this) {
       case _QuickFilter.todos:
         return true;
-      // "Pendientes" == sin empezar. Coincide con la columna del Kanban y con
-      // la insignia; el estado se sigue guardando como "Nuevo" (ver
-      // SupportCaseStatus.labelFor).
-      case _QuickFilter.pendientes:
-        return c.status == SupportCaseStatus.nuevo;
-      case _QuickFilter.enProceso:
-        return c.status == SupportCaseStatus.enProceso;
-      case _QuickFilter.reportado:
-        return c.status == SupportCaseStatus.reportado;
-      case _QuickFilter.esperandoCliente:
-        return c.status == SupportCaseStatus.esperandoCliente;
-      case _QuickFilter.resueltos:
-        return !SupportCaseStatus.isOpen(c.status);
       case _QuickFilter.altaPrioridad:
         return c.priority == SupportCasePriority.alta ||
             c.priority == SupportCasePriority.critica;
       case _QuickFilter.mas5dias:
         return SupportCaseStatus.isOpen(c.status) && c.daysOpen() > 5;
-      case _QuickFilter.mas10dias:
-        return SupportCaseStatus.isOpen(c.status) && c.daysOpen() > 10;
       case _QuickFilter.misCasos:
         return myUid != null &&
             (c.assignedUserId == myUid || c.createdBy == myUid);
@@ -175,6 +145,13 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
   /// significaría "no filtrar", así que los casos sin encargado necesitan un
   /// valor propio para poder pedirse.
   String? _assigneeFilter;
+
+  /// Estado por el que se filtra. `null` = todos.
+  ///
+  /// Guarda el valor tal como está en la base ("Nuevo", "En proceso"), no la
+  /// etiqueta que se muestra: la etiqueta cambia cuando Michel quiere que
+  /// cambie y el dato no tiene por qué enterarse.
+  String? _statusFilter;
   String? _tagFilter;
   _SortBy _sortBy = _SortBy.recientes;
   _ViewMode _viewMode = _ViewMode.tabla;
@@ -201,6 +178,9 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
     var result = all.where((c) => _filter.matches(c, myUid)).toList();
     if (_tagFilter != null) {
       result = result.where((c) => c.tags.contains(_tagFilter)).toList();
+    }
+    if (_statusFilter != null) {
+      result = result.where((c) => c.status == _statusFilter).toList();
     }
     if (_assigneeFilter != null) {
       result = result.where((c) {
@@ -291,6 +271,16 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
         final filtered = _applyFiltersAndSort(all, myUid, catalog.userName);
 
         final canDelete = auth.hasPermission(AppPermissions.manageSupportCases);
+
+        // Cada vista recibe lo que le toca. El Resumen necesita los resueltos
+        // —sin ellos no hay tiempo de resolución ni salidas que graficar—,
+        // así que es la única que los ve junto a los abiertos.
+        final abiertos = filtered
+            .where((c) => SupportCaseStatus.isOpen(c.status))
+            .toList();
+        final resueltos = filtered
+            .where((c) => !SupportCaseStatus.isOpen(c.status))
+            .toList();
         // El Resumen recibe los casos ya filtrados, igual que la tabla y el
         // tablero: un filtro cambia las tres vistas de la misma forma.
         final list = (!isMobile && _viewMode == _ViewMode.resumen)
@@ -301,11 +291,19 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
               )
             : (!isMobile && _viewMode == _ViewMode.kanban)
             ? SupportCaseKanbanView(
-                cases: filtered,
+                cases: abiertos,
                 onTap: (id) => _openDetail(context, id),
               )
             : _CaseList(
-                cases: filtered,
+                // Lo resuelto sólo aparece si se pide: por el botón
+                // Resueltos o eligiéndolo en el filtro de estado, que es la
+                // única forma de llegar a ellos desde un teléfono —ahí no
+                // hay botón de vistas—.
+                cases:
+                    (_viewMode == _ViewMode.resueltos ||
+                        _statusFilter == SupportCaseStatus.resuelto)
+                    ? resueltos
+                    : abiertos,
                 selectedCaseId: panel.caseId,
                 onTap: (id) => _openDetail(context, id),
                 canDelete: canDelete,
@@ -321,6 +319,12 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
           onTagFilterChanged: (t) => setState(() => _tagFilter = t),
           assigneeFilter: _assigneeFilter,
           onAssigneeFilterChanged: (v) => setState(() => _assigneeFilter = v),
+          // En Resueltos no se ofrece: todos tienen el mismo estado y el
+          // desplegable sólo podría dejar la pantalla en blanco.
+          statusFilter: _viewMode == _ViewMode.resueltos ? null : _statusFilter,
+          onStatusFilterChanged: (v) => setState(() => _statusFilter = v),
+          mostrarEstados: isMobile || _viewMode != _ViewMode.resueltos,
+          myUid: myUid,
           sortBy: _sortBy,
           onSortChanged: (s) => setState(() => _sortBy = s),
           // Sólo en celular: en escritorio ambos viven en la barra superior
@@ -333,12 +337,10 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
           viewMode: isMobile ? null : _viewMode,
           onViewModeChanged: (v) => setState(() {
             _viewMode = v;
-            // Si venía filtrando por un estado, ese chip desaparece al entrar
-            // al Kanban. Dejarlo puesto escondería casos detrás de un filtro
-            // invisible, asi que se suelta.
-            if (v == _ViewMode.kanban && _filter.esColumnaKanban) {
-              _filter = _QuickFilter.todos;
-            }
+            // En Resueltos un estado abierto no dejaría pasar nada, y el
+            // desplegable ni siquiera se muestra: sería un filtro invisible
+            // escondiendo casos. Se suelta.
+            if (v == _ViewMode.resueltos) _statusFilter = null;
           }),
         );
 
@@ -430,6 +432,10 @@ class _CasesHeader extends StatelessWidget {
     required this.tagFilter,
     required this.onTagFilterChanged,
     required this.assigneeFilter,
+    required this.statusFilter,
+    required this.onStatusFilterChanged,
+    required this.mostrarEstados,
+    required this.myUid,
     required this.onAssigneeFilterChanged,
     required this.sortBy,
     required this.onSortChanged,
@@ -453,6 +459,12 @@ class _CasesHeader extends StatelessWidget {
 
   /// Null = todos los encargados; [kSinEncargado] = sólo los sin asignar.
   final String? assigneeFilter;
+  final String? statusFilter;
+  final ValueChanged<String?> onStatusFilterChanged;
+  final bool mostrarEstados;
+
+  /// Para contar los casos de quien está mirando.
+  final String? myUid;
   final ValueChanged<String?> onAssigneeFilterChanged;
 
   final _SortBy sortBy;
@@ -469,7 +481,6 @@ class _CasesHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final today = DateTime.now();
     final availableTags = all.expand((c) => c.tags).toSet().toList()..sort();
 
     // (id, nombre, cuántos casos). El conteo va en la opción para que se vea
@@ -495,21 +506,20 @@ class _CasesHeader extends StatelessWidget {
             )
             .toList()
           ..sort((a, b) => a.$2.compareTo(b.$2));
-    final open = all.where((c) => SupportCaseStatus.isOpen(c.status));
-    final urgentes = open.where(
-      (c) =>
-          c.priority == SupportCasePriority.alta ||
-          c.priority == SupportCasePriority.critica,
-    );
-    final mas5 = open.where((c) => c.daysOpen() > 5);
-    final mas10 = open.where((c) => c.daysOpen() > 10);
-    final resueltosHoy = all.where(
-      (c) =>
-          c.resolvedAt != null &&
-          c.resolvedAt!.year == today.year &&
-          c.resolvedAt!.month == today.month &&
-          c.resolvedAt!.day == today.day,
-    );
+    // Las cinco tarjetas de indicadores que había aquí —Casos abiertos,
+    // Urgentes, Más de 5 días, Más de 10 días, Resueltos hoy— se fueron a los
+    // filtros de abajo, que ya decían tres de las cinco cosas con otras
+    // palabras: "Alta prioridad" era Urgentes, "+5 días" era Más de 5 días,
+    // "+10 días" era Más de 10 días. La cifra ahora está en el botón que la
+    // filtra, que es donde uno va a parar después de leerla, y la pantalla se
+    // ahorró una fila entera: con el filtro de estado nuevo, las tarjetas se
+    // quedaban en "Ca…", "Ur…" con la cifra tapada.
+    //
+    // "Resueltos hoy" vive en el Resumen, donde además se puede pedir el
+    // periodo que uno quiera en vez de sólo hoy.
+    final base = viewMode == _ViewMode.resueltos
+        ? all.where((c) => !SupportCaseStatus.isOpen(c.status)).toList()
+        : all.where((c) => SupportCaseStatus.isOpen(c.status)).toList();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -533,51 +543,11 @@ class _CasesHeader extends StatelessWidget {
             builder: (context, constraints) {
               final angosto = constraints.maxWidth < 640;
 
-              // La fila de arriba sólo funciona si sobra ancho de verdad. Los
-              // tres controles de la derecha piden unos 600 px que no ceden, y
-              // las cinco tarjetas se reparten el resto: por debajo de esto
-              // les tocan menos de 90 px cada una y se quedan en "Ca…", "Ur…",
-              // con la cifra tapada. No es un caso raro — pasa siempre que se
-              // abre el panel del detalle, que deja la lista en unos 960 px.
+              // Buscador y controles comparten fila sólo si sobra ancho de
+              // verdad: los cuatro desplegables más el selector de vista
+              // piden unos 900 px que no ceden. Por debajo, los controles se
+              // llevan su propia tira deslizable.
               final holgado = constraints.maxWidth >= 1200;
-
-              final indicadores = <Widget>[
-                KpiIconCard(
-                  icon: LucideIcons.fileText,
-                  label: 'Casos abiertos',
-                  value: '${open.length}',
-                  color: colors.primary,
-                  labelAbove: true,
-                ),
-                KpiIconCard(
-                  icon: LucideIcons.alertTriangle,
-                  label: 'Urgentes',
-                  value: '${urgentes.length}',
-                  color: Colors.red,
-                  labelAbove: true,
-                ),
-                KpiIconCard(
-                  icon: LucideIcons.sunrise,
-                  label: 'Más de 5 días',
-                  value: '${mas5.length}',
-                  color: Colors.orange,
-                  labelAbove: true,
-                ),
-                KpiIconCard(
-                  icon: LucideIcons.alarmClock,
-                  label: 'Más de 10 días',
-                  value: '${mas10.length}',
-                  color: Colors.red,
-                  labelAbove: true,
-                ),
-                KpiIconCard(
-                  icon: LucideIcons.checkCircle2,
-                  label: 'Resueltos hoy',
-                  value: '${resueltosHoy.length}',
-                  color: Colors.green,
-                  labelAbove: true,
-                ),
-              ];
 
               final buscador = TextField(
                 controller: searchController,
@@ -598,6 +568,9 @@ class _CasesHeader extends StatelessWidget {
                 DropdownButton<_SortBy>(
                   value: sortBy,
                   underline: const SizedBox.shrink(),
+                  isDense: true,
+                  iconSize: 18,
+                  style: TextStyle(color: colors.textPrimary, fontSize: 13),
                   onChanged: (v) => v != null ? onSortChanged(v) : null,
                   items: const [
                     DropdownMenuItem(
@@ -618,6 +591,51 @@ class _CasesHeader extends StatelessWidget {
                     ),
                   ],
                 ),
+                // Estado. Con la cuenta al lado, que es la mitad de la
+                // pregunta: cuántos hay esperando al cliente se responde sin
+                // elegir nada.
+                if (mostrarEstados)
+                  DropdownButton<String?>(
+                    value: statusFilter,
+                    underline: const SizedBox.shrink(),
+                    isDense: true,
+                    iconSize: 18,
+                    style: TextStyle(color: colors.textPrimary, fontSize: 13),
+                    hint: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          LucideIcons.circleDot,
+                          size: 14,
+                          color: colors.textSecondary,
+                        ),
+                        const SizedBox(width: 4),
+                        const Text('Estado'),
+                      ],
+                    ),
+                    onChanged: onStatusFilterChanged,
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Todos los estados'),
+                      ),
+                      // En escritorio los resueltos tienen su propio botón,
+                      // así que ofrecerlos aquí sería la misma cosa dos
+                      // veces. En celular no hay botón de vistas: este
+                      // filtro es el único camino.
+                      for (final e
+                          in viewMode == null
+                              ? SupportCaseStatus.all
+                              : SupportCaseStatus.openStates)
+                        DropdownMenuItem<String?>(
+                          value: e,
+                          child: Text(
+                            '${SupportCaseStatus.columnLabelFor(e)} '
+                            '(${all.where((c) => c.status == e).length})',
+                          ),
+                        ),
+                    ],
+                  ),
                 // Encargado. Sólo se ofrecen las personas que de verdad
                 // tienen algún caso: una lista con los seis usuarios de la
                 // empresa haría elegir entre nombres que no devuelven nada.
@@ -625,6 +643,9 @@ class _CasesHeader extends StatelessWidget {
                   DropdownButton<String?>(
                     value: assigneeFilter,
                     underline: const SizedBox.shrink(),
+                    isDense: true,
+                    iconSize: 18,
+                    style: TextStyle(color: colors.textPrimary, fontSize: 13),
                     hint: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -654,6 +675,9 @@ class _CasesHeader extends StatelessWidget {
                   DropdownButton<String?>(
                     value: tagFilter,
                     underline: const SizedBox.shrink(),
+                    isDense: true,
+                    iconSize: 18,
+                    style: TextStyle(color: colors.textPrimary, fontSize: 13),
                     hint: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -678,21 +702,31 @@ class _CasesHeader extends StatelessWidget {
                   ),
                 if (viewMode != null)
                   SegmentedButton<_ViewMode>(
+                    // Sin la marca de "elegido" a la izquierda del nombre:
+                    // son cuatro vistas y ese palomito corría cada etiqueta
+                    // unos 20 px, que al final eran 80 de fila. El segmento
+                    // elegido ya se distingue por el color.
+                    showSelectedIcon: false,
                     segments: const [
                       ButtonSegment(
                         value: _ViewMode.tabla,
                         label: Text('Tabla'),
-                        icon: Icon(LucideIcons.list, size: 15),
+                        icon: Icon(LucideIcons.list, size: 14),
                       ),
                       ButtonSegment(
                         value: _ViewMode.kanban,
                         label: Text('Kanban'),
-                        icon: Icon(LucideIcons.columns, size: 15),
+                        icon: Icon(LucideIcons.columns, size: 14),
                       ),
                       ButtonSegment(
                         value: _ViewMode.resumen,
                         label: Text('Resumen'),
-                        icon: Icon(LucideIcons.barChart2, size: 15),
+                        icon: Icon(LucideIcons.barChart2, size: 14),
+                      ),
+                      ButtonSegment(
+                        value: _ViewMode.resueltos,
+                        label: Text('Resueltos'),
+                        icon: Icon(LucideIcons.checkCircle2, size: 14),
                       ),
                     ],
                     selected: {viewMode!},
@@ -700,20 +734,24 @@ class _CasesHeader extends StatelessWidget {
                     style: const ButtonStyle(
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       visualDensity: VisualDensity.compact,
+                      textStyle: WidgetStatePropertyAll(
+                        TextStyle(fontSize: 12.5),
+                      ),
+                      padding: WidgetStatePropertyAll(
+                        EdgeInsets.symmetric(horizontal: 10),
+                      ),
                     ),
                   ),
               ];
 
               final chips = <Widget>[
                 for (final f in _QuickFilter.values)
-                  // En Kanban estos cuatro son las columnas de abajo: repetirlos
-                  // no agrega nada, y elegir uno vacía las otras tres.
-                  if (!(viewMode == _ViewMode.kanban && f.esColumnaKanban))
-                    _FilterChip(
-                      label: f.label,
-                      selected: filter == f,
-                      onTap: () => onFilterChanged(f),
-                    ),
+                  _FilterChip(
+                    label: f.label,
+                    cantidad: base.where((c) => f.matches(c, myUid)).length,
+                    selected: filter == f,
+                    onTap: () => onFilterChanged(f),
+                  ),
               ];
 
               if (angosto) {
@@ -723,8 +761,6 @@ class _CasesHeader extends StatelessWidget {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _TiraHorizontal(children: indicadores),
-                    const SizedBox(height: 12),
                     _TiraHorizontal(children: controles),
                     const SizedBox(height: 8),
                     buscador,
@@ -736,77 +772,66 @@ class _CasesHeader extends StatelessWidget {
 
               if (!holgado) {
                 // Ancho intermedio —el panel del detalle abierto, o la ventana
-                // a media pantalla—. Los indicadores recuperan su tamaño
-                // natural y se deslizan si no caben todos, que es preferible a
-                // verlos aplastados; los controles bajan a la fila del
-                // buscador, donde sí tienen sitio.
+                // a media pantalla—. Los controles se deslizan de lado si no
+                // caben, que es preferible a verlos aplastados.
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _TiraHorizontal(children: indicadores),
-                    const SizedBox(height: 12),
+                    _TiraHorizontal(children: controles),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
                         Expanded(child: buscador),
                         const SizedBox(width: 12),
-                        for (var i = 0; i < controles.length; i++) ...[
-                          if (i > 0) const SizedBox(width: 8),
-                          controles[i],
-                        ],
+                        Expanded(
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: chips,
+                          ),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Wrap(spacing: 8, runSpacing: 8, children: chips),
                   ],
                 );
               }
 
-              // Escritorio holgado: dos filas en vez de tres. Los indicadores
-              // dejaban toda su derecha vacía y los filtros rápidos gastaban
-              // una fila entera para cinco botones; juntándolos se recupera el
-              // alto de una fila completa para los casos, que es lo que se
-              // viene a ver.
+              // Escritorio holgado: dos filas, y la segunda sólo si hace
+              // falta. Antes eran tres —indicadores, controles, filtros— y la
+              // primera se iba casi entera en cinco tarjetas que decían lo
+              // mismo que los filtros de la tercera.
               return Column(
                 children: [
                   Row(
                     children: [
-                      // Las cinco se reparten en partes iguales lo que
-                      // dejan libre los controles de la derecha. Con su ancho
-                      // fijo de 148 px pedían 772 y los controles unos 500:
-                      // en una ventana de 1265 px no caben, y lo que sobraba
-                      // se pintaba encima del desplegable. Repartiendo, se
-                      // encogen lo justo y de paso llenan la fila en vez de
-                      // dejar el hueco que había antes a su derecha.
-                      for (var i = 0; i < indicadores.length; i++) ...[
-                        if (i > 0) const SizedBox(width: 8),
-                        Expanded(child: indicadores[i]),
-                      ],
-                      const SizedBox(width: 16),
-                      for (var i = 0; i < controles.length; i++) ...[
-                        if (i > 0) const SizedBox(width: 8),
-                        controles[i],
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      // Ancho fijo: los filtros conservan su tamaño y el
+                      // Ancho fijo: los controles conservan su tamaño y el
                       // espacio lo cede el buscador, que es de donde sobra.
-                      // 320 y no 360 porque con los nueve filtros de la vista
-                      // Tabla la fila quedaba corta por unos 40 px — y cuando
-                      // no caben, el último se va a una segunda línea.
-                      SizedBox(width: 320, child: buscador),
+                      SizedBox(width: 250, child: buscador),
                       const SizedBox(width: 12),
-                      // `Wrap` y no una tira deslizable: con las nueve
-                      // opciones de la vista Tabla no caben en la fila, y
-                      // deslizándose el último quedaba cortado contra el borde
-                      // sin nada que indicara que seguía habiendo filtros. Si
-                      // no caben, bajan de línea y se ven todos.
+                      // `Wrap` y no una fila: si algún día no caben —una
+                      // etiqueta de nombre largo, una ventana angosta— bajan
+                      // de línea y se ven enteros, en vez de que el último
+                      // quede cortado contra el borde. Con los tamaños de
+                      // ahora caben los cinco en una sola línea, que es como
+                      // Michel lo quiere: dos filas arriba, no tres.
                       Expanded(
-                        child: Wrap(spacing: 8, runSpacing: 8, children: chips),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          alignment: WrapAlignment.end,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: controles,
+                        ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 10),
+                  // `Wrap` y no una tira deslizable: si no caben, bajan de
+                  // línea y se ven todos, en vez de que el último quede
+                  // cortado contra el borde sin nada que lo indique.
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Wrap(spacing: 8, runSpacing: 8, children: chips),
                   ),
                 ],
               );
@@ -823,11 +848,18 @@ class _FilterChip extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.cantidad,
   });
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
+
+  /// Cuántos casos deja pasar este filtro ahora mismo.
+  ///
+  /// Es la cifra que antes estaba en una tarjeta de indicador aparte. Aquí
+  /// responde la pregunta y además dice qué va a pasar si uno lo toca.
+  final int? cantidad;
 
   @override
   Widget build(BuildContext context) {
@@ -835,19 +867,35 @@ class _FilterChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
         decoration: BoxDecoration(
           color: selected ? colors.primary : colors.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: selected ? colors.primary : colors.divider),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? colors.onPrimary : colors.textSecondary,
-            fontSize: 13,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? colors.onPrimary : colors.textSecondary,
+                fontSize: 12,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+            if (cantidad != null) ...[
+              const SizedBox(width: 6),
+              Text(
+                '$cantidad',
+                style: TextStyle(
+                  color: selected ? colors.onPrimary : colors.textPrimary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

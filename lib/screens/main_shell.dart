@@ -4,6 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/utils/date_utils.dart';
 import '../core/constants/app_constants.dart';
 import '../core/responsive/app_spacing.dart';
 import '../core/responsive/responsive.dart';
@@ -24,13 +25,8 @@ import '../widgets/confirm_dialog.dart';
 import '../widgets/user_avatar.dart';
 import 'admin/admin_panel_page.dart';
 import '../widgets/update_banner.dart';
-import 'admin/available_hours_page.dart';
-import 'admin/clients_page.dart';
-import 'admin/groups_page.dart';
 import 'admin/printer_configs_page.dart';
-import 'admin/statuses_page.dart';
-import 'admin/task_types_page.dart';
-import 'admin/users_page.dart';
+import 'calendar/by_assignee_page.dart';
 import 'calendar/calendar_page.dart';
 import 'dashboard/dashboard_page.dart';
 import 'home/home_page.dart';
@@ -44,6 +40,7 @@ import 'tools/file_downloads_page.dart';
 import 'tools/qr_generator_page.dart';
 import 'trash/trash_page.dart';
 import 'week/week_page.dart';
+import '../widgets/loading_indicator.dart';
 
 // ── Navigation data model (single source of truth) ──────────────────────────
 
@@ -77,7 +74,7 @@ class _ShellEntry {
 
 // ── Calendar view toggle (desktop/tablet only) ───────────────────────────────
 
-enum _CalView { mes, semana }
+enum _CalView { mes, semana, encargados }
 
 /// Wraps [CalendarPage] and [WeekPage] in a single shell section.
 ///
@@ -147,6 +144,13 @@ class _CalendarSectionState extends State<_CalendarSection> {
                     label: Text('Semana'),
                     icon: Icon(LucideIcons.calendarDays, size: 15),
                   ),
+                  // La tercera mirada: no "qué hay ese día" sino "quién lo
+                  // tiene, y quién está libre".
+                  ButtonSegment(
+                    value: _CalView.encargados,
+                    label: Text('Encargados'),
+                    icon: Icon(LucideIcons.userCheck, size: 15),
+                  ),
                 ],
                 selected: {_view},
                 onSelectionChanged: (s) => _setView(s.first),
@@ -160,8 +164,8 @@ class _CalendarSectionState extends State<_CalendarSection> {
         ),
         Expanded(
           child: IndexedStack(
-            index: _view == _CalView.mes ? 0 : 1,
-            children: const [CalendarPage(), WeekPage()],
+            index: _CalView.values.indexOf(_view),
+            children: const [CalendarPage(), WeekPage(), ByAssigneePage()],
           ),
         ),
       ],
@@ -199,33 +203,33 @@ class _AdminSectionState extends State<_AdminSection> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _AdminBreadcrumb(
-          subTitle: _subTitle(_subKey!),
+          subTitle: _subTitle(context, _subKey!),
           onBack: () => setState(() => _subKey = null),
         ),
-        Expanded(child: _buildSubPage(_subKey!)),
+        Expanded(child: _buildSubPage(context, _subKey!)),
       ],
     );
   }
 
-  String _subTitle(String key) => switch (key) {
-    'grupos' => 'Equipos',
-    'tiposTarea' => 'Tipos de tarea',
-    'estados' => 'Estados',
-    'horarios' => 'Horarios disponibles',
-    'usuarios' => 'Usuarios',
-    'clientes' => 'Clientes',
-    _ => key,
-  };
+  // El título y la pantalla salen del mismo catálogo que dibuja las tarjetas
+  // del panel. Antes esto eran dos `switch` escritos aquí, y agregar "Equipo
+  // técnico" allá sin tocarlos hizo que el módulo abriera en blanco: el
+  // `switch` caía en su caso por defecto, que devuelve un widget vacío.
+  String _subTitle(BuildContext context, String key) =>
+      adminModuleByKey(context.read<AuthProvider>(), key)?.title ?? key;
 
-  Widget _buildSubPage(String key) => switch (key) {
-    'grupos' => const GroupsPage(showAppBar: false),
-    'tiposTarea' => const TaskTypesPage(showAppBar: false),
-    'estados' => const StatusesPage(showAppBar: false),
-    'horarios' => const AvailableHoursPage(showAppBar: false),
-    'usuarios' => const UsersPage(showAppBar: false),
-    'clientes' => const ClientsPage(showAppBar: false),
-    _ => const SizedBox.shrink(),
-  };
+  Widget _buildSubPage(BuildContext context, String key) {
+    final modulo = adminModuleByKey(context.read<AuthProvider>(), key);
+    // Sin módulo —clave vieja, o permiso retirado mientras estaba abierto—
+    // se dice, en vez de dejar la pantalla vacía sin explicación.
+    if (modulo == null) {
+      return const EmptyState(
+        message: 'Este módulo ya no está disponible.',
+        icon: LucideIcons.layoutDashboard,
+      );
+    }
+    return modulo.builder(false);
+  }
 }
 
 /// Breadcrumb bar rendered when a sub-module is active inside [_AdminSection].
@@ -691,6 +695,28 @@ class _MainShellState extends State<MainShell> {
         : sections[_index - tabs.length];
     final conControles = entry.showsDashboardControls;
 
+    // Con el menú plegado (72 px) el borde del contenido queda antes de que
+    // termine el título, y "Dashboard" y el saludo se pintaban uno encima del
+    // otro. El saludo empieza donde empieza el contenido o donde acaba el
+    // título, lo que quede más a la derecha.
+    var saludoLeft = _sidebarWidth + AppSpacing.md;
+    if (conControles) {
+      final theme = Theme.of(context);
+      final titlePainter = TextPainter(
+        text: TextSpan(
+          text: title,
+          style: theme.appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge,
+        ),
+        textDirection: TextDirection.ltr,
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
+      )..layout();
+      final titleEnd =
+          NavigationToolbar.kMiddleSpacing + titlePainter.width + AppSpacing.lg;
+      titlePainter.dispose();
+      if (titleEnd > saludoLeft) saludoLeft = titleEnd;
+    }
+
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
@@ -708,7 +734,7 @@ class _MainShellState extends State<MainShell> {
         flexibleSpace: conControles
             ? SafeArea(
                 child: Padding(
-                  padding: EdgeInsets.only(left: _sidebarWidth + AppSpacing.md),
+                  padding: EdgeInsets.only(left: saludoLeft),
                   child: const Align(
                     alignment: Alignment.centerLeft,
                     child: _SaludoDelDia(),
@@ -1309,12 +1335,7 @@ class _SaludoDelDia extends StatelessWidget {
     final user = context.watch<AuthProvider>().appUser;
     if (user == null) return const SizedBox.shrink();
 
-    final h = DateTime.now().hour;
-    final saludo = h < 12
-        ? 'Buenos días'
-        : h < 18
-        ? 'Buenas tardes'
-        : 'Buenas noches';
+    final saludo = AppDateUtils.saludoDelDia(DateTime.now());
 
     return Text(
       '$saludo, ${user.name}',

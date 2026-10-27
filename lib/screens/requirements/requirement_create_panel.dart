@@ -11,16 +11,54 @@ import '../../models/requirement_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/requirement_repository.dart';
+import 'requirement_module_dialog.dart';
+
+/// Lo que trae un caso de soporte que se va a convertir en requerimiento.
+///
+/// No es el caso entero: es lo poco que sirve de los dos lados —de quién es,
+/// qué pidió y de qué caso salió—. El resto (tipo, módulo, prioridad) lo
+/// decide quien convierte, porque son preguntas de desarrollo que el caso no
+/// responde.
+class RequirementPrefill {
+  const RequirementPrefill({
+    required this.descripcion,
+    required this.clientId,
+    required this.clientName,
+    required this.supportCaseId,
+    required this.supportCaseNumber,
+  });
+
+  final String descripcion;
+  final String? clientId;
+  final String clientName;
+  final String supportCaseId;
+  final int supportCaseNumber;
+
+  String get codigoCaso => 'CS-${supportCaseNumber.toString().padLeft(4, '0')}';
+}
 
 /// Abre el formulario para registrar un requerimiento nuevo.
-Future<void> showRequirementCreateSheet(BuildContext context) {
-  return showDialog<void>(
+///
+/// Con [prefill] llega con los datos de un caso de soporte ya puestos: es el
+/// botón "Pasar a requerimiento" del caso.
+/// Devuelve `true` si se llegó a registrar algo, para que quien lo abrió
+/// —el botón "Pasar a requerimiento" de un caso de soporte— sepa si anotar
+/// la conversión o no. Cerrar con Cancelar devuelve `false`.
+Future<bool> showRequirementCreateSheet(
+  BuildContext context, {
+  RequirementPrefill? prefill,
+}) async {
+  final creado = await showDialog<bool>(
     context: context,
-    builder: (_) => const Dialog(
-      insetPadding: EdgeInsets.all(24),
-      child: SizedBox(width: 640, child: RequirementCreatePanel()),
+    builder: (_) => Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      child: SizedBox(
+        width: 640,
+        child: RequirementCreatePanel(prefill: prefill),
+      ),
     ),
   );
+  return creado ?? false;
 }
 
 /// Abre el mismo formulario para corregir uno que ya existe.
@@ -53,11 +91,15 @@ class RequirementCreatePanel extends StatefulWidget {
   const RequirementCreatePanel({
     super.key,
     this.existente,
+    this.prefill,
     this.enPanel = false,
   });
 
   /// Null = alta nueva. Con valor, el formulario corrige ese requerimiento.
   final RequirementModel? existente;
+
+  /// Datos de un caso de soporte que se está convirtiendo en requerimiento.
+  final RequirementPrefill? prefill;
 
   /// Embebido en el panel lateral de la pantalla, no dentro de una ventana.
   ///
@@ -92,16 +134,18 @@ class _RequirementCreatePanelState extends State<RequirementCreatePanel> {
     _tipo = e?.type ?? RequirementType.solicitudes;
     // Un valor que ya no está en la lista —un módulo renombrado desde que se
     // importó la hoja— dejaría el desplegable sin coincidencia y reventaría.
-    _modulo = RequirementModule.all.contains(e?.module)
+    // El que trae el requerimiento si lo reconocemos; si no, "Otros". Un
+    // valor suelto dejaría el desplegable sin coincidencia.
+    _modulo = (e?.module.isNotEmpty ?? false)
         ? e!.module
-        : RequirementModule.all.last;
+        : RequirementModule.otros;
     _prioridad = RequirementPriority.all.contains(e?.priority)
         ? e!.priority
         : RequirementPriority.sinPrioridad;
     _area = RequirementSource.all.contains(e?.source)
         ? e!.source
         : RequirementSource.all.first;
-    _descripcion.text = e?.description ?? '';
+    _descripcion.text = e?.description ?? widget.prefill?.descripcion ?? '';
   }
 
   /// Los clientes se resuelven en el primer `build`: el catálogo llega por
@@ -111,12 +155,24 @@ class _RequirementCreatePanelState extends State<RequirementCreatePanel> {
   void _cargarClientes() {
     if (_clientesCargados) return;
     _clientesCargados = true;
-    final e = widget.existente;
-    if (e == null || e.clientIds.isEmpty) return;
     final catalogo = context.read<CatalogProvider>();
+    final e = widget.existente;
+    if (e != null) {
+      if (e.clientIds.isEmpty) return;
+      _clientes.addAll([
+        for (final c in catalogo.clients)
+          if (e.clientIds.contains(c.id)) c,
+      ]);
+      return;
+    }
+    // Viene de un caso de soporte: su cliente entra ya elegido. Sólo si el
+    // caso traía un cliente del catálogo — hay casos escritos con el nombre
+    // a mano, y ahí no hay a quién enlazar.
+    final previo = widget.prefill;
+    if (previo?.clientId == null) return;
     _clientes.addAll([
       for (final c in catalogo.clients)
-        if (e.clientIds.contains(c.id)) c,
+        if (c.id == previo!.clientId) c,
     ]);
   }
 
@@ -140,7 +196,7 @@ class _RequirementCreatePanelState extends State<RequirementCreatePanel> {
       _clientes.clear();
       _origen = RequirementOrigin.cliente;
       _tipo = RequirementType.solicitudes;
-      _modulo = RequirementModule.all.last;
+      _modulo = RequirementModule.otros;
       _prioridad = RequirementPriority.sinPrioridad;
     });
   }
@@ -266,13 +322,15 @@ class _RequirementCreatePanelState extends State<RequirementCreatePanel> {
           source: _area,
           createdById: usuario?.id ?? '',
           createdByName: usuario?.name ?? 'Alguien',
+          supportCaseId: widget.prefill?.supportCaseId,
+          supportCaseNumber: widget.prefill?.supportCaseNumber,
         );
       }
       if (!mounted) return;
       if (widget.enPanel) {
         _limpiar();
       } else {
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(true);
       }
       SnackbarUtils.showSuccess(
         context,
@@ -306,14 +364,19 @@ class _RequirementCreatePanelState extends State<RequirementCreatePanel> {
                 children: [
                   Icon(LucideIcons.lightbulb, color: colors.primary),
                   const SizedBox(width: 10),
-                  Text(
-                    _editando
-                        ? 'Editar ${widget.existente!.codigo}'
-                        : 'Nuevo requerimiento',
-                    style: TextStyle(
-                      color: colors.textPrimary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                  Expanded(
+                    child: Text(
+                      _editando
+                          ? 'Editar ${widget.existente!.codigo}'
+                          : widget.prefill == null
+                          ? 'Nuevo requerimiento'
+                          : 'Nuevo requerimiento desde '
+                                '${widget.prefill!.codigoCaso}',
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],
@@ -391,8 +454,9 @@ class _RequirementCreatePanelState extends State<RequirementCreatePanel> {
                     child: _desplegable(
                       'Módulo',
                       _modulo,
-                      RequirementModule.all,
+                      context.watch<CatalogProvider>().requirementModules,
                       (v) => setState(() => _modulo = v),
+                      conAgregar: true,
                     ),
                   ),
                 ],
@@ -464,16 +528,31 @@ class _RequirementCreatePanelState extends State<RequirementCreatePanel> {
     String etiqueta,
     String valor,
     List<String> opciones,
-    ValueChanged<String> onChanged,
-  ) {
+    ValueChanged<String> onChanged, {
+    bool conAgregar = false,
+  }) {
     return DropdownButtonFormField<String>(
-      initialValue: valor,
+      // Un valor que no está en la lista deja el desplegable sin coincidencia
+      // y revienta: pasa con un módulo que el equipo agregó y todavía no ha
+      // llegado por el stream, o con uno escrito distinto en la hoja vieja.
+      initialValue: opciones.contains(valor) ? valor : null,
       isExpanded: true,
       decoration: InputDecoration(labelText: etiqueta),
       items: [
         for (final o in opciones) DropdownMenuItem(value: o, child: Text(o)),
+        if (conAgregar) agregarModuloItem(context),
       ],
-      onChanged: (v) => v == null ? null : onChanged(v),
+      onChanged: (v) async {
+        if (v == null) return;
+        if (v != kAgregarModulo) {
+          onChanged(v);
+          return;
+        }
+        final creado = await pedirModuloNuevo(context);
+        // Queda elegido de una vez: agregarlo es justamente lo que uno hace
+        // cuando el módulo que necesita no estaba.
+        if (creado != null && mounted) onChanged(creado);
+      },
     );
   }
 }

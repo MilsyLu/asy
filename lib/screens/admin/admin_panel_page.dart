@@ -51,71 +51,7 @@ class AdminPanelPage extends StatelessWidget {
         ? 2
         : 1;
 
-    final modules = <_AdminModuleData>[
-      _AdminModuleData(
-        icon: LucideIcons.users,
-        title: 'Equipos',
-        subtitle: 'Crear equipos y asignar trabajadores.',
-        moduleKey: 'grupos',
-        accentColor: const Color(0xFF43C97A),
-        builder: (_) => const GroupsPage(),
-        requiredPermission: AppPermissions.manageTeams,
-      ),
-      _AdminModuleData(
-        icon: LucideIcons.tag,
-        title: 'Tipos de tarea',
-        subtitle: 'Catálogo de tipos de tarea y colores.',
-        moduleKey: 'tiposTarea',
-        accentColor: const Color(0xFF4FA3F7),
-        builder: (_) => const TaskTypesPage(),
-        requiredPermission: AppPermissions.manageCatalogs,
-      ),
-      _AdminModuleData(
-        icon: LucideIcons.listChecks,
-        title: 'Estados',
-        subtitle: 'Estados disponibles para las tareas.',
-        moduleKey: 'estados',
-        accentColor: const Color(0xFFB388F5),
-        builder: (_) => const StatusesPage(),
-        requiredPermission: AppPermissions.manageCatalogs,
-      ),
-      _AdminModuleData(
-        icon: LucideIcons.clock,
-        title: 'Horarios disponibles',
-        subtitle: 'Horas habilitadas para agendar tareas.',
-        moduleKey: 'horarios',
-        accentColor: const Color(0xFFD4AF37),
-        builder: (_) => const AvailableHoursPage(),
-        requiredPermission: AppPermissions.manageCatalogs,
-      ),
-      _AdminModuleData(
-        icon: LucideIcons.settings,
-        title: 'Usuarios',
-        subtitle: 'Roles, equipos, contraseñas y dispositivos.',
-        moduleKey: 'usuarios',
-        accentColor: const Color(0xFF26C6DA),
-        builder: (_) => const UsersPage(),
-        requiredPermission: AppPermissions.manageUsers,
-      ),
-      _AdminModuleData(
-        icon: LucideIcons.contact,
-        title: 'Clientes',
-        subtitle: 'Ficha, teléfono e historial de cada cliente.',
-        moduleKey: 'clientes',
-        accentColor: const Color(0xFFE67E9C),
-        builder: (_) => const ClientsPage(),
-        requiredPermission: AppPermissions.manageClients,
-      ),
-      _AdminModuleData(
-        icon: LucideIcons.userCog,
-        title: 'Equipo técnico',
-        subtitle: 'A quién se le asignan los requerimientos.',
-        moduleKey: 'desarrolladores',
-        accentColor: const Color(0xFF7C5CD6),
-        builder: (_) => const DevelopersPage(),
-        requiredPermission: AppPermissions.manageRequirements,
-      ),
-    ].where((m) => auth.hasPermission(m.requiredPermission)).toList();
+    final modules = adminModules(auth);
 
     final body = SingleChildScrollView(
       child: Padding(
@@ -139,7 +75,10 @@ class AdminPanelPage extends StatelessWidget {
                 crossAxisCount: crossAxisCount,
                 crossAxisSpacing: AppSpacing.md,
                 mainAxisSpacing: AppSpacing.md,
-                mainAxisExtent: 240,
+                // 240 px para un título, una línea y una flecha: la
+                // tarjeta era casi toda espacio vacío. En horizontal, lo
+                // mismo cabe en 84.
+                mainAxisExtent: 84,
               ),
               itemCount: modules.length,
               itemBuilder: (context, index) {
@@ -150,9 +89,11 @@ class AdminPanelPage extends StatelessWidget {
                     if (onModuleSelected != null) {
                       onModuleSelected!(module.moduleKey);
                     } else {
-                      Navigator.of(
-                        context,
-                      ).push(MaterialPageRoute(builder: module.builder));
+                      // Como ruta propia sí lleva su barra superior: no
+                      // hay panel alrededor que la ponga.
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => module.builder(true)),
+                      );
                     }
                   },
                 );
@@ -204,7 +145,7 @@ class _AdminHeader extends StatelessWidget {
 
 class _AdminModuleCard extends StatefulWidget {
   const _AdminModuleCard({required this.data, required this.onTap});
-  final _AdminModuleData data;
+  final AdminModuleData data;
   final VoidCallback onTap;
 
   @override
@@ -228,7 +169,10 @@ class _AdminModuleCardState extends State<_AdminModuleCard> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeInOut,
-          padding: const EdgeInsets.all(AppSpacing.lg),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
           decoration: BoxDecoration(
             color: colors.surface,
             borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
@@ -242,65 +186,75 @@ class _AdminModuleCardState extends State<_AdminModuleCard> {
               BoxShadow(
                 color: _hovered
                     ? accent.withValues(alpha: 0.15)
-                    : Colors.black.withValues(alpha: 0.12),
-                blurRadius: _hovered ? 20 : 4,
-                spreadRadius: _hovered ? 2 : 0,
-                offset: const Offset(0, 4),
+                    : Colors.black.withValues(alpha: 0.08),
+                blurRadius: _hovered ? 14 : 3,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          // En fila y no en columna: el icono a la izquierda, el texto al
+          // medio y la flecha a la derecha. Antes el icono iba arriba
+          // centrado, el texto debajo y la flecha al fondo, con todo el hueco
+          // de por medio — una tarjeta de 240 px de alto para decir "Equipos"
+          // y una línea más.
+          child: Row(
             children: [
-              Center(
-                child: AnimatedScale(
-                  scale: _hovered ? 1.08 : 1.0,
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeInOut,
-                  child: Container(
-                    width: 64,
-                    height: 64,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(widget.data.icon, color: accent, size: 28),
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                widget.data.title,
-                style: TextStyle(
-                  color: colors.textPrimary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                widget.data.subtitle,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: colors.textSecondary, fontSize: 12),
-              ),
-              const Spacer(),
-              Align(
-                alignment: Alignment.centerRight,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
-                  width: 36,
-                  height: 36,
+              AnimatedScale(
+                scale: _hovered ? 1.08 : 1.0,
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeInOut,
+                child: Container(
+                  width: 40,
+                  height: 40,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: _hovered
-                        ? accent.withValues(alpha: 0.25)
-                        : accent.withValues(alpha: 0.12),
+                    color: accent.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(LucideIcons.arrowRight, color: accent, size: 16),
+                  child: Icon(widget.data.icon, color: accent, size: 20),
                 ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.data.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                    Text(
+                      widget.data.subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                width: 30,
+                height: 30,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _hovered
+                      ? accent.withValues(alpha: 0.25)
+                      : accent.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(LucideIcons.arrowRight, color: accent, size: 15),
               ),
             ],
           ),
@@ -310,10 +264,95 @@ class _AdminModuleCardState extends State<_AdminModuleCard> {
   }
 }
 
+/// Los módulos del Panel de administración.
+///
+/// Una sola lista, y de ahí salen las dos cosas que antes vivían separadas:
+/// las tarjetas del panel y la pantalla que se abre al tocar una. El shell
+/// tenía su propio `switch` por clave, y agregar "Equipo técnico" a esta
+/// lista sin agregarlo allá hizo que el módulo abriera **en blanco**: el
+/// `switch` caía en su caso por defecto, que devuelve un widget vacío, sin
+/// error ni aviso de ninguna clase.
+///
+/// Ya no hay un segundo mapa que mantener: quien agregue un módulo aquí lo
+/// agrega en todas partes.
+List<AdminModuleData> adminModules(AuthProvider auth) => [
+  AdminModuleData(
+    icon: LucideIcons.users,
+    title: 'Equipos',
+    subtitle: 'Crear equipos y asignar trabajadores.',
+    moduleKey: 'grupos',
+    accentColor: const Color(0xFF43C97A),
+    builder: (showAppBar) => GroupsPage(showAppBar: showAppBar),
+    requiredPermission: AppPermissions.manageTeams,
+  ),
+  AdminModuleData(
+    icon: LucideIcons.tag,
+    title: 'Tipos de tarea',
+    subtitle: 'Catálogo de tipos de tarea y colores.',
+    moduleKey: 'tiposTarea',
+    accentColor: const Color(0xFF4FA3F7),
+    builder: (showAppBar) => TaskTypesPage(showAppBar: showAppBar),
+    requiredPermission: AppPermissions.manageCatalogs,
+  ),
+  AdminModuleData(
+    icon: LucideIcons.listChecks,
+    title: 'Estados',
+    subtitle: 'Estados disponibles para las tareas.',
+    moduleKey: 'estados',
+    accentColor: const Color(0xFFB388F5),
+    builder: (showAppBar) => StatusesPage(showAppBar: showAppBar),
+    requiredPermission: AppPermissions.manageCatalogs,
+  ),
+  AdminModuleData(
+    icon: LucideIcons.clock,
+    title: 'Horarios disponibles',
+    subtitle: 'Horas habilitadas para agendar tareas.',
+    moduleKey: 'horarios',
+    accentColor: const Color(0xFFD4AF37),
+    builder: (showAppBar) => AvailableHoursPage(showAppBar: showAppBar),
+    requiredPermission: AppPermissions.manageCatalogs,
+  ),
+  AdminModuleData(
+    icon: LucideIcons.settings,
+    title: 'Usuarios',
+    subtitle: 'Roles, equipos, contraseñas y dispositivos.',
+    moduleKey: 'usuarios',
+    accentColor: const Color(0xFF26C6DA),
+    builder: (showAppBar) => UsersPage(showAppBar: showAppBar),
+    requiredPermission: AppPermissions.manageUsers,
+  ),
+  AdminModuleData(
+    icon: LucideIcons.contact,
+    title: 'Clientes',
+    subtitle: 'Ficha, teléfono e historial de cada cliente.',
+    moduleKey: 'clientes',
+    accentColor: const Color(0xFFE67E9C),
+    builder: (showAppBar) => ClientsPage(showAppBar: showAppBar),
+    requiredPermission: AppPermissions.manageClients,
+  ),
+  AdminModuleData(
+    icon: LucideIcons.userCog,
+    title: 'Equipo técnico',
+    subtitle: 'A quién se le asignan los requerimientos.',
+    moduleKey: 'desarrolladores',
+    accentColor: const Color(0xFF7C5CD6),
+    builder: (showAppBar) => DevelopersPage(showAppBar: showAppBar),
+    requiredPermission: AppPermissions.manageRequirements,
+  ),
+].where((m) => auth.hasPermission(m.requiredPermission)).toList();
+
+/// El módulo de esa clave, o `null` si no existe o el usuario no lo tiene.
+AdminModuleData? adminModuleByKey(AuthProvider auth, String key) {
+  for (final m in adminModules(auth)) {
+    if (m.moduleKey == key) return m;
+  }
+  return null;
+}
+
 // ── Data ──────────────────────────────────────────────────────────────────────
 
-class _AdminModuleData {
-  const _AdminModuleData({
+class AdminModuleData {
+  const AdminModuleData({
     required this.icon,
     required this.title,
     required this.subtitle,
@@ -328,7 +367,11 @@ class _AdminModuleData {
   final String subtitle;
   final String moduleKey;
   final Color accentColor;
-  final WidgetBuilder builder;
+
+  /// Construye la pantalla del módulo. Recibe si debe traer su propia barra
+  /// superior: suelta la trae, embebida dentro del panel no — ahí el panel ya
+  /// pone la suya con la miga de pan.
+  final Widget Function(bool showAppBar) builder;
 
   /// One of [AppPermissions] — a super_admin always has every permission;
   /// a scoped admin_equipo only sees this module if it's on for them.

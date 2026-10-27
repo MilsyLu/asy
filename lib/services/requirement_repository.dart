@@ -119,6 +119,8 @@ class RequirementRepository {
     required String createdById,
     required String createdByName,
     DateTime? receivedAt,
+    String? supportCaseId,
+    int? supportCaseNumber,
   }) async {
     final ref = _collection.doc();
     final cuando = receivedAt ?? DateTime.now();
@@ -146,6 +148,8 @@ class RequirementRepository {
         'developerId': developerId,
         'developerName': developerName,
         'qaNotes': '',
+        'supportCaseId': supportCaseId,
+        'supportCaseNumber': supportCaseNumber,
         // Los tres que más se olvidaban en la hoja. Aquí no se preguntan:
         // los pone la app, así que no pueden faltar.
         'receivedAt': Timestamp.fromDate(cuando),
@@ -159,7 +163,10 @@ class RequirementRepository {
     await addEvent(
       ref.id,
       type: RequirementEvent.creado,
-      text: 'Requerimiento creado.',
+      text: supportCaseNumber == null
+          ? 'Requerimiento creado.'
+          : 'Requerimiento creado desde el caso de soporte '
+                'CS-${supportCaseNumber.toString().padLeft(4, '0')}.',
       authorId: createdById,
       authorName: createdByName,
     );

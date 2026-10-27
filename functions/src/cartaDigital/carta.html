@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Carta __NOMBRE__</title>
+<meta name="description" content="Carta de __NOMBRE__: platos, fotos y precios.">
+<meta property="og:title" content="Carta __NOMBRE__">
+<meta property="og:description" content="Platos, fotos y precios.">
+__OG_IMAGE__
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Carta de restaurante de solo consulta: portada con la marca, barra de categorías fija, filas de plato con foto a la derecha, ficha al tocar.
+   --brand es el color que el restaurante eligió en VinApp; se usa tal cual, solo como relleno. */
+:root{
+  --bg:#f6f8f8; --surface:#ffffff; --ink:#1a2b2a; --muted:#5f6f6e; --line:#dfe6e5;
+  --brand:__COLOR__; --on-brand:__ON_COLOR__;
+  --brand-soft:color-mix(in srgb, var(--brand) 22%, var(--surface));
+  --shade:rgba(15,25,25,.55);
+  --display:"Young Serif","Georgia","Times New Roman",serif;
+  --body:"Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --r-s:10px; --r-m:16px; --r-l:24px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#101716; --surface:#172120; --ink:#e7efee; --muted:#9db0ad; --line:#263533;
+  --shade:rgba(0,0,0,.65); color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+img{max-width:100%}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.wrap{max-width:1120px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* Portada */
+.cover{max-width:1120px;margin:0 auto}
+.cover img{display:block;width:100%;height:clamp(150px,32vw,300px);object-fit:cover;object-position:100% 50%}
+@media (min-width:1120px){.cover img{border-radius:0 0 var(--r-l) var(--r-l)}}
+header.wrap{padding-top:18px}
+.cover:not([hidden]) + header.wrap{padding-top:0}
+.brand{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start}
+.logo{width:92px;height:92px;border-radius:50%;background:#fff;border:4px solid var(--bg);object-fit:cover;box-shadow:0 6px 18px rgba(0,0,0,.12)}
+.cover:not([hidden]) + header .logo{margin-top:-46px}
+.brand-text{min-width:0;padding-top:14px}
+h1{font-family:var(--display);font-weight:400;font-size:clamp(32px,6vw,46px);line-height:1.05;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.facts{display:flex;flex-wrap:wrap;gap:8px 18px;margin:16px 0 0;padding:0;list-style:none;color:var(--muted);font-size:14px}
+.facts li{display:flex;align-items:center;gap:7px}
+.facts svg{width:16px;height:16px;flex:none;color:var(--ink)}
+.pill{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:13px;padding:3px 10px;border-radius:999px;background:var(--brand-soft);color:var(--ink)}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.pill.closed{background:transparent;border:1px solid var(--line);color:var(--muted)}
+.note{margin:16px 0 0;font-size:13.5px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-m);padding:10px 14px;display:flex;gap:10px;align-items:flex-start}
+.note svg{width:18px;height:18px;flex:none;color:var(--ink);margin-top:1px}
+
+/* Barra fija: buscador + categorías */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);margin-top:22px;border-bottom:1px solid var(--line)}
+.bar .wrap{display:flex;flex-direction:column;gap:10px;padding-block:12px 0}
+.search{position:relative}
+.search svg{position:absolute;left:14px;top:50%;translate:0 -50%;width:18px;height:18px;color:var(--muted);pointer-events:none}
+.search input{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:10px 40px 10px 42px;outline:none;-webkit-appearance:none;appearance:none}
+.search input::-webkit-search-cancel-button{display:none}
+.search input:focus-visible{border-color:var(--ink);box-shadow:0 0 0 3px var(--brand-soft)}
+.search input::placeholder{color:var(--muted)}
+.clear{position:absolute;right:6px;top:50%;translate:0 -50%;width:32px;height:32px;border:0;border-radius:50%;background:transparent;color:var(--muted);font-size:20px;cursor:pointer;display:grid;place-items:center}
+.clear:focus-visible{outline:2px solid var(--ink)}
+.chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:10px;margin:0 calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding-inline:max(16px,env(safe-area-inset-left,0px))}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;font:inherit;font-size:14px;font-weight:500;color:var(--muted);background:transparent;border:1px solid var(--line);border-radius:999px;padding:6px 13px;cursor:pointer;white-space:nowrap;transition:background .15s,color .15s,border-color .15s}
+.chip:hover{color:var(--ink);border-color:var(--brand)}
+.chip[aria-current="true"]{background:var(--brand);border-color:var(--brand);color:var(--on-brand);font-weight:600}
+.chip:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+/* Secciones y platos */
+main{padding-block:8px 40px}
+section{scroll-margin-top:122px;padding-top:26px}
+.sec-head{display:flex;align-items:baseline;gap:10px;margin-bottom:12px}
+h2{font-family:var(--display);font-weight:400;font-size:clamp(23px,3.4vw,28px);line-height:1.15;margin:0;text-wrap:balance}
+.count{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));gap:10px}
+.dish{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:start;text-align:left;font:inherit;color:inherit;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-m);padding:14px;cursor:pointer;width:100%;transition:border-color .15s,transform .15s}
+.dish:hover{border-color:var(--brand)}
+.dish:active{transform:scale(.99)}
+.dish:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.dish-text{min-width:0;display:flex;flex-direction:column;gap:4px;min-height:100%}
+.dish-name{font-weight:600;font-size:16px;line-height:1.3;text-wrap:pretty}
+.dish-desc{font-size:13.5px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.price{margin-top:auto;padding-top:6px;font-weight:700;font-size:15.5px;font-variant-numeric:tabular-nums;display:flex;gap:8px;align-items:baseline}
+.price s{font-weight:500;font-size:13px;color:var(--muted)}
+.thumb{width:104px;height:104px;border-radius:var(--r-s);object-fit:cover;background:var(--brand-soft);display:block}
+.empty{padding-block:48px;text-align:center;color:var(--muted)}
+.empty strong{display:block;font-family:var(--display);font-weight:400;font-size:22px;color:var(--ink);margin-bottom:4px}
+
+footer{border-top:1px solid var(--line);color:var(--muted);font-size:13.5px}
+footer .wrap{padding-block:24px 36px;display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))}
+footer h3{font-family:var(--display);font-weight:400;color:var(--ink);font-size:17px;margin:0 0 6px}
+.hours{margin:0;display:grid;grid-template-columns:auto 1fr;gap:2px 14px;font-variant-numeric:tabular-nums}
+.hours dt{color:var(--ink)}
+.hours dd{margin:0}
+.hours .today{font-weight:700;color:var(--ink)}
+.stamp{grid-column:1/-1;font-size:12.5px}
+
+/* Ficha del plato */
+dialog{border:0;padding:0;background:var(--surface);color:var(--ink);width:min(560px,100%);max-height:min(92dvh,860px);border-radius:var(--r-l);overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.25)}
+dialog::backdrop{background:var(--shade)}
+dialog[open]{display:flex;flex-direction:column;animation:rise .22s cubic-bezier(.2,.8,.2,1)}
+@keyframes rise{from{transform:translateY(16px);opacity:.4}}
+.d-img{width:100%;aspect-ratio:4/3;max-height:min(52dvh,420px);object-fit:cover;display:block;background:var(--brand-soft)}
+@media (max-width:640px){
+  dialog{margin:auto 0 0;max-width:100%;border-radius:var(--r-l) var(--r-l) 0 0;max-height:90dvh}
+  dialog[open]{animation-name:sheet}
+  .d-img{max-height:38dvh}
+  @keyframes sheet{from{transform:translateY(40%)}}
+}
+.d-scroll{overflow-y:auto;min-height:0;flex:1;overscroll-behavior:contain}
+.d-body{padding:20px 22px calc(24px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px}
+.d-cat{font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.d-name{font-family:var(--display);font-weight:400;font-size:26px;line-height:1.15;margin:0;text-wrap:balance}
+.d-desc{margin:0;color:var(--muted);white-space:pre-line}
+.d-price{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.d-price s{font-size:15px;font-weight:500;color:var(--muted);margin-left:8px}
+.d-hint{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px;margin-top:4px}
+.has-opts{font-size:12.5px;font-weight:500;color:var(--muted)}
+
+/* Adiciones y combinaciones del plato, solo para leer */
+.groups{display:flex;flex-direction:column;gap:16px;margin-top:6px}
+.groups h3{font-size:15px;font-weight:700;margin:0}
+.grp-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-bottom:6px}
+.grp-name{font-weight:600}
+.tag{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.tag.req{background:var(--brand-soft);border-color:transparent;color:var(--ink)}
+.grp-rule{font-size:12.5px;color:var(--muted);margin-left:auto}
+.opts{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:12px}
+.opts li{display:flex;justify-content:space-between;gap:12px;padding:9px 12px;font-size:14px}
+.opts li + li{border-top:1px solid var(--line)}
+.opt-price{flex:none;color:var(--muted);font-variant-numeric:tabular-nums}
+.opt-price.plus{color:var(--ink);font-weight:600}
+.close{position:absolute;top:12px;right:12px;width:38px;height:38px;border-radius:50%;border:0;background:var(--surface);color:var(--ink);font-size:22px;line-height:1;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.18);display:grid;place-items:center;z-index:1}
+.close:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="cover" id="cover" hidden><img id="coverImg" alt=""></div>
+<header class="wrap">
+  <div class="brand">
+    <img class="logo" id="logo" alt="" hidden>
+    <div class="brand-text"><h1 id="name"></h1></div>
+  </div>
+  <ul class="facts">
+    <li id="statusRow" hidden><span class="pill" id="status"></span> <span id="todayHours"></span></li>
+    <li id="addressRow" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg><span id="address"></span></li>
+    <li id="payRow" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20M6 15h4"/></svg><span id="pay"></span></li>
+  </ul>
+  <p class="note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><span id="noteText">Esta es nuestra carta para consultar. Cuando sepa qué quiere, pídaselo a su mesero.</span></p>
+</header>
+
+<div class="bar">
+  <div class="wrap">
+    <label class="search" for="q">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="Buscar en la carta" autocomplete="off" aria-label="Buscar en la carta">
+      <button class="clear" id="clear" type="button" aria-label="Borrar búsqueda" hidden>×</button>
+    </label>
+    <nav class="chips" id="chips" aria-label="Categorías"></nav>
+  </div>
+</div>
+
+<main class="wrap" id="menu"></main>
+<div class="wrap empty" id="empty" hidden><strong>No encontramos ese plato</strong>Pruebe con otra palabra.</div>
+
+<footer>
+  <div class="wrap">
+    <div id="hoursBox" hidden><h3>Horario</h3><dl class="hours" id="hours"></dl></div>
+    <div id="visitBox" hidden><h3>Visítenos</h3><span id="address2"></span><span id="phoneRow" hidden><br>WhatsApp <span id="phone"></span></span></div>
+    <div><h3>Precios</h3>En pesos colombianos. Los precios pueden cambiar sin previo aviso.</div>
+    <div class="stamp" id="stamp"></div>
+  </div>
+</footer>
+
+<dialog id="sheet" aria-labelledby="dName">
+  <button class="close" id="close" type="button" aria-label="Cerrar">×</button>
+  <div class="d-scroll">
+  <img class="d-img" id="dImg" alt="">
+  <div class="d-body">
+    <div class="d-cat" id="dCat"></div>
+    <h2 class="d-name" id="dName"></h2>
+    <div class="d-price" id="dPrice"></div>
+    <p class="d-desc" id="dDesc"></p>
+    <div class="groups" id="dGroups" hidden></div>
+    <div class="d-hint" id="dHint">Para pedirlo, dígaselo a su mesero.</div>
+  </div>
+  </div>
+</dialog>
+
+<script>
+const DATA = __DATA__;
+
+const $ = s => document.querySelector(s);
+const money = n => "$" + Math.round(n).toLocaleString("es-CO");
+const fold = s => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+// Los nombres vienen de VinApp en mayúsculas o minúsculas sueltas; se arreglan solo las mayúsculas, no las palabras.
+const tidy = s => {
+  s = String(s || "").trim().replace(/\s+/g, " ");
+  if (s === s.toUpperCase()) s = s.toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
+// Descripciones como "Tortas" o "Bebidas" solo repiten la categoría: no se muestran.
+const realDesc = d => { d = (d || "").trim(); return d.split(/\s+/).length > 2 || /[.,]/.test(d) ? d : ""; };
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+const co = DATA.company;
+const brandName = tidy(co.name).replace(/(^|\s)(\S)/g, (m, a, b) => a + b.toUpperCase());
+$("#name").textContent = brandName;
+if (co.cover) { $("#coverImg").src = co.cover; $("#coverImg").alt = brandName; $("#cover").hidden = false; }
+if (co.logo) { $("#logo").src = co.logo; $("#logo").alt = "Logo de " + brandName; $("#logo").hidden = false; }
+
+const cats = DATA.menu.filter(c => c.products.length).map((c, i) => ({
+  id: "c" + i, label: tidy(c.name),
+  items: c.products.map(p => ({...p, name: tidy(p.name), desc: realDesc(p.desc), key: fold(p.name + " " + p.desc + " " + c.name)}))
+}));
+
+// Carta
+$("#menu").innerHTML = cats.map(c => `
+  <section id="${c.id}" aria-labelledby="${c.id}h">
+    <div class="sec-head"><h2 id="${c.id}h">${esc(c.label)}</h2><span class="count">${c.items.length}</span></div>
+    <div class="grid">${c.items.map((p, j) => `
+      <button class="dish" type="button" data-c="${c.id}" data-j="${j}">
+        <span class="dish-text">
+          <span class="dish-name">${esc(p.name)}</span>
+          ${p.desc ? `<span class="dish-desc">${esc(p.desc)}</span>` : ""}
+          <span class="price">${money(p.price)}${p.old > p.price ? `<s>${money(p.old)}</s>` : ""}${p.groups?.length ? `<span class="has-opts">· Con opciones</span>` : ""}</span>
+        </span>
+        ${p.img ? `<img class="thumb" src="${esc(p.img)}" alt="" loading="lazy" width="104" height="104">` : ""}
+      </button>`).join("")}
+    </div>
+  </section>`).join("");
+
+$("#chips").innerHTML = cats.map(c => `<button class="chip" type="button" data-t="${c.id}">${esc(c.label)}</button>`).join("");
+
+// Categorías: tocar lleva a la sección; al bajar, se marca la que está en pantalla
+const chipsEl = $("#chips");
+const chipFor = id => chipsEl.querySelector(`[data-t="${id}"]`);
+let current = null;
+function mark(id) {
+  if (id === current) return;
+  current = id;
+  chipsEl.querySelectorAll(".chip").forEach(b => b.setAttribute("aria-current", b.dataset.t === id));
+  const b = chipFor(id);
+  if (b) chipsEl.scrollTo({left: b.offsetLeft - chipsEl.clientWidth / 2 + b.offsetWidth / 2, behavior: "smooth"});
+}
+chipsEl.addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  document.getElementById(b.dataset.t).scrollIntoView({block: "start"});
+  mark(b.dataset.t);
+});
+function spy() {
+  const line = $(".bar").getBoundingClientRect().bottom + 40;
+  let id = null;
+  for (const s of document.querySelectorAll("main section:not([hidden])")) {
+    if (s.getBoundingClientRect().top <= line) id = s.id; else break;
+  }
+  mark(id || (document.querySelector("main section:not([hidden])") || {}).id);
+}
+addEventListener("scroll", () => requestAnimationFrame(spy), {passive: true});
+spy();
+
+// Buscador
+const q = $("#q");
+function filter() {
+  const t = fold(q.value.trim());
+  $("#clear").hidden = !t;
+  let any = false;
+  cats.forEach(c => {
+    const sec = document.getElementById(c.id);
+    let n = 0;
+    sec.querySelectorAll(".dish").forEach(el => {
+      const ok = !t || c.items[el.dataset.j].key.includes(t);
+      el.hidden = !ok; if (ok) n++;
+    });
+    sec.hidden = !n; chipFor(c.id).hidden = !n;
+    sec.querySelector(".count").textContent = n;
+    any ||= n > 0;
+  });
+  $("#empty").hidden = any;
+  current = null; spy();
+}
+q.addEventListener("input", filter);
+$("#clear").addEventListener("click", () => { q.value = ""; filter(); q.focus(); });
+
+// Ficha del plato
+const sheet = $("#sheet");
+$("#menu").addEventListener("click", e => {
+  const el = e.target.closest(".dish"); if (!el) return;
+  const c = cats.find(x => x.id === el.dataset.c), p = c.items[el.dataset.j];
+  const img = $("#dImg");
+  img.hidden = !p.img; if (p.img) { img.src = p.img; img.alt = p.name; }
+  $("#dCat").textContent = c.label;
+  $("#dName").textContent = p.name;
+  $("#dDesc").textContent = p.desc; $("#dDesc").hidden = !p.desc;
+  $("#dPrice").innerHTML = money(p.price) + (p.old > p.price ? `<s>${money(p.old)}</s>` : "");
+  const groups = p.groups || [];
+  $("#dGroups").hidden = !groups.length;
+  $("#dGroups").innerHTML = groups.length ? `<h3>Opciones</h3>` + groups.map(g => {
+    const rule = g.max > 1 ? (g.required ? `Elige hasta ${g.max}` : `Máximo ${g.max}`) : g.max === 1 ? (g.required ? "Elige 1" : "Máximo 1") : "";
+    return `<div>
+      <div class="grp-head">
+        <span class="grp-name">${esc(tidy(g.name))}</span>
+        <span class="tag${g.required ? " req" : ""}">${g.required ? "Obligatorio" : "Opcional"}</span>
+        ${rule ? `<span class="grp-rule">${rule}</span>` : ""}
+      </div>
+      <ul class="opts">${g.options.map(o => `<li><span>${esc(tidy(o.name))}</span>${o.price > 0 ? `<span class="opt-price plus">+${money(o.price)}</span>` : `<span class="opt-price">Sin costo</span>`}</li>`).join("")}</ul>
+    </div>`;
+  }).join("") : "";
+  sheet.showModal();
+  sheet.querySelector(".d-scroll").scrollTop = 0;
+});
+$("#close").addEventListener("click", () => sheet.close());
+sheet.addEventListener("click", e => { if (e.target === sheet) sheet.close(); });
+
+// Horario y estado, calculados en hora de Colombia (UTC-5) sin importar dónde esté el visitante
+const DAYS = ["Domingo","Lunes","Martes","Miercoles","Jueves","Viernes","Sabado"];
+const SHOW = {Miercoles:"Miércoles", Sabado:"Sábado"};
+const sched = {};
+(co.horarios || []).forEach(h => {
+  const a = h.manana?.apertura || h.tarde?.apertura, b = h.tarde?.cierre || h.manana?.cierre;
+  if (a && b) sched[h.dia] = [a, b];
+});
+if (Object.keys(sched).length) {
+  const ampm = t => { let [h, m] = t.split(":").map(Number); const s = h < 12 ? "a. m." : "p. m."; h = h % 12 || 12; return h + (m ? ":" + String(m).padStart(2, "0") : "") + " " + s; };
+  const toMin = t => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+  const now = new Date(Date.now() - 5 * 3600e3);
+  const today = DAYS[now.getUTCDay()], mins = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const th = sched[today];
+  const open = th && mins >= toMin(th[0]) && mins < toMin(th[1]);
+  const st = $("#status");
+  st.textContent = open ? "Abierto ahora" : "Cerrado ahora";
+  st.classList.toggle("closed", !open);
+  $("#todayHours").textContent = th ? `Hoy ${ampm(th[0])} – ${ampm(th[1])}` : "Hoy no abrimos";
+  $("#statusRow").hidden = false;
+  $("#hours").innerHTML = [1,2,3,4,5,6,0].map(i => {
+    const d = DAYS[i], h = sched[d], cls = d === today ? ' class="today"' : "";
+    return `<dt${cls}>${SHOW[d] || d}</dt><dd${cls}>${h ? ampm(h[0]) + " – " + ampm(h[1]) : "Cerrado"}</dd>`;
+  }).join("");
+  $("#hoursBox").hidden = false;
+}
+if (co.address) {
+  $("#address").textContent = $("#address2").textContent = co.address;
+  $("#addressRow").hidden = false; $("#visitBox").hidden = false;
+}
+const ph = String(co.phone || "").replace(/^57/, "");
+if (ph.length === 10) {
+  $("#phone").textContent = ph.replace(/(\d{3})(\d{3})(\d{4})/, "$1 $2 $3");
+  $("#phoneRow").hidden = false; $("#visitBox").hidden = false;
+}
+if (co.pagos?.length) {
+  const p = co.pagos.map(x => x.toLowerCase());
+  p[0] = p[0].charAt(0).toUpperCase() + p[0].slice(1);
+  $("#pay").textContent = p.length > 1 ? p.slice(0, -1).join(", ") + " y " + p.at(-1) : p[0];
+  $("#payRow").hidden = false;
+}
+// La carta de mesa se lee sentado en el restaurante; la de domicilio, en
+// casa, donde no hay mesero a quien pedirle.
+if (DATA.precios !== "mesa") {
+  const wa = ph.length === 10 ? " al WhatsApp " + ph.replace(/(\d{3})(\d{3})(\d{4})/, "$1 $2 $3") : "";
+  $("#noteText").textContent = "Esta es nuestra carta para consultar. Para pedir a domicilio, escríbanos" + (wa || " por WhatsApp") + ".";
+  $("#dHint").textContent = "Para pedirlo a domicilio, escríbanos" + (wa || " por WhatsApp") + ".";
+}
+
+const when = new Date(DATA.generadoEn);
+$("#stamp").textContent = "Carta actualizada el " + when.toLocaleDateString("es-CO", {day: "numeric", month: "long", year: "numeric", timeZone: "America/Bogota"}) + ".";
+</script>
+</body>
+</html>

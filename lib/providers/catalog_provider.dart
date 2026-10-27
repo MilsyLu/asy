@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../core/constants/app_constants.dart';
+import '../core/constants/requirement_constants.dart';
 import '../core/utils/report_metrics.dart' show TaskCatalog;
 import '../models/app_user.dart';
 import '../models/available_hour_model.dart';
@@ -49,6 +50,10 @@ class CatalogProvider extends ChangeNotifier implements TaskCatalog {
       clients = v;
       notifyListeners();
     });
+    _reqModulesSub = _repository.watchRequirementModules().listen((v) {
+      requirementModulesExtra = v;
+      notifyListeners();
+    });
   }
 
   final CatalogRepository _repository;
@@ -60,6 +65,7 @@ class CatalogProvider extends ChangeNotifier implements TaskCatalog {
   late final StreamSubscription<List<AvailableHourModel>> _hoursSub;
   late final StreamSubscription<List<AppUser>> _usersSub;
   late final StreamSubscription<List<ClientModel>> _clientsSub;
+  late final StreamSubscription<List<String>> _reqModulesSub;
 
   List<GroupModel> groups = [];
   List<TaskTypeModel> taskTypes = [];
@@ -67,6 +73,29 @@ class CatalogProvider extends ChangeNotifier implements TaskCatalog {
   List<AvailableHourModel> availableHours = [];
   List<AppUser> users = [];
   List<ClientModel> clients = [];
+
+  /// Los módulos de requerimiento que agregó el equipo, sin los de siempre.
+  List<String> requirementModulesExtra = [];
+
+  /// Todos los módulos, en el orden en que se muestran.
+  ///
+  /// "Otros" va de último aunque alfabéticamente no le toque: es el cajón de
+  /// sastre y arriba invita a no pensar cuál es el módulo de verdad.
+  List<String> get requirementModules {
+    const otros = RequirementModule.otros;
+    final base = [
+      for (final m in RequirementModule.all)
+        if (m != otros) m,
+    ];
+    final extras = [
+      for (final m in requirementModulesExtra)
+        if (m != otros && !base.contains(m)) m,
+    ];
+    return [...base, ...extras, otros];
+  }
+
+  Future<void> addRequirementModule(String name) =>
+      _repository.addRequirementModule(name);
 
   bool get isReady =>
       groups.isNotEmpty ||
@@ -206,6 +235,7 @@ class CatalogProvider extends ChangeNotifier implements TaskCatalog {
     _hoursSub.cancel();
     _usersSub.cancel();
     _clientsSub.cancel();
+    _reqModulesSub.cancel();
     super.dispose();
   }
 }

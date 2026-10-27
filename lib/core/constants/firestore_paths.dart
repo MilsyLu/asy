@@ -24,6 +24,10 @@ class FirestoreCollections {
   static const String requirementCounters = 'requirementCounters';
   static const String requirementEvents = 'events';
 
+  /// Módulos que el equipo agregó desde el formulario, además de los
+  /// que trae [RequirementModule.all].
+  static const String requirementModules = 'requirementModules';
+
   /// El equipo técnico al que se asignan los requerimientos. No son usuarios
   /// de CheCu: están del otro lado, construyendo VinApp.
   static const String developers = 'developers';

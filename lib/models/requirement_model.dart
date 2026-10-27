@@ -107,6 +107,8 @@ class RequirementModel {
     this.developerId,
     this.developerName = '',
     this.qaNotes = '',
+    this.supportCaseId,
+    this.supportCaseNumber,
     required this.receivedAt,
     required this.receivedById,
     required this.receivedByName,
@@ -155,6 +157,15 @@ class RequirementModel {
   /// Lo que QA va anotando mientras lo prueba.
   final String qaNotes;
 
+  /// El caso de soporte del que nació, si nació de uno.
+  ///
+  /// Muchos requerimientos empiezan como un caso: el cliente reporta algo, se
+  /// revisa y resulta que no es una falla sino algo que la aplicación no
+  /// hace todavía. Antes eso se volvía a escribir a mano en la hoja y se
+  /// perdía el hilo — quién lo pidió, cuándo, qué se había intentado ya.
+  final String? supportCaseId;
+  final int? supportCaseNumber;
+
   final DateTime receivedAt;
   final String receivedById;
   final String receivedByName;
@@ -162,6 +173,13 @@ class RequirementModel {
   final DateTime? updatedAt;
 
   bool get estaAsignado => developerId != null && developerId!.isNotEmpty;
+
+  bool get vieneDeUnCaso => supportCaseId != null && supportCaseId!.isNotEmpty;
+
+  /// Cómo se lee el caso de origen: CS-0042.
+  String get codigoCaso => supportCaseNumber == null
+      ? ''
+      : 'CS-${supportCaseNumber.toString().padLeft(4, '0')}';
   bool get esInterno => origin == RequirementOrigin.interno;
   bool get estaAbierto => RequirementStatus.isOpen(status);
 
@@ -202,6 +220,8 @@ class RequirementModel {
       developerId: m['developerId'] as String?,
       developerName: m['developerName'] as String? ?? '',
       qaNotes: m['qaNotes'] as String? ?? '',
+      supportCaseId: m['supportCaseId'] as String?,
+      supportCaseNumber: (m['supportCaseNumber'] as num?)?.toInt(),
       receivedAt:
           (m['receivedAt'] as Timestamp?)?.toDate() ??
           (m['createdAt'] as Timestamp?)?.toDate() ??

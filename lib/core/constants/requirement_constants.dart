@@ -113,6 +113,14 @@ abstract final class RequirementSource {
 /// distintas del mismo desplegable — el mismo módulo escrito de dos formas.
 /// Aquí va una sola.
 abstract final class RequirementModule {
+  /// El cajón de sastre. Tiene nombre propio porque hay que poder ponerlo de
+  /// último en la lista y saber cuál es sin compararlo contra una cadena
+  /// suelta escrita en tres sitios.
+  static const String otros = 'Otros';
+
+  /// Los que venían en la hoja. El equipo puede agregar más desde el
+  /// formulario (ver `CatalogProvider.requirementModules`); éstos son la
+  /// base que toda empresa tiene desde el primer día.
   static const List<String> all = [
     'Inventario',
     'Productos',
@@ -127,7 +135,7 @@ abstract final class RequirementModule {
     'Órdenes',
     'Usuarios',
     'Domicilios',
-    'Otros',
+    otros,
   ];
 }
 

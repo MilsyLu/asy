@@ -22,7 +22,10 @@
   "hosting": {
     "public": "build/web",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [{ "source": "**", "destination": "/index.html" }],
+    "rewrites": [
+      { "source": "/carta/**", "function": { "functionId": "verCarta", "region": "us-central1" } },
+      { "source": "**", "destination": "/index.html" }
+    ],
     "headers": [
       {
         "source": "/flutter_service_worker.js",

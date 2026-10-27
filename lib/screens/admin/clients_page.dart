@@ -17,6 +17,9 @@ import '../../widgets/confirm_dialog.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/responsive_sheet.dart';
 import '../../widgets/side_panel_shell.dart';
+import '../../widgets/compact_panel_scope.dart';
+import 'client_activity_section.dart';
+import 'client_stats_panel.dart';
 
 /// Admin: CRUD for `clients`. Not team-scoped — `manageClients` is a flat
 /// permission (see AppPermissions), so every admin who has it sees/edits
@@ -160,6 +163,7 @@ class _ClientsPageState extends State<ClientsPage> {
     showResponsiveSheet<void>(
       context,
       desktopMaxWidth: 380,
+      scrollable: false,
       contentBuilder: (sheetCtx) {
         final colors = sheetCtx.colors;
         return SafeArea(
@@ -193,53 +197,66 @@ class _ClientsPageState extends State<ClientsPage> {
                 ),
                 const SizedBox(height: 16),
                 Divider(color: colors.divider, height: 1),
-                const SizedBox(height: 16),
-                FutureBuilder(
-                  future: historyFuture,
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Center(
-                          child: SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        ),
-                      );
-                    }
-                    final history = snapshot.data!;
-                    return Row(
+                // Nombre arriba y Cerrar abajo quedan fijos; solo se desplaza
+                // lo del medio, y solo cuando no cabe.
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Expanded(
-                          child: _HistoryStatBox(
-                            label: 'Tareas',
-                            value: '${history.total}',
-                            color: colors.primary,
-                          ),
+                        FutureBuilder(
+                          future: historyFuture,
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData) {
+                              return const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: Center(
+                                  child: SizedBox(
+                                    height: 18,
+                                    width: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                ),
+                              );
+                            }
+                            final history = snapshot.data!;
+                            return Row(
+                              children: [
+                                Expanded(
+                                  child: _HistoryStatBox(
+                                    label: 'Tareas',
+                                    value: '${history.total}',
+                                    color: colors.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _HistoryStatBox(
+                                    label: 'Completadas',
+                                    value: '${history.completed}',
+                                    color: colors.success,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _HistoryStatBox(
+                                    label: 'Reprogramadas',
+                                    value: '${history.rescheduled}',
+                                    color: colors.error,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _HistoryStatBox(
-                            label: 'Completadas',
-                            value: '${history.completed}',
-                            color: colors.success,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _HistoryStatBox(
-                            label: 'Reprogramadas',
-                            value: '${history.rescheduled}',
-                            color: colors.error,
-                          ),
-                        ),
+                        const SizedBox(height: 20),
+                        ClientActivitySection(client: client),
                       ],
-                    );
-                  },
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 4),
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
@@ -419,7 +436,27 @@ class _ClientsPageState extends State<ClientsPage> {
                   // Scrollable: avoids the confirm button being cut off
                   // below the fold when the panel is taller than the
                   // available height (see same fix in users_page.dart).
-                  child: SizedBox(width: 320, child: SingleChildScrollView(child: panel)),
+                  child: SizedBox(
+                    width: 320,
+                    // Letra y campos un poco más pequeños para que "Nuevo
+                    // cliente" y el Resumen quepan juntos sin barra de
+                    // desplazamiento. El scroll sigue ahí, sin barra, solo
+                    // para pantallas muy bajas donde de verdad no caben.
+                    child: CompactPanelScope(
+                      child: ScrollConfiguration(
+                        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                        child: const SingleChildScrollView(
+                          child: Column(
+                            children: [
+                              panel,
+                              SizedBox(height: 10),
+                              ClientStatsPanel(compact: true),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             );
@@ -435,7 +472,9 @@ class _ClientsPageState extends State<ClientsPage> {
                 const SizedBox(height: 16),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: panel,
+                  child: Column(
+                    children: [panel, SizedBox(height: 12), ClientStatsPanel()],
+                  ),
                 ),
               ],
             ),
@@ -1012,6 +1051,8 @@ Future<void> _showClientDetailSheet(
                       );
                     },
                   ),
+                  const SizedBox(height: 16),
+                  ClientActivitySection(client: client),
                   if (canEdit) ...[
                     const SizedBox(height: 20),
                     SizedBox(
