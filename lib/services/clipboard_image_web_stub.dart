@@ -4,7 +4,8 @@
 
 import 'dart:typed_data';
 
-typedef ClipboardImageCallback = void Function(Uint8List bytes, String mediaType);
+typedef ClipboardImageCallback =
+    void Function(Uint8List bytes, String mediaType);
 
 void registerClipboardImageListener(ClipboardImageCallback onImage) {}
 

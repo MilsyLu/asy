@@ -10,9 +10,11 @@ import '../models/empresa_model.dart';
 /// live deactivation) and by the Platform Admin Panel (Michel's own screens,
 /// `lib/screens/platform/`).
 class EmpresaRepository {
-  EmpresaRepository({FirebaseFirestore? firestore, FirebaseFunctions? functions})
-      : _firestore = firestore ?? FirebaseFirestore.instance,
-        _functions = functions ?? FirebaseFunctions.instance;
+  EmpresaRepository({
+    FirebaseFirestore? firestore,
+    FirebaseFunctions? functions,
+  }) : _firestore = firestore ?? FirebaseFirestore.instance,
+       _functions = functions ?? FirebaseFunctions.instance;
 
   final FirebaseFirestore _firestore;
   final FirebaseFunctions _functions;
@@ -43,8 +45,10 @@ class EmpresaRepository {
   /// (firestore.rules restricts `list` on this collection to platform
   /// owners).
   Stream<List<EmpresaModel>> watchAllEmpresas() {
-    return _empresas.orderBy('createdAt', descending: true).snapshots().map(
-        (snap) => snap.docs.map((d) => EmpresaModel.fromDoc(d)).toList());
+    return _empresas
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => EmpresaModel.fromDoc(d)).toList());
   }
 
   /// Creates a new empresa + its first admin account. Returns the new

@@ -9,7 +9,7 @@ import '../models/notification_model.dart';
 /// flips `isRead`.
 class NotificationRepository {
   NotificationRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
 
@@ -22,8 +22,9 @@ class NotificationRepository {
         .where('userId', isEqualTo: userId)
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snap) =>
-            snap.docs.map((d) => NotificationModel.fromDoc(d)).toList());
+        .map(
+          (snap) => snap.docs.map((d) => NotificationModel.fromDoc(d)).toList(),
+        );
   }
 
   /// Live count of unread notifications for [userId], used by the bell badge.

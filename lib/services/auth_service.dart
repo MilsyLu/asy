@@ -14,9 +14,9 @@ class AuthService {
     FirebaseAuth? auth,
     FirebaseFirestore? firestore,
     FirebaseFunctions? functions,
-  })  : _auth = auth ?? FirebaseAuth.instance,
-        _firestore = firestore ?? FirebaseFirestore.instance,
-        _functions = functions ?? FirebaseFunctions.instance;
+  }) : _auth = auth ?? FirebaseAuth.instance,
+       _firestore = firestore ?? FirebaseFirestore.instance,
+       _functions = functions ?? FirebaseFunctions.instance;
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
@@ -128,8 +128,10 @@ class AuthService {
 
   Future<bool> _hasUserProfile(String uid) async {
     try {
-      final doc =
-          await _firestore.collection(FirestoreCollections.users).doc(uid).get();
+      final doc = await _firestore
+          .collection(FirestoreCollections.users)
+          .doc(uid)
+          .get();
       return doc.exists;
     } on FirebaseException catch (e) {
       // `users/{userId}` only grants `get` when the document's empresaId
@@ -234,7 +236,11 @@ class AuthService {
       if (lastLogin == null) {
         streak = 1;
       } else {
-        final lastDay = DateTime(lastLogin.year, lastLogin.month, lastLogin.day);
+        final lastDay = DateTime(
+          lastLogin.year,
+          lastLogin.month,
+          lastLogin.day,
+        );
         final today = DateTime(now.year, now.month, now.day);
         final dayDiff = today.difference(lastDay).inDays;
 
@@ -248,15 +254,11 @@ class AuthService {
 
       if (streak > maxStreak) maxStreak = streak;
 
-      transaction.set(
-        docRef,
-        {
-          'lastLogin': Timestamp.fromDate(now),
-          'streakDays': streak,
-          'maxStreakDays': maxStreak,
-        },
-        SetOptions(merge: true),
-      );
+      transaction.set(docRef, {
+        'lastLogin': Timestamp.fromDate(now),
+        'streakDays': streak,
+        'maxStreakDays': maxStreak,
+      }, SetOptions(merge: true));
     });
   }
 

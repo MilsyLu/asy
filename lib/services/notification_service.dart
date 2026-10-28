@@ -46,7 +46,8 @@ class NotificationPayload {
   }
 
   @override
-  String toString() => 'NotificationPayload(type: $type, taskId: $taskId, caseId: $caseId)';
+  String toString() =>
+      'NotificationPayload(type: $type, taskId: $taskId, caseId: $caseId)';
 }
 
 /// Wraps Firebase Cloud Messaging + flutter_local_notifications.
@@ -99,14 +100,19 @@ class NotificationService {
       // Sprint 7.3.3: must be a monochrome white-on-transparent drawable, not
       // the full-color launcher mipmap — Android renders status-bar icons from
       // the alpha channel only, so a color icon shows up as a solid block.
-      const androidInit = AndroidInitializationSettings('@drawable/ic_notification');
+      const androidInit = AndroidInitializationSettings(
+        '@drawable/ic_notification',
+      );
       const iosInit = DarwinInitializationSettings(
         requestAlertPermission: false,
         requestBadgePermission: false,
         requestSoundPermission: false,
       );
       await _localNotifications.initialize(
-        settings: const InitializationSettings(android: androidInit, iOS: iosInit),
+        settings: const InitializationSettings(
+          android: androidInit,
+          iOS: iosInit,
+        ),
         // Mirrors the web foreground-click path: the notification's
         // `payload` carries the taskId (set below in `.show()`'s
         // `payload:` argument).
@@ -118,7 +124,8 @@ class NotificationService {
       if (Platform.isAndroid) {
         await _localNotifications
             .resolvePlatformSpecificImplementation<
-                AndroidFlutterLocalNotificationsPlugin>()
+              AndroidFlutterLocalNotificationsPlugin
+            >()
             ?.createNotificationChannel(_channel);
       }
     }
@@ -138,7 +145,9 @@ class NotificationService {
     // (Sprint 7.4.3 Parte 1) — forwards to whatever handler is currently
     // registered via [setTokenRefreshHandler] instead of letting callers
     // create their own `.listen()` each time they need to react to it.
-    _messaging.onTokenRefresh.listen((token) => _tokenRefreshHandler?.call(token));
+    _messaging.onTokenRefresh.listen(
+      (token) => _tokenRefreshHandler?.call(token),
+    );
 
     // --- Background/terminated delivery: official Firebase entry point ---
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
@@ -161,7 +170,9 @@ class NotificationService {
         final params = Uri.parse(url).queryParameters;
         final taskId = params['openTask'];
         final caseId = params['openCase'];
-        debugPrint('[WEB_FCM] notification click -> openTask=$taskId openCase=$caseId');
+        debugPrint(
+          '[WEB_FCM] notification click -> openTask=$taskId openCase=$caseId',
+        );
         openNotificationFromData({'taskId': ?taskId, 'caseId': ?caseId});
       });
     }
@@ -187,11 +198,7 @@ class NotificationService {
   /// [initialize] as its own responsibility per the FCM service breakdown
   /// (Sprint 7.1 Part 3).
   Future<void> requestPermissions() async {
-    await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+    await _messaging.requestPermission(alert: true, badge: true, sound: true);
 
     if (!kIsWeb && Platform.isIOS) {
       await _messaging.setForegroundNotificationPresentationOptions(
@@ -253,7 +260,9 @@ class NotificationService {
             },
             onClick: () => openNotificationFromData(message.data),
           );
-          debugPrint('[WEB_FCM] foreground: notification shown via Web Notification API');
+          debugPrint(
+            '[WEB_FCM] foreground: notification shown via Web Notification API',
+          );
         } catch (e) {
           debugPrint('[WEB_FCM] foreground: Notification API error — $e');
         }
@@ -313,7 +322,9 @@ class NotificationService {
   Future<void> deleteToken() async {
     try {
       await _messaging.deleteToken();
-      debugPrint('[WEB_FCM_DIAG] deleteToken() OK — next getToken() will mint a new one');
+      debugPrint(
+        '[WEB_FCM_DIAG] deleteToken() OK — next getToken() will mint a new one',
+      );
     } catch (e) {
       // Non-fatal: if there was nothing cached to delete, getToken() below
       // still does the right thing.
@@ -372,7 +383,9 @@ class NotificationService {
 
     if (kIsWeb) {
       if (token == null) {
-        debugPrint('[WEB_FCM_DIAG] getToken() returned NULL after ${sw.elapsedMilliseconds}ms');
+        debugPrint(
+          '[WEB_FCM_DIAG] getToken() returned NULL after ${sw.elapsedMilliseconds}ms',
+        );
       } else {
         final head = token.substring(0, 12);
         final tail = token.substring(token.length - 8);

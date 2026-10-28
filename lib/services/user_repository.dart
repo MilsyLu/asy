@@ -18,7 +18,7 @@ import '../models/app_user.dart';
 /// empresaId either — only the three list/query methods do.
 class UserRepository {
   UserRepository({this.empresaId, FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
   final String? empresaId;
@@ -47,7 +47,10 @@ class UserRepository {
   }
 
   Stream<List<AppUser>> watchAllUsers() {
-    assert(empresaId != null, 'watchAllUsers() requires a tenant-scoped UserRepository');
+    assert(
+      empresaId != null,
+      'watchAllUsers() requires a tenant-scoped UserRepository',
+    );
     return _collection
         .where('empresaId', isEqualTo: empresaId)
         .orderBy('name')
@@ -91,9 +94,9 @@ class UserRepository {
   /// [AppPermissions]/[AppUser.permissions]. Uses `merge: true` so legacy
   /// documents without the field are upgraded in place.
   Future<void> updatePermissions(String uid, Map<String, bool> permissions) {
-    return _collection
-        .doc(uid)
-        .set({'permissions': permissions}, SetOptions(merge: true));
+    return _collection.doc(uid).set({
+      'permissions': permissions,
+    }, SetOptions(merge: true));
   }
 
   Future<void> updateName(String uid, String name) {
@@ -121,7 +124,9 @@ class UserRepository {
     if (photoUrl == null) {
       return _collection.doc(uid).update({'photoUrl': FieldValue.delete()});
     }
-    return _collection.doc(uid).set({'photoUrl': photoUrl}, SetOptions(merge: true));
+    return _collection.doc(uid).set({
+      'photoUrl': photoUrl,
+    }, SetOptions(merge: true));
   }
 
   /// Registers an FCM token for push notifications. Idempotent — a token
@@ -154,10 +159,15 @@ class UserRepository {
   /// eventually pruned when FCM reports it invalid (see
   /// `functions/src/notifications.js`), so this is a minor push-delivery
   /// efficiency trade-off, not a confidentiality one.
-  Future<void> addFcmToken(String uid, String token, {String? callerEmpresaId}) async {
+  Future<void> addFcmToken(
+    String uid,
+    String token, {
+    String? callerEmpresaId,
+  }) async {
     if (token.isEmpty) return;
 
-    final tokenShort = '${token.substring(0, 8)}...${token.substring(token.length - 8)}';
+    final tokenShort =
+        '${token.substring(0, 8)}...${token.substring(token.length - 8)}';
     debugPrint('[WEB_FCM_DIAG] addFcmToken() ENTRY uid=$uid token=$tokenShort');
 
     if (callerEmpresaId != null) {
@@ -165,7 +175,9 @@ class UserRepository {
           .where('empresaId', isEqualTo: callerEmpresaId)
           .where('fcmTokens', arrayContains: token)
           .get();
-      debugPrint('[WEB_FCM_DIAG] addFcmToken(): stale query done — ${staleHolders.docs.length} doc(s) hold this token');
+      debugPrint(
+        '[WEB_FCM_DIAG] addFcmToken(): stale query done — ${staleHolders.docs.length} doc(s) hold this token',
+      );
       for (final doc in staleHolders.docs) {
         if (doc.id == uid) continue;
         await doc.reference.update({
@@ -176,16 +188,23 @@ class UserRepository {
     }
 
     final docRef = _collection.doc(uid);
-    debugPrint('[WEB_FCM_DIAG] addFcmToken(): starting Firestore transaction...');
+    debugPrint(
+      '[WEB_FCM_DIAG] addFcmToken(): starting Firestore transaction...',
+    );
     await _firestore.runTransaction((transaction) async {
       final snap = await transaction.get(docRef);
-      final current = (snap.data()?['fcmTokens'] as List<dynamic>?)
+      final current =
+          (snap.data()?['fcmTokens'] as List<dynamic>?)
               ?.whereType<String>()
               .toList() ??
           <String>[];
-      debugPrint('[WEB_FCM_DIAG] addFcmToken(): inside transaction — current.length=${current.length} alreadyContains=${current.contains(token)}');
+      debugPrint(
+        '[WEB_FCM_DIAG] addFcmToken(): inside transaction — current.length=${current.length} alreadyContains=${current.contains(token)}',
+      );
       if (current.contains(token)) {
-        debugPrint('[WEB_FCM_DIAG] addFcmToken(): token already present — no write needed');
+        debugPrint(
+          '[WEB_FCM_DIAG] addFcmToken(): token already present — no write needed',
+        );
         return;
       }
 
@@ -196,13 +215,17 @@ class UserRepository {
       }
 
       transaction.set(docRef, {'fcmTokens': current}, SetOptions(merge: true));
-      debugPrint('[WEB_FCM_DIAG] addFcmToken(): transaction.set() queued — new count=${current.length}');
+      debugPrint(
+        '[WEB_FCM_DIAG] addFcmToken(): transaction.set() queued — new count=${current.length}',
+      );
       debugPrint('[FCM] Token added: $uid (${current.length}/$_maxFcmTokens)');
       if (evicted != null) {
         debugPrint('[FCM] Token limit reached: $uid, oldest token evicted');
       }
     });
-    debugPrint('[WEB_FCM_DIAG] addFcmToken(): Firestore transaction COMPLETED OK');
+    debugPrint(
+      '[WEB_FCM_DIAG] addFcmToken(): Firestore transaction COMPLETED OK',
+    );
   }
 
   Future<void> removeFcmToken(String uid, String token) async {
@@ -221,9 +244,9 @@ class UserRepository {
   /// notifications (Sprint 7.3.1). Uses `merge: true` so legacy documents
   /// without the field are upgraded in place.
   Future<void> setActive(String uid, bool isActive) {
-    return _collection
-        .doc(uid)
-        .set({'isActive': isActive}, SetOptions(merge: true));
+    return _collection.doc(uid).set({
+      'isActive': isActive,
+    }, SetOptions(merge: true));
   }
 
   /// Sets which FCM push categories [uid] wants to receive (Sprint 7.5.0 —
@@ -235,8 +258,8 @@ class UserRepository {
   /// `merge: true` so legacy documents without the field are upgraded in
   /// place.
   Future<void> updatePushNotificationMode(String uid, String mode) {
-    return _collection
-        .doc(uid)
-        .set({'pushNotificationMode': mode}, SetOptions(merge: true));
+    return _collection.doc(uid).set({
+      'pushNotificationMode': mode,
+    }, SetOptions(merge: true));
   }
 }

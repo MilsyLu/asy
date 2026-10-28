@@ -74,7 +74,9 @@ Future<void> openSupportCaseFromNotification(String? caseId) async {
   }
 
   await rootNavigatorKey.currentState?.push(
-    MaterialPageRoute(builder: (_) => SupportCaseDetailView(caseId: caseId, showAppBar: true)),
+    MaterialPageRoute(
+      builder: (_) => SupportCaseDetailView(caseId: caseId, showAppBar: true),
+    ),
   );
 }
 

@@ -7,9 +7,9 @@ class StorageService {
   /// public download URL. Uses [putData] (available on all platforms,
   /// including web) instead of the mobile-only [putFile].
   static Future<String> uploadProfilePhoto(String uid, Uint8List bytes) async {
-    final ref = FirebaseStorage.instance
-        .ref()
-        .child('profile_photos/$uid/avatar.jpg');
+    final ref = FirebaseStorage.instance.ref().child(
+      'profile_photos/$uid/avatar.jpg',
+    );
     final snapshot = await ref.putData(
       bytes,
       SettableMetadata(contentType: 'image/jpeg'),
@@ -35,10 +35,13 @@ class StorageService {
     required String fileName,
     required String contentType,
   }) async {
-    final ref = FirebaseStorage.instance
-        .ref()
-        .child('supportCases/$empresaId/$caseId/${DateTime.now().millisecondsSinceEpoch}_$fileName');
-    final snapshot = await ref.putData(bytes, SettableMetadata(contentType: contentType));
+    final ref = FirebaseStorage.instance.ref().child(
+      'supportCases/$empresaId/$caseId/${DateTime.now().millisecondsSinceEpoch}_$fileName',
+    );
+    final snapshot = await ref.putData(
+      bytes,
+      SettableMetadata(contentType: contentType),
+    );
     return snapshot.ref.getDownloadURL();
   }
 }

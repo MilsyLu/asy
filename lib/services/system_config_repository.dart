@@ -7,7 +7,7 @@ import '../models/system_config_model.dart';
 /// at `systemConfig/settings` in Firestore.
 class SystemConfigRepository {
   SystemConfigRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
 
@@ -24,9 +24,8 @@ class SystemConfigRepository {
   }
 
   Future<void> setTimeSelectionMode(String mode) {
-    return _settingsDoc.set(
-      {'timeSelectionMode': mode},
-      SetOptions(merge: true),
-    );
+    return _settingsDoc.set({
+      'timeSelectionMode': mode,
+    }, SetOptions(merge: true));
   }
 }

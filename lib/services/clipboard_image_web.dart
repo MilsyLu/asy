@@ -38,7 +38,8 @@ extension type _Blob._(JSObject _) implements JSObject {
   external JSPromise<JSArrayBuffer> arrayBuffer();
 }
 
-typedef ClipboardImageCallback = void Function(Uint8List bytes, String mediaType);
+typedef ClipboardImageCallback =
+    void Function(Uint8List bytes, String mediaType);
 
 JSFunction? _currentListener;
 

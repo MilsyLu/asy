@@ -7,7 +7,10 @@ import '../models/printer_config_model.dart';
 /// One image to send to the AI extraction Cloud Function. Never persisted —
 /// the bytes live only for the duration of the request.
 class PrinterConfigImageInput {
-  const PrinterConfigImageInput({required this.base64Data, required this.mediaType});
+  const PrinterConfigImageInput({
+    required this.base64Data,
+    required this.mediaType,
+  });
 
   /// Raw base64 image data, no `data:image/...;base64,` prefix.
   final String base64Data;
@@ -28,8 +31,8 @@ class PrinterConfigRepository {
     required this.empresaId,
     FirebaseFirestore? firestore,
     FirebaseFunctions? functions,
-  })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _functions = functions ?? FirebaseFunctions.instance;
+  }) : _firestore = firestore ?? FirebaseFirestore.instance,
+       _functions = functions ?? FirebaseFunctions.instance;
 
   final FirebaseFirestore _firestore;
   final FirebaseFunctions _functions;
@@ -42,8 +45,13 @@ class PrinterConfigRepository {
       _collection.where('empresaId', isEqualTo: empresaId);
 
   Stream<List<PrinterConfigModel>> watchAll() {
-    return _query.orderBy('clientName').snapshots().map(
-        (snap) => snap.docs.map((d) => PrinterConfigModel.fromDoc(d)).toList());
+    return _query
+        .orderBy('clientName')
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs.map((d) => PrinterConfigModel.fromDoc(d)).toList(),
+        );
   }
 
   Future<String> add(String clientName, Map<String, dynamic> fields) async {
@@ -57,7 +65,11 @@ class PrinterConfigRepository {
     return ref.id;
   }
 
-  Future<void> update(String id, String clientName, Map<String, dynamic> fields) {
+  Future<void> update(
+    String id,
+    String clientName,
+    Map<String, dynamic> fields,
+  ) {
     return _collection.doc(id).update({
       'clientName': clientName,
       'fields': fields,
