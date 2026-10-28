@@ -228,6 +228,34 @@ class _RequirementDetailViewState extends State<RequirementDetailView> {
     );
   }
 
+  /// Borra el requerimiento, preguntando antes.
+  ///
+  /// No hay papelera de requerimientos, así que esto es definitivo y se lleva
+  /// también su historia. Por eso dice el código y para quién era: a Michel
+  /// le quedaron tres REQ de prueba seguidos y confundirse de fila es fácil.
+  Future<void> _eliminar(RequirementModel r) async {
+    final confirma = await showConfirmDialog(
+      context,
+      title: 'Eliminar ${r.codigo}',
+      message:
+          '¿Eliminar "${r.paraQuien}" de forma permanente, con todo su '
+          'seguimiento? No se puede deshacer.',
+      confirmLabel: 'Eliminar',
+      destructive: true,
+    );
+    if (!confirma || !mounted) return;
+    try {
+      await context.read<RequirementRepository>().delete(r.id);
+      if (!mounted) return;
+      widget.onClose?.call();
+      if (mounted) SnackbarUtils.showSuccess(context, '${r.codigo} eliminado');
+    } catch (e) {
+      if (mounted) {
+        SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+      }
+    }
+  }
+
   Widget _encabezado(
     RequirementModel r,
     AppColorsExtension colors,
@@ -256,6 +284,12 @@ class _RequirementDetailViewState extends State<RequirementDetailView> {
               tooltip: 'Editar',
               icon: Icon(LucideIcons.pencil, color: colors.primary, size: 18),
               onPressed: () => showRequirementEditSheet(context, r),
+            ),
+          if (puedeGestionar)
+            IconButton(
+              tooltip: 'Eliminar',
+              icon: Icon(LucideIcons.trash2, color: colors.error, size: 18),
+              onPressed: () => _eliminar(r),
             ),
           if (widget.onClose != null)
             IconButton(

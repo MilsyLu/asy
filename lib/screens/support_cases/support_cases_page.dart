@@ -9,6 +9,7 @@ import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/client_linking.dart';
 import '../../core/utils/date_utils.dart';
+import '../../core/utils/support_case_metrics.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../models/support_case_model.dart';
 import '../../models/support_case_tag_model.dart';
@@ -18,6 +19,8 @@ import '../../providers/support_case_panel_provider.dart';
 import 'support_cases_summary.dart';
 import '../../services/catalog_repository.dart';
 import '../../services/support_case_repository.dart';
+import '../../widgets/calendario_menu.dart';
+import '../../widgets/ventana_flotante.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/client_name_autocomplete.dart';
 import '../../widgets/loading_indicator.dart';
@@ -146,6 +149,13 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
   /// valor propio para poder pedirse.
   String? _assigneeFilter;
 
+  /// Rango de fechas por el que se filtra. `null` = todas.
+  ///
+  /// Se compara contra `reportedAt`, que es la fecha que la lista muestra en
+  /// cada fila. Filtrar por una fecha distinta de la que se ve sería la
+  /// receta para que alguien jure que el filtro está malo.
+  DateTimeRange? _rango;
+
   /// Estado por el que se filtra. `null` = todos.
   ///
   /// Guarda el valor tal como está en la base ("Nuevo", "En proceso"), no la
@@ -181,6 +191,11 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
     }
     if (_statusFilter != null) {
       result = result.where((c) => c.status == _statusFilter).toList();
+    }
+    if (_rango != null) {
+      result = result
+          .where((c) => inPeriod(c.reportedAt, _rango!.start, _rango!.end))
+          .toList();
     }
     if (_assigneeFilter != null) {
       result = result.where((c) {
@@ -323,6 +338,8 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
           // desplegable sólo podría dejar la pantalla en blanco.
           statusFilter: _viewMode == _ViewMode.resueltos ? null : _statusFilter,
           onStatusFilterChanged: (v) => setState(() => _statusFilter = v),
+          rango: _rango,
+          onRangoChanged: (v) => setState(() => _rango = v),
           mostrarEstados: isMobile || _viewMode != _ViewMode.resueltos,
           myUid: myUid,
           sortBy: _sortBy,
@@ -360,17 +377,51 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
             // leerse. Crear uno sí lo abre — bloquearlo también dejaba el
             // botón "Nuevo caso" sin hacer absolutamente nada desde esta
             // vista, que es peor que una gráfica estrecha un rato.
-            final sideBySide =
-                constraints.maxWidth >= 900 &&
+            // ¿Hay detalle que mostrar? Es una sola pregunta; el ancho
+            // decide sólo *dónde* se muestra, no *si* se muestra. Antes el
+            // ancho decidía las dos cosas a la vez, y por debajo de 900 el
+            // clic en un caso no hacía nada visible: se abría un panel que
+            // nadie dibujaba.
+            final hayDetalle =
                 panel.isOpen &&
                 (panel.creating || _viewMode != _ViewMode.resumen);
+            final sideBySide = constraints.maxWidth >= 900 && hayDetalle;
             final listColumn = Column(
               children: [
                 header,
                 Expanded(child: list),
               ],
             );
-            if (!sideBySide) return listColumn;
+            final contenidoPanel = panel.creating
+                ? _NewCasePanel(
+                    onCreated: (nuevoId) => context
+                        .read<SupportCasePanelController>()
+                        .openCase(nuevoId),
+                    onClose: () =>
+                        context.read<SupportCasePanelController>().close(),
+                  )
+                : SupportCaseDetailView(
+                    key: ValueKey(panel.caseId),
+                    caseId: panel.caseId ?? '',
+                    showAppBar: false,
+                    onClose: () =>
+                        context.read<SupportCasePanelController>().close(),
+                  );
+
+            if (!sideBySide) {
+              // Sin ancho para la columna, el detalle flota sobre la lista.
+              return Stack(
+                children: [
+                  listColumn,
+                  if (hayDetalle)
+                    VentanaFlotante(
+                      onClose: () =>
+                          context.read<SupportCasePanelController>().close(),
+                      child: contenidoPanel,
+                    ),
+                ],
+              );
+            }
             return Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -382,23 +433,7 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
                   // El formulario estaba en una ventana emergente que tapaba la
                   // lista; aqui se ve al lado de los casos que ya existen, que
                   // es justo lo que uno mira mientras registra uno nuevo.
-                  child: panel.creating
-                      ? _NewCasePanel(
-                          onCreated: (nuevoId) => context
-                              .read<SupportCasePanelController>()
-                              .openCase(nuevoId),
-                          onClose: () => context
-                              .read<SupportCasePanelController>()
-                              .close(),
-                        )
-                      : SupportCaseDetailView(
-                          key: ValueKey(panel.caseId),
-                          caseId: panel.caseId!,
-                          showAppBar: false,
-                          onClose: () => context
-                              .read<SupportCasePanelController>()
-                              .close(),
-                        ),
+                  child: contenidoPanel,
                 ),
               ],
             );
@@ -434,6 +469,8 @@ class _CasesHeader extends StatelessWidget {
     required this.assigneeFilter,
     required this.statusFilter,
     required this.onStatusFilterChanged,
+    required this.rango,
+    required this.onRangoChanged,
     required this.mostrarEstados,
     required this.myUid,
     required this.onAssigneeFilterChanged,
@@ -461,6 +498,8 @@ class _CasesHeader extends StatelessWidget {
   final String? assigneeFilter;
   final String? statusFilter;
   final ValueChanged<String?> onStatusFilterChanged;
+  final DateTimeRange? rango;
+  final ValueChanged<DateTimeRange?> onRangoChanged;
   final bool mostrarEstados;
 
   /// Para contar los casos de quien está mirando.
@@ -700,49 +739,64 @@ class _CasesHeader extends StatelessWidget {
                         DropdownMenuItem<String?>(value: tag, child: Text(tag)),
                     ],
                   ),
-                if (viewMode != null)
-                  SegmentedButton<_ViewMode>(
-                    // Sin la marca de "elegido" a la izquierda del nombre:
-                    // son cuatro vistas y ese palomito corría cada etiqueta
-                    // unos 20 px, que al final eran 80 de fila. El segmento
-                    // elegido ya se distingue por el color.
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(
-                        value: _ViewMode.tabla,
-                        label: Text('Tabla'),
-                        icon: Icon(LucideIcons.list, size: 14),
-                      ),
-                      ButtonSegment(
-                        value: _ViewMode.kanban,
-                        label: Text('Kanban'),
-                        icon: Icon(LucideIcons.columns, size: 14),
-                      ),
-                      ButtonSegment(
-                        value: _ViewMode.resumen,
-                        label: Text('Resumen'),
-                        icon: Icon(LucideIcons.barChart2, size: 14),
-                      ),
-                      ButtonSegment(
-                        value: _ViewMode.resueltos,
-                        label: Text('Resueltos'),
-                        icon: Icon(LucideIcons.checkCircle2, size: 14),
-                      ),
-                    ],
-                    selected: {viewMode!},
-                    onSelectionChanged: (s) => onViewModeChanged(s.first),
-                    style: const ButtonStyle(
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
-                      textStyle: WidgetStatePropertyAll(
-                        TextStyle(fontSize: 12.5),
-                      ),
-                      padding: WidgetStatePropertyAll(
-                        EdgeInsets.symmetric(horizontal: 10),
-                      ),
-                    ),
-                  ),
               ];
+
+              // El selector de vista, aparte de los desplegables: en ventana
+              // angosta va al lado del buscador en vez de llevarse una fila
+              // para él solo con medio ancho en blanco a su derecha.
+              final Widget? selectorVista = viewMode == null
+                  ? null
+                  : SegmentedButton<_ViewMode>(
+                      // Sin la marca de "elegido" a la izquierda del nombre:
+                      // son cuatro vistas y ese palomito corría cada etiqueta
+                      // unos 20 px, que al final eran 80 de fila. El segmento
+                      // elegido ya se distingue por el color.
+                      showSelectedIcon: false,
+                      // En ventana angosta, sólo los iconos. Con nombre, los
+                      // cuatro segmentos piden unos 430 px: sumados a los
+                      // cuatro desplegables no caben, y la fila terminaba
+                      // partiendo el selector contra el borde derecho. Sin
+                      // nombre son 180 y caben todos. El nombre sigue estando
+                      // al pasar el mouse.
+                      segments: [
+                        ButtonSegment(
+                          value: _ViewMode.tabla,
+                          label: holgado ? const Text('Tabla') : null,
+                          tooltip: 'Tabla',
+                          icon: const Icon(LucideIcons.list, size: 14),
+                        ),
+                        ButtonSegment(
+                          value: _ViewMode.kanban,
+                          label: holgado ? const Text('Kanban') : null,
+                          tooltip: 'Kanban',
+                          icon: const Icon(LucideIcons.columns, size: 14),
+                        ),
+                        ButtonSegment(
+                          value: _ViewMode.resumen,
+                          label: holgado ? const Text('Resumen') : null,
+                          tooltip: 'Resumen',
+                          icon: const Icon(LucideIcons.barChart2, size: 14),
+                        ),
+                        ButtonSegment(
+                          value: _ViewMode.resueltos,
+                          label: holgado ? const Text('Resueltos') : null,
+                          tooltip: 'Resueltos',
+                          icon: const Icon(LucideIcons.checkCircle2, size: 14),
+                        ),
+                      ],
+                      selected: {viewMode!},
+                      onSelectionChanged: (s) => onViewModeChanged(s.first),
+                      style: const ButtonStyle(
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.compact,
+                        textStyle: WidgetStatePropertyAll(
+                          TextStyle(fontSize: 12.5),
+                        ),
+                        padding: WidgetStatePropertyAll(
+                          EdgeInsets.symmetric(horizontal: 10),
+                        ),
+                      ),
+                    );
 
               final chips = <Widget>[
                 for (final f in _QuickFilter.values)
@@ -752,6 +806,7 @@ class _CasesHeader extends StatelessWidget {
                     selected: filter == f,
                     onTap: () => onFilterChanged(f),
                   ),
+                ChipFecha(rango: rango, onChanged: onRangoChanged),
               ];
 
               if (angosto) {
@@ -766,6 +821,10 @@ class _CasesHeader extends StatelessWidget {
                     buscador,
                     const SizedBox(height: 8),
                     _TiraHorizontal(children: chips),
+                    if (selectorVista != null) ...[
+                      const SizedBox(height: 8),
+                      _TiraHorizontal(children: [selectorVista]),
+                    ],
                   ],
                 );
               }
@@ -777,21 +836,34 @@ class _CasesHeader extends StatelessWidget {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _TiraHorizontal(children: controles),
+                    // `Wrap` y no una tira deslizable: deslizándose, el
+                    // último control quedaba partido contra el borde y
+                    // parecía roto. Bajando de línea se ve entero.
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: controles,
+                    ),
                     const SizedBox(height: 8),
+                    // El buscador se estira y el selector de vista se le
+                    // pega a la derecha. Antes el selector tenía una fila
+                    // propia con medio ancho en blanco al lado, y el
+                    // buscador otra media fila vacía debajo.
                     Row(
                       children: [
                         Expanded(child: buscador),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: chips,
-                          ),
-                        ),
+                        if (selectorVista != null) ...[
+                          const SizedBox(width: 10),
+                          selectorVista,
+                        ],
                       ],
                     ),
+                    const SizedBox(height: 8),
+                    // Los filtros, a todo el ancho: con la fila entera para
+                    // ellos caben los cinco en una línea en vez de dejar
+                    // "Mis casos" solo abajo.
+                    Wrap(spacing: 8, runSpacing: 8, children: chips),
                   ],
                 );
               }
@@ -820,7 +892,7 @@ class _CasesHeader extends StatelessWidget {
                           runSpacing: 8,
                           alignment: WrapAlignment.end,
                           crossAxisAlignment: WrapCrossAlignment.center,
-                          children: controles,
+                          children: [...controles, ?selectorVista],
                         ),
                       ),
                     ],

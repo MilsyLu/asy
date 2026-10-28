@@ -7,6 +7,10 @@ import '../../core/responsive/app_spacing.dart';
 import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
+import '../../core/utils/requirement_metrics.dart';
+import '../../widgets/calendario_menu.dart';
+import '../../widgets/ventana_flotante.dart';
+import '../../core/utils/support_case_metrics.dart';
 import '../../models/requirement_model.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/requirement_repository.dart';
@@ -47,6 +51,13 @@ class _RequirementsPageState extends State<RequirementsPage> {
   String? _modulo;
   String? _responsable;
   bool _soloAbiertos = true;
+
+  /// Rango de fechas de recepción. `null` = todas.
+  ///
+  /// Contra `receivedAt`, que es la fecha que muestra cada fila: filtrar por
+  /// una fecha distinta de la que se ve es la receta para que alguien jure
+  /// que el filtro está malo.
+  DateTimeRange? _rango;
   _Vista _vista = _Vista.tabla;
   String? _seleccionado;
 
@@ -60,6 +71,10 @@ class _RequirementsPageState extends State<RequirementsPage> {
     final q = _query.trim().toLowerCase();
     return todos.where((r) {
       if (_soloAbiertos && !r.estaAbierto) return false;
+      if (_rango != null &&
+          !inPeriod(r.receivedAt, _rango!.start, _rango!.end)) {
+        return false;
+      }
       if (_estado != null && r.status != _estado) return false;
       if (_modulo != null && r.module != _modulo) return false;
       if (_responsable != null) {
@@ -136,6 +151,8 @@ class _RequirementsPageState extends State<RequirementsPage> {
           onResponsable: (v) => setState(() => _responsable = v),
           soloAbiertos: _soloAbiertos,
           onSoloAbiertos: (v) => setState(() => _soloAbiertos = v),
+          rango: _rango,
+          onRango: (v) => setState(() => _rango = v),
           vista: isMobile ? null : _vista,
           onVista: (v) => setState(() => _vista = v),
         );
@@ -153,7 +170,29 @@ class _RequirementsPageState extends State<RequirementsPage> {
                 Expanded(child: contenido),
               ],
             );
-            if (!conPanel) return columna;
+            if (!conPanel) {
+              // Sin ancho para la columna de la derecha, el detalle flota
+              // sobre la lista. Antes, por debajo de 1000 px, tocar un
+              // requerimiento no hacía nada visible.
+              //
+              // El formulario de alta no flota: ahí no hay nada que leer
+              // detrás y sigue teniendo su botón propio en la barra de
+              // arriba, que lo abre como ventana.
+              if (_seleccionado == null) return columna;
+              return Stack(
+                children: [
+                  columna,
+                  VentanaFlotante(
+                    onClose: () => setState(() => _seleccionado = null),
+                    child: RequirementDetailView(
+                      key: ValueKey(_seleccionado),
+                      requirementId: _seleccionado!,
+                      onClose: () => setState(() => _seleccionado = null),
+                    ),
+                  ),
+                ],
+              );
+            }
             return Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -214,6 +253,8 @@ class _Cabecera extends StatelessWidget {
     required this.onResponsable,
     required this.soloAbiertos,
     required this.onSoloAbiertos,
+    required this.rango,
+    required this.onRango,
     required this.vista,
     required this.onVista,
   });
@@ -230,27 +271,18 @@ class _Cabecera extends StatelessWidget {
   final ValueChanged<String?> onResponsable;
   final bool soloAbiertos;
   final ValueChanged<bool> onSoloAbiertos;
+  final DateTimeRange? rango;
+  final ValueChanged<DateTimeRange?> onRango;
   final _Vista? vista;
   final ValueChanged<_Vista> onVista;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final abiertos = todos.where((r) => r.estaAbierto).toList();
-    final sinAsignar = abiertos.where((r) => !r.estaAsignado).length;
-    final enDesarrollo = todos
-        .where((r) => RequirementStatus.enManosDeDesarrollo(r.status))
-        .length;
-    final sinAprobar = todos
-        .where((r) => r.status == RequirementStatus.recibido)
-        .length;
-    final publicados = todos
-        .where(
-          (r) =>
-              r.status == RequirementStatus.publicado ||
-              r.status == RequirementStatus.comunicado,
-        )
-        .length;
+    // Las cinco salen de un solo sitio y con pruebas: ver
+    // `RequirementCounts`. Estaban sueltas aquí y una se desincronizó de su
+    // propia etiqueta sin que nada lo notara.
+    final cuentas = RequirementCounts.of(todos);
 
     final responsables = <String, int>{};
     for (final r in todos) {
@@ -289,42 +321,46 @@ class _Cabecera extends StatelessWidget {
           (
             icono: LucideIcons.inbox,
             nombre: 'Por aprobar',
-            valor: '$sinAprobar',
+            valor: '${cuentas.porAprobar}',
             color: Colors.blueGrey,
             ayuda: 'Recibidos que nadie ha aprobado ni rechazado todavía.',
           ),
           (
             icono: LucideIcons.lightbulb,
             nombre: 'Abiertos',
-            valor: '${abiertos.length}',
+            valor: '${cuentas.abiertos}',
             color: colors.primary,
-            ayuda: 'Todo lo que no está publicado, comunicado ni rechazado.',
+            ayuda:
+                'Ni comunicados al cliente, ni en pausa, ni rechazados. Un '
+                'publicado sigue abierto: falta avisarle al cliente.',
           ),
           (
             icono: LucideIcons.userX,
             nombre: 'Sin responsable',
-            valor: '$sinAsignar',
+            valor: '${cuentas.sinResponsable}',
             color: Colors.orange,
             ayuda: 'Abiertos sin desarrollador asignado.',
           ),
           (
             icono: LucideIcons.hammer,
             nombre: 'Desarrollo o QA',
-            valor: '$enDesarrollo',
+            valor: '${cuentas.enDesarrolloOQa}',
             color: Colors.purple,
             ayuda: 'En desarrollo o en pruebas.',
           ),
           (
-            icono: LucideIcons.checkCircle2,
-            nombre: 'Publicados',
-            valor: '$publicados',
+            icono: LucideIcons.megaphone,
+            nombre: 'Por comunicar',
+            valor: '${cuentas.porComunicar}',
             color: Colors.green,
-            ayuda: 'Publicados o ya comunicados al cliente.',
+            ayuda:
+                'Ya publicados, pero al cliente todavía no se le ha avisado. '
+                'Es el último paso y el que más se olvida.',
           ),
         ];
 
     final indicadores = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
@@ -352,9 +388,12 @@ class _Cabecera extends StatelessWidget {
                   if (i > 0)
                     Container(
                       width: 1,
-                      height: 34,
+                      height: 32,
                       color: colors.divider,
-                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                      // 4 y no 8: son cuatro separadores, así que cada píxel
+                      // que se les quita son 8 que gana el nombre más largo
+                      // —"Sin responsable"— antes de cortarse.
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
                     ),
                   Expanded(child: bloque(i)),
                 ],
@@ -376,19 +415,28 @@ class _Cabecera extends StatelessWidget {
       ),
     );
 
+    // El selector con los dos nombres pide unos 175 px. A ventana angosta
+    // ésos son justo los que le faltan al último indicador, que se quedaba
+    // en "Por c" con la cifra tapada. Sin nombres son 95 y caben los cinco.
+    // El nombre sigue estando al pasar el mouse.
+    final anchoPantalla = MediaQuery.sizeOf(context).width;
+    final conNombres = anchoPantalla >= 1250;
     final selector = vista == null
         ? null
         : SegmentedButton<_Vista>(
-            segments: const [
+            showSelectedIcon: false,
+            segments: [
               ButtonSegment(
                 value: _Vista.tabla,
-                label: Text('Lista'),
-                icon: Icon(LucideIcons.list, size: 14),
+                label: conNombres ? const Text('Lista') : null,
+                tooltip: 'Lista',
+                icon: const Icon(LucideIcons.list, size: 14),
               ),
               ButtonSegment(
                 value: _Vista.tablero,
-                label: Text('Tablero'),
-                icon: Icon(LucideIcons.columns, size: 14),
+                label: conNombres ? const Text('Tablero') : null,
+                tooltip: 'Tablero',
+                icon: const Icon(LucideIcons.columns, size: 14),
               ),
             ],
             selected: {vista!},
@@ -397,6 +445,9 @@ class _Cabecera extends StatelessWidget {
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               visualDensity: VisualDensity.compact,
               textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12)),
+              padding: WidgetStatePropertyAll(
+                EdgeInsets.symmetric(horizontal: 8),
+              ),
             ),
           );
 
@@ -451,6 +502,7 @@ class _Cabecera extends StatelessWidget {
             ),
         ],
       ),
+      ChipFecha(rango: rango, onChanged: onRango),
       FilterChip(
         label: const Text('Solo abiertos'),
         selected: soloAbiertos,
@@ -480,7 +532,7 @@ class _Cabecera extends StatelessWidget {
           Row(
             children: [
               Expanded(child: indicadores),
-              if (selector != null) ...[const SizedBox(width: 10), selector],
+              if (selector != null) ...[const SizedBox(width: 8), selector],
             ],
           ),
           const SizedBox(height: 8),

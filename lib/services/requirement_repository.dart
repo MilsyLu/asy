@@ -68,7 +68,10 @@ class RequirementRepository {
   /// los tiene, se desactiva. Borrarlo dejaría esos requerimientos con un
   /// responsable que no existe.
   Future<bool> deleteDeveloperIfUnused(String id) async {
-    final usados = await _query.where('developerId', isEqualTo: id).limit(1).get();
+    final usados = await _query
+        .where('developerId', isEqualTo: id)
+        .limit(1)
+        .get();
     if (usados.docs.isNotEmpty) return false;
     await _developersCollection.doc(id).delete();
     return true;
@@ -105,7 +108,12 @@ class RequirementRepository {
   /// estado anterior de la base, nunca las escrituras de esa misma
   /// transacción. Es exactamente el error que hacía fallar en silencio cada
   /// "Nuevo caso" cuando se construyó Casos de Soporte.
-  Future<String> create({
+  /// Crea el requerimiento y devuelve su id y su número.
+  ///
+  /// El número hace falta afuera: un caso de soporte que se convierte tiene
+  /// que poder decir "pasó a REQ-0042", y el número sólo se conoce aquí
+  /// dentro, cuando la transacción toma el siguiente del contador.
+  Future<({String id, int numero})> create({
     required String origin,
     required List<String> clientIds,
     required List<String> clientNames,
@@ -124,10 +132,12 @@ class RequirementRepository {
   }) async {
     final ref = _collection.doc();
     final cuando = receivedAt ?? DateTime.now();
+    var numero = 0;
 
     await _firestore.runTransaction((tx) async {
       final snap = await tx.get(_counterRef);
       final siguiente = ((snap.data()?['value'] as num?)?.toInt() ?? 0) + 1;
+      numero = siguiente;
       tx.set(_counterRef, {
         'value': siguiente,
         'empresaId': empresaId,
@@ -170,7 +180,7 @@ class RequirementRepository {
       authorId: createdById,
       authorName: createdByName,
     );
-    return ref.id;
+    return (id: ref.id, numero: numero);
   }
 
   Future<void> addEvent(
@@ -187,6 +197,41 @@ class RequirementRepository {
       'authorName': authorName,
       'createdAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  /// Copia el seguimiento de un caso de soporte en este requerimiento.
+  ///
+  /// Con las fechas y los autores originales, no con los de ahora: el valor
+  /// de esa historia es decir *cuándo* se respondió qué, y volver a fecharla
+  /// hoy la convertiría en una lista de cosas que pasaron todas al tiempo.
+  ///
+  /// Por eso quedan antes del evento "Requerimiento creado": primero lo que
+  /// pasó como caso, después el momento en que dejó de serlo.
+  Future<void> importarHistorialDeCaso(
+    String requirementId,
+    List<
+      ({
+        String tipo,
+        String texto,
+        String autorId,
+        String autorNombre,
+        DateTime cuando,
+      })
+    >
+    entradas,
+  ) async {
+    if (entradas.isEmpty) return;
+    final batch = _firestore.batch();
+    for (final e in entradas) {
+      batch.set(_eventsCollection(requirementId).doc(), {
+        'type': e.tipo,
+        'text': e.texto,
+        'authorId': e.autorId,
+        'authorName': e.autorNombre,
+        'createdAt': Timestamp.fromDate(e.cuando),
+      });
+    }
+    await batch.commit();
   }
 
   Future<void> changeStatus(
@@ -301,5 +346,24 @@ class RequirementRepository {
     );
   }
 
-  Future<void> delete(String id) => _collection.doc(id).delete();
+  /// Borra el requerimiento y toda su historia.
+  ///
+  /// Los eventos van en el mismo lote y no después: si se borrara sólo el
+  /// documento, su subcolección quedaría viva en Firestore, invisible para
+  /// la app y sin regla que la ampare — y si algún día se creara otro
+  /// requerimiento con ese mismo id, heredaría una historia ajena.
+  ///
+  /// Un lote se rechaza entero si una sola de sus escrituras no pasa. Por
+  /// eso `firestore.rules` tiene que permitir borrar los eventos, no sólo el
+  /// requerimiento: eso exactamente era lo que hacía fallar en silencio el
+  /// borrado de un caso de soporte (ver `support_case_delete.test.js`).
+  Future<void> delete(String id) async {
+    final eventos = await _eventsCollection(id).get();
+    final lote = _firestore.batch();
+    for (final doc in eventos.docs) {
+      lote.delete(doc.reference);
+    }
+    lote.delete(_collection.doc(id));
+    await lote.commit();
+  }
 }

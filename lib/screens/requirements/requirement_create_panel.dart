@@ -41,14 +41,16 @@ class RequirementPrefill {
 ///
 /// Con [prefill] llega con los datos de un caso de soporte ya puestos: es el
 /// botón "Pasar a requerimiento" del caso.
-/// Devuelve `true` si se llegó a registrar algo, para que quien lo abrió
-/// —el botón "Pasar a requerimiento" de un caso de soporte— sepa si anotar
-/// la conversión o no. Cerrar con Cancelar devuelve `false`.
-Future<bool> showRequirementCreateSheet(
+/// Devuelve el requerimiento creado, o null si se cerró sin registrar nada.
+///
+/// Lo necesita quien lo abrió: el botón "Pasar a requerimiento" de un caso de
+/// soporte tiene que dejar el caso enlazado al REQ que acaba de nacer, y para
+/// eso hace falta el número.
+Future<({String id, int numero})?> showRequirementCreateSheet(
   BuildContext context, {
   RequirementPrefill? prefill,
 }) async {
-  final creado = await showDialog<bool>(
+  return showDialog<({String id, int numero})>(
     context: context,
     builder: (_) => Dialog(
       insetPadding: const EdgeInsets.all(24),
@@ -58,7 +60,6 @@ Future<bool> showRequirementCreateSheet(
       ),
     ),
   );
-  return creado ?? false;
 }
 
 /// Abre el mismo formulario para corregir uno que ya existe.
@@ -123,6 +124,9 @@ class _RequirementCreatePanelState extends State<RequirementCreatePanel> {
   late String _area;
   final _clientes = <ClientModel>[];
   bool _guardando = false;
+
+  /// El requerimiento que se acaba de crear, para devolverlo al cerrar.
+  ({String id, int numero})? _creado;
 
   bool get _editando => widget.existente != null;
 
@@ -311,7 +315,7 @@ class _RequirementCreatePanelState extends State<RequirementCreatePanel> {
           authorName: usuario?.name ?? 'Alguien',
         );
       } else {
-        await repo.create(
+        final nuevo = await repo.create(
           origin: _origen,
           clientIds: ids,
           clientNames: nombres,
@@ -325,12 +329,13 @@ class _RequirementCreatePanelState extends State<RequirementCreatePanel> {
           supportCaseId: widget.prefill?.supportCaseId,
           supportCaseNumber: widget.prefill?.supportCaseNumber,
         );
+        _creado = nuevo;
       }
       if (!mounted) return;
       if (widget.enPanel) {
         _limpiar();
       } else {
-        Navigator.of(context).pop(true);
+        Navigator.of(context).pop(_creado);
       }
       SnackbarUtils.showSuccess(
         context,

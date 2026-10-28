@@ -1,5 +1,6 @@
 import '../constants/support_case_constants.dart';
 import '../../models/support_case_model.dart';
+import 'date_utils.dart';
 
 /// Las cuentas del Resumen de Casos de Soporte, separadas de la pantalla.
 ///
@@ -73,7 +74,7 @@ class SupportDay {
 }
 
 /// [d] sin la hora.
-DateTime dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+DateTime dayOnly(DateTime d) => AppDateUtils.soloDia(d);
 
 /// Si [d] cae dentro de [start]–[end], ambos días incluidos.
 bool inPeriod(DateTime d, DateTime start, DateTime end) {

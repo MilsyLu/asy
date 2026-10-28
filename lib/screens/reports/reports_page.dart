@@ -13,6 +13,7 @@ import '../../models/task_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/task_repository.dart';
+import '../../widgets/calendario_menu.dart';
 import '../../widgets/kpi_card.dart';
 import '../../widgets/loading_indicator.dart';
 import 'report_excel.dart';
@@ -138,16 +139,6 @@ class _ReportsPageState extends State<ReportsPage>
     }
   }
 
-  Future<void> _pickRange() async {
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020, 1, 1),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      initialDateRange: _range,
-    );
-    if (picked != null) setState(() => _range = picked);
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -209,9 +200,18 @@ class _ReportsPageState extends State<ReportsPage>
                   tasks: visible,
                   catalog: catalog,
                   matchCount: tasks.length,
-                  dateSelector: _DateRangeButton(
-                    range: _range,
-                    onTap: _pickRange,
+                  // El botón de siempre, pero ahora despliega el
+                  // calendario pegado a él en vez de abrir una ventana a
+                  // pantalla completa.
+                  dateSelector: CalendarioRangoMenu(
+                    rango: _range,
+                    primerDia: DateTime.utc(2020, 1, 1),
+                    ultimoDia: DateTime.now().add(const Duration(days: 365)),
+                    onChanged: (r) => setState(() => _range = r),
+                    builder: (context, menu) => _DateRangeButton(
+                      range: _range,
+                      onTap: () => menu.isOpen ? menu.close() : menu.open(),
+                    ),
                   ),
                 ),
               ),

@@ -19,7 +19,7 @@ import '../models/support_case_tag_model.dart';
 /// history, so the original report is never lost.
 class SupportCaseRepository {
   SupportCaseRepository({required this.empresaId, FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
   final String empresaId;
@@ -27,13 +27,17 @@ class SupportCaseRepository {
   CollectionReference<Map<String, dynamic>> get _collection =>
       _firestore.collection(FirestoreCollections.supportCases);
 
-  Query<Map<String, dynamic>> get _query => _collection.where('empresaId', isEqualTo: empresaId);
+  Query<Map<String, dynamic>> get _query =>
+      _collection.where('empresaId', isEqualTo: empresaId);
 
-  DocumentReference<Map<String, dynamic>> get _counterRef =>
-      _firestore.collection(FirestoreCollections.supportCaseCounters).doc(empresaId);
+  DocumentReference<Map<String, dynamic>> get _counterRef => _firestore
+      .collection(FirestoreCollections.supportCaseCounters)
+      .doc(empresaId);
 
   CollectionReference<Map<String, dynamic>> _historyCollection(String caseId) =>
-      _collection.doc(caseId).collection(FirestoreCollections.supportCaseHistory);
+      _collection
+          .doc(caseId)
+          .collection(FirestoreCollections.supportCaseHistory);
 
   CollectionReference<Map<String, dynamic>> get _tagsCollection =>
       _firestore.collection(FirestoreCollections.supportCaseTags);
@@ -44,8 +48,13 @@ class SupportCaseRepository {
   /// The admin-curated tag catalog — readable by anyone (see
   /// firestore.rules), only `manageSupportCases` can add/remove entries.
   Stream<List<SupportCaseTagModel>> watchTags() {
-    return _tagsQuery.orderBy('name').snapshots().map(
-        (snap) => snap.docs.map((d) => SupportCaseTagModel.fromDoc(d)).toList());
+    return _tagsQuery
+        .orderBy('name')
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs.map((d) => SupportCaseTagModel.fromDoc(d)).toList(),
+        );
   }
 
   Future<void> addTag(String name) {
@@ -59,18 +68,40 @@ class SupportCaseRepository {
   Future<void> deleteTag(String tagId) => _tagsCollection.doc(tagId).delete();
 
   Stream<List<SupportCaseModel>> watchAll() {
-    return _query.orderBy('createdAt', descending: true).snapshots().map(
-        (snap) => snap.docs.map((d) => SupportCaseModel.fromDoc(d)).toList());
+    return _query
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snap) => snap.docs.map((d) => SupportCaseModel.fromDoc(d)).toList(),
+        );
   }
 
   Stream<List<SupportCaseHistoryEntry>> watchHistory(String caseId) {
-    return _historyCollection(caseId).orderBy('createdAt').snapshots().map(
-        (snap) => snap.docs.map((d) => SupportCaseHistoryEntry.fromDoc(d)).toList());
+    return _historyCollection(caseId)
+        .orderBy('createdAt')
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs.map((d) => SupportCaseHistoryEntry.fromDoc(d)).toList(),
+        );
+  }
+
+  /// La historia completa, de una vez.
+  ///
+  /// [watchHistory] sirve para pintarla en pantalla; esto es para llevársela:
+  /// cuando un caso se convierte en requerimiento, su seguimiento se copia
+  /// allá antes de borrar el caso. Sin esto, convertir perdería todo lo que
+  /// se había hecho y respondido.
+  Future<List<SupportCaseHistoryEntry>> getHistory(String caseId) async {
+    final snap = await _historyCollection(caseId).orderBy('createdAt').get();
+    return snap.docs.map((d) => SupportCaseHistoryEntry.fromDoc(d)).toList();
   }
 
   Stream<SupportCaseModel?> watchCase(String caseId) {
-    return _collection.doc(caseId).snapshots().map(
-        (doc) => doc.exists ? SupportCaseModel.fromDoc(doc) : null);
+    return _collection
+        .doc(caseId)
+        .snapshots()
+        .map((doc) => doc.exists ? SupportCaseModel.fromDoc(doc) : null);
   }
 
   /// Assigns the next `caseNumber` for this empresa (via a transaction on
@@ -104,9 +135,13 @@ class SupportCaseRepository {
 
     await _firestore.runTransaction((tx) async {
       final counterSnap = await tx.get(_counterRef);
-      final nextNumber = ((counterSnap.data()?['value'] as num?)?.toInt() ?? 0) + 1;
+      final nextNumber =
+          ((counterSnap.data()?['value'] as num?)?.toInt() ?? 0) + 1;
 
-      tx.set(_counterRef, {'value': nextNumber, 'empresaId': empresaId}, SetOptions(merge: true));
+      tx.set(_counterRef, {
+        'value': nextNumber,
+        'empresaId': empresaId,
+      }, SetOptions(merge: true));
 
       tx.set(caseRef, {
         'caseNumber': nextNumber,
@@ -164,7 +199,9 @@ class SupportCaseRepository {
     required String authorId,
     required String authorName,
   }) async {
-    await _collection.doc(caseId).update({'updatedAt': FieldValue.serverTimestamp()});
+    await _collection.doc(caseId).update({
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
     await _appendHistory(
       caseId,
       type: SupportCaseHistoryType.comment,
@@ -185,7 +222,9 @@ class SupportCaseRepository {
       'updatedAt': FieldValue.serverTimestamp(),
       // "Días sin resolver" freezes once the case leaves the open states,
       // and resumes counting if it's reopened.
-      'resolvedAt': SupportCaseStatus.isOpen(newStatus) ? null : FieldValue.serverTimestamp(),
+      'resolvedAt': SupportCaseStatus.isOpen(newStatus)
+          ? null
+          : FieldValue.serverTimestamp(),
     });
     await _appendHistory(
       caseId,
@@ -250,7 +289,9 @@ class SupportCaseRepository {
     await _appendHistory(
       caseId,
       type: SupportCaseHistoryType.tagsChanged,
-      text: newTags.isEmpty ? 'Quitó todas las etiquetas.' : 'Etiquetas: ${newTags.join(', ')}.',
+      text: newTags.isEmpty
+          ? 'Quitó todas las etiquetas.'
+          : 'Etiquetas: ${newTags.join(', ')}.',
       authorId: authorId,
       authorName: authorName,
     );
@@ -276,27 +317,38 @@ class SupportCaseRepository {
     void field(String key, String label, String before, String after) {
       if (before.trim() == after.trim()) return;
       updates[key] = after.trim();
-      changes.add(before.trim().isEmpty
-          ? '$label: "${after.trim()}"'
-          : '$label: "${before.trim()}" → "${after.trim()}"');
+      changes.add(
+        before.trim().isEmpty
+            ? '$label: "${after.trim()}"'
+            : '$label: "${before.trim()}" → "${after.trim()}"',
+      );
     }
 
     field('clientName', 'Cliente', previous.clientName, clientName);
-    field('contactName', 'Persona que reportó', previous.contactName, contactName);
+    field(
+      'contactName',
+      'Persona que reportó',
+      previous.contactName,
+      contactName,
+    );
     field('contactPhone', 'Teléfono', previous.contactPhone, contactPhone);
     field('subject', 'Asunto', previous.subject, subject);
     if (previous.description.trim() != description.trim()) {
       // The old description can be long; it goes whole into the history so
       // the original report stays readable there.
       updates['description'] = description.trim();
-      changes.add(previous.description.trim().isEmpty
-          ? 'Agregó la descripción.'
-          : 'Cambió la descripción. Antes decía: "${previous.description.trim()}"');
+      changes.add(
+        previous.description.trim().isEmpty
+            ? 'Agregó la descripción.'
+            : 'Cambió la descripción. Antes decía: "${previous.description.trim()}"',
+      );
     }
     if (!DateUtils.isSameDay(previous.reportedAt, reportedAt)) {
       updates['reportedAt'] = Timestamp.fromDate(reportedAt);
-      changes.add('Fecha de reporte: ${AppDateUtils.formatShortDate(previous.reportedAt)} '
-          '→ ${AppDateUtils.formatShortDate(reportedAt)}');
+      changes.add(
+        'Fecha de reporte: ${AppDateUtils.formatShortDate(previous.reportedAt)} '
+        '→ ${AppDateUtils.formatShortDate(reportedAt)}',
+      );
     }
     if (clientId != previous.clientId) updates['clientId'] = clientId;
 
@@ -331,7 +383,9 @@ class SupportCaseRepository {
     required String authorName,
   }) async {
     await _collection.doc(caseId).update({
-      'reminderTime': reminderTime != null ? Timestamp.fromDate(reminderTime) : null,
+      'reminderTime': reminderTime != null
+          ? Timestamp.fromDate(reminderTime)
+          : null,
       'reminderNote': reminderNote,
       'reminderSetBy': reminderTime != null ? authorId : null,
       'reminderSent': false,
@@ -340,8 +394,8 @@ class SupportCaseRepository {
     final text = reminderTime == null
         ? 'Quitó el recordatorio.'
         : 'Programó un recordatorio para ${AppDateUtils.formatShortDate(reminderTime)} '
-            '${AppDateUtils.formatTime12h(reminderTime)}'
-            '${reminderNote.trim().isEmpty ? '' : ' — "${reminderNote.trim()}"'}.';
+              '${AppDateUtils.formatTime12h(reminderTime)}'
+              '${reminderNote.trim().isEmpty ? '' : ' — "${reminderNote.trim()}"'}.';
     await _appendHistory(
       caseId,
       type: SupportCaseHistoryType.reminderChanged,

@@ -358,8 +358,22 @@ service cloud.firestore {
         allow create: if isSignedIn() && sameEmpresa(
           get(/databases/$(database)/documents/supportCases/$(caseId)).data.empresaId
         );
-        // History is an append-only log — never edited or removed
-        // individually (the parent case's own delete rule handles cleanup).
+        // Append-only: una entrada no se edita ni se borra sola.
+        //
+        // Borrarlas junto con el caso sí hace falta, y esto faltaba. El
+        // comentario que había aquí decía que "el borrado del caso padre se
+        // encarga de la limpieza" — no es cierto: las reglas de Firestore no
+        // cascadean. `SupportCaseRepository.delete` borra el historial y el
+        // caso en un mismo lote, y un lote se rechaza entero si una sola de
+        // sus escrituras no pasa, así que borrar un caso fallaba siempre y
+        // en silencio. Lo encontró Michel convirtiendo un caso en
+        // requerimiento: nacía el requerimiento y el caso seguía ahí.
+        //
+        // Misma condición que borrar el caso: quien puede borrar el caso
+        // puede borrar su historia, y nadie más.
+        allow delete: if sameEmpresa(
+            get(/databases/$(database)/documents/supportCases/$(caseId)).data.empresaId
+          ) && (isSuperAdmin() || hasPermission('manageSupportCases'));
       }
     }
 
@@ -407,6 +421,14 @@ service cloud.firestore {
         allow create: if isSignedIn() && sameEmpresa(
           get(/databases/$(database)/documents/requirements/$(reqId)).data.empresaId
         );
+        // Un evento no se edita ni se borra solo, pero sí se va con su
+        // requerimiento: `RequirementRepository.delete` los borra en el mismo
+        // lote, y sin esto el lote entero se rechazaría. Es el mismo hueco
+        // que tenía el historial de los casos de soporte y que hacía que
+        // borrar un caso fallara sin decir nada.
+        allow delete: if sameEmpresa(
+            get(/databases/$(database)/documents/requirements/$(reqId)).data.empresaId
+          ) && (isSuperAdmin() || hasPermission('manageRequirements'));
       }
     }
 

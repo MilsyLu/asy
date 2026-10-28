@@ -7,6 +7,7 @@ import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/support_case_metrics.dart';
 import '../../models/support_case_model.dart';
+import '../../widgets/calendario_menu.dart';
 import '../../widgets/kpi_icon_card.dart';
 
 /// El periodo que muestra el Resumen.
@@ -173,90 +174,101 @@ class SupportCasesSummary extends StatelessWidget {
 
 /// Desplegable de periodo, con la misma escalera de opciones que el Dashboard
 /// para que las dos pantallas se elijan igual.
-class _SelectorPeriodo extends StatelessWidget {
+class _SelectorPeriodo extends StatefulWidget {
   const _SelectorPeriodo({required this.periodo, required this.onChanged});
 
   final PeriodoResumen periodo;
   final ValueChanged<PeriodoResumen> onChanged;
 
-  Future<void> _elegir(BuildContext context, int indice) async {
+  @override
+  State<_SelectorPeriodo> createState() => _SelectorPeriodoState();
+}
+
+class _SelectorPeriodoState extends State<_SelectorPeriodo> {
+  /// Para abrir el calendario al elegir "Personalizado".
+  final _menu = MenuController();
+
+  PeriodoResumen get periodo => widget.periodo;
+  ValueChanged<PeriodoResumen> get onChanged => widget.onChanged;
+
+  void _elegir(BuildContext context, int indice) {
     if (indice != PeriodoResumen.indicePersonalizado) {
       onChanged(PeriodoResumen.preset(indice));
       return;
     }
-    final hoy = DateTime.now();
-    final elegido = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(hoy.year - 3),
-      lastDate: DateTime(hoy.year, hoy.month, hoy.day),
-      initialDateRange: DateTimeRange(start: periodo.inicio, end: periodo.fin),
-      helpText: 'Elige el periodo',
-      saveText: 'Aplicar',
-    );
-    if (elegido == null) return;
-    onChanged(PeriodoResumen.personalizado(elegido));
+    // Calendario desplegable, no ventana a pantalla completa.
+    // Al siguiente cuadro: en este instante el desplegable todavía se está
+    // cerrando, y abrir el calendario encima se pierde.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _menu.open());
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return Row(
-      children: [
-        Container(
-          height: 38,
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-          decoration: BoxDecoration(
-            color: colors.surface,
-            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-            border: Border.all(color: colors.divider),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<int>(
-              value: periodo.indice,
-              isDense: true,
-              icon: Icon(
-                LucideIcons.chevronDown,
-                size: 16,
-                color: colors.textSecondary,
-              ),
+    final hoy = DateTime.now();
+    return CalendarioRangoMenu(
+      controller: _menu,
+      rango: DateTimeRange(start: periodo.inicio, end: periodo.fin),
+      ultimoDia: DateTime(hoy.year, hoy.month, hoy.day),
+      onChanged: (r) => onChanged(PeriodoResumen.personalizado(r)),
+      builder: (context, _) => Row(
+        children: [
+          Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+            decoration: BoxDecoration(
+              color: colors.surface,
               borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-              dropdownColor: colors.surface,
-              style: TextStyle(color: colors.textPrimary, fontSize: 13),
-              // Cerrado muestra el periodo de verdad, así que uno
-              // personalizado se lee como las dos fechas que se eligieron y no
-              // como la palabra "Personalizado", que no dice cuáles son.
-              selectedItemBuilder: (_) => [
-                for (var i = 0; i < PeriodoResumen.etiquetas.length; i++)
-                  Row(
-                    children: [
-                      Icon(
-                        LucideIcons.calendar,
-                        size: 15,
-                        color: colors.primary,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        periodo.etiqueta,
-                        style: TextStyle(
-                          color: colors.textPrimary,
-                          fontSize: 13,
+              border: Border.all(color: colors.divider),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<int>(
+                value: periodo.indice,
+                isDense: true,
+                icon: Icon(
+                  LucideIcons.chevronDown,
+                  size: 16,
+                  color: colors.textSecondary,
+                ),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                dropdownColor: colors.surface,
+                style: TextStyle(color: colors.textPrimary, fontSize: 13),
+                // Cerrado muestra el periodo de verdad, así que uno
+                // personalizado se lee como las dos fechas que se eligieron y no
+                // como la palabra "Personalizado", que no dice cuáles son.
+                selectedItemBuilder: (_) => [
+                  for (var i = 0; i < PeriodoResumen.etiquetas.length; i++)
+                    Row(
+                      children: [
+                        Icon(
+                          LucideIcons.calendar,
+                          size: 15,
+                          color: colors.primary,
                         ),
-                      ),
-                    ],
-                  ),
-              ],
-              items: [
-                for (var i = 0; i < PeriodoResumen.etiquetas.length; i++)
-                  DropdownMenuItem(
-                    value: i,
-                    child: Text(PeriodoResumen.etiquetas[i]),
-                  ),
-              ],
-              onChanged: (v) => v == null ? null : _elegir(context, v),
+                        const SizedBox(width: 6),
+                        Text(
+                          periodo.etiqueta,
+                          style: TextStyle(
+                            color: colors.textPrimary,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+                items: [
+                  for (var i = 0; i < PeriodoResumen.etiquetas.length; i++)
+                    DropdownMenuItem(
+                      value: i,
+                      child: Text(PeriodoResumen.etiquetas[i]),
+                    ),
+                ],
+                onChanged: (v) => v == null ? null : _elegir(context, v),
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

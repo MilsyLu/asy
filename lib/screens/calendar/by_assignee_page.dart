@@ -10,6 +10,7 @@ import '../../models/task_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/task_repository.dart';
+import '../../widgets/calendario_menu.dart';
 import '../../widgets/loading_indicator.dart';
 import '../home/widgets/compact_task_card.dart';
 import '../home/widgets/task_detail_dialog.dart';
@@ -81,27 +82,11 @@ class _ByAssigneePageState extends State<ByAssigneePage> {
     });
   }
 
-  Future<void> _elegirFecha() async {
-    final hoy = DateTime.now();
-    final elegida = await showDatePicker(
-      context: context,
-      initialDate: _ancla,
-      firstDate: DateTime(hoy.year - 3),
-      lastDate: DateTime(hoy.year + 3),
-      helpText: switch (_modo) {
-        _Modo.dia => 'Elige el día',
-        _Modo.semana => 'Elige un día de la semana',
-        _Modo.mes => 'Elige un día del mes',
-      },
-      // En modo mes se empieza por el año: lo que se busca es el mes, y
-      // llegar a él desde la rejilla de días es dar vueltas de más.
-      initialDatePickerMode: _modo == _Modo.mes
-          ? DatePickerMode.year
-          : DatePickerMode.day,
-    );
-    if (elegida == null || !mounted) return;
-    setState(() => _ancla = elegida);
-  }
+  /// El calendario desplegable, el mismo de los filtros de toda la app.
+  ///
+  /// Reemplaza a `showDatePicker`, que abría una ventana a pantalla completa
+  /// para elegir un día. En semana y en mes basta con tocar cualquier día
+  /// del que se busca: el modo se encarga del resto.
 
   String get _titulo => switch (_modo) {
     _Modo.dia => AppDateUtils.formatHumanDate(_ancla),
@@ -198,32 +183,39 @@ class _ByAssigneePageState extends State<ByAssigneePage> {
               // moverse un paso; saltar a otro mes con ellas son veinte
               // clics, y el texto de la fecha es justo donde uno intenta
               // hacer clic para eso.
-              InkWell(
-                onTap: _elegirFecha,
-                borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _titulo,
-                        style: TextStyle(
-                          color: colors.textPrimary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
+              CalendarioDiaMenu(
+                dia: _ancla,
+                atajos: [
+                  (nombre: 'Hoy', dia: AppDateUtils.soloDia(DateTime.now())),
+                ],
+                onChanged: (d) => setState(() => _ancla = d),
+                builder: (context, menu) => InkWell(
+                  onTap: () => menu.isOpen ? menu.close() : menu.open(),
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _titulo,
+                          style: TextStyle(
+                            color: colors.textPrimary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 5),
-                      Icon(
-                        LucideIcons.calendar,
-                        size: 14,
-                        color: colors.primary,
-                      ),
-                    ],
+                        const SizedBox(width: 5),
+                        Icon(
+                          LucideIcons.calendar,
+                          size: 14,
+                          color: colors.primary,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

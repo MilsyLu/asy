@@ -24,11 +24,11 @@ class SupportCaseAttachment {
   }
 
   Map<String, dynamic> toMap() => {
-        'url': url,
-        'name': name,
-        'contentType': contentType,
-        'size': size,
-      };
+    'url': url,
+    'name': name,
+    'contentType': contentType,
+    'size': size,
+  };
 }
 
 /// Represents a document in the `supportCases` collection — a client-reported
@@ -108,6 +108,12 @@ class SupportCaseModel {
   final String reminderNote;
   final String? reminderSetBy;
 
+  /// Cómo se lee el caso: CS-0042.
+  ///
+  /// Estaba escrito a mano en el buscador y en media pantalla más; aquí sirve
+  /// además para que el requerimiento que nace de un caso diga de cuál vino.
+  String get codigo => 'CS-${caseNumber.toString().padLeft(4, '0')}';
+
   /// Whole days since [reportedAt] (when the client reported it — not when
   /// the record was typed in), frozen at [resolvedAt] once the case is
   /// resolved/closed.
@@ -129,16 +135,22 @@ class SupportCaseModel {
       description: map['description'] as String? ?? '',
       priority: map['priority'] as String? ?? '',
       status: map['status'] as String? ?? '',
-      tags: (map['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
+      tags:
+          (map['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
+          const [],
       assignedUserId: map['assignedUserId'] as String?,
-      attachments: (map['attachments'] as List<dynamic>?)
-              ?.map((e) => SupportCaseAttachment.fromMap(e as Map<String, dynamic>))
+      attachments:
+          (map['attachments'] as List<dynamic>?)
+              ?.map(
+                (e) => SupportCaseAttachment.fromMap(e as Map<String, dynamic>),
+              )
               .toList() ??
           const [],
       createdBy: map['createdBy'] as String? ?? '',
       createdByName: map['createdByName'] as String? ?? '',
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      reportedAt: (map['reportedAt'] as Timestamp?)?.toDate() ??
+      reportedAt:
+          (map['reportedAt'] as Timestamp?)?.toDate() ??
           (map['createdAt'] as Timestamp?)?.toDate() ??
           DateTime.now(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),

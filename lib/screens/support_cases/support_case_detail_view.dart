@@ -22,6 +22,8 @@ import '../../widgets/client_name_autocomplete.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/support_case_badges.dart';
+import '../../models/requirement_model.dart';
+import '../../services/requirement_repository.dart';
 import '../requirements/requirement_create_panel.dart';
 
 /// Case detail: editable estado/prioridad/responsable, the case's own data
@@ -348,25 +350,55 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
     }
   }
 
-  /// Convierte el caso en requerimiento.
+  Future<void> _editCase(SupportCaseModel c) async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => _EditCaseDialog(supportCase: c),
+    );
+    if (saved == true && mounted) {
+      SnackbarUtils.showSuccess(context, 'Caso actualizado');
+    }
+  }
+
+  /// Convierte el caso en requerimiento: lo muda, no lo copia.
   ///
   /// Pasa muy seguido: el cliente reporta algo como falla, se revisa y
   /// resulta que la aplicación nunca lo hizo. Eso no se arregla, se
-  /// desarrolla, y hasta ahora había que volver a escribirlo todo a mano en
-  /// Requerimientos y el caso quedaba suelto sin decir a dónde fue a parar.
+  /// desarrolla, y deja de ser trabajo de soporte.
   ///
-  /// El formulario llega con el cliente y el texto del caso puestos; lo que
-  /// falta —tipo, módulo, prioridad— son preguntas de desarrollo que el caso
-  /// no responde y las contesta quien convierte. Al guardar, el caso queda
-  /// con una nota en su historia que dice de qué requerimiento se trata.
+  /// Antes esto dejaba el caso vivo y sólo marcado, y Verónica reportó lo
+  /// obvio: seguía apareciendo en Casos de Soporte, ocupando sitio en el
+  /// tablero y con el reloj de días corriendo sobre algo que soporte ya no
+  /// puede resolver. Así que el caso se va de verdad — pero su seguimiento
+  /// completo viaja al requerimiento, con las fechas y los autores
+  /// originales, y el requerimiento queda diciendo que empezó como CS-00xx.
+  ///
+  /// Es irreversible: el caso se borra y no hay papelera de casos. Por eso
+  /// se pregunta antes, y por eso sólo lo puede hacer quien administra los
+  /// casos — la misma condición que borrar uno.
   Future<void> _pasarARequerimiento(SupportCaseModel c) async {
+    final confirma = await showConfirmDialog(
+      context,
+      title: '¿Convertir ${c.codigo} en requerimiento?',
+      message:
+          'El caso se va de Casos de Soporte y pasa a Requerimientos con '
+          'todo su seguimiento. No se puede deshacer.',
+      confirmLabel: 'Convertir',
+    );
+    if (!confirma || !mounted) return;
+
     final repo = context.read<SupportCaseRepository>();
-    final usuario = context.read<AuthProvider>().appUser;
     final texto = c.description.trim().isEmpty
         ? c.subject.trim()
         : '${c.subject.trim()}\n\n${c.description.trim()}';
 
-    final registrado = await showRequirementCreateSheet(
+    // La historia se lee ANTES de abrir el formulario: después del borrado
+    // ya no hay de dónde sacarla, y si algo falla aquí todavía no se ha
+    // tocado nada.
+    final historia = await repo.getHistory(c.id);
+    if (!mounted) return;
+
+    final creado = await showRequirementCreateSheet(
       context,
       prefill: RequirementPrefill(
         descripcion: texto,
@@ -376,26 +408,73 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
         supportCaseNumber: c.caseNumber,
       ),
     );
-    // El formulario dice si llegó a guardar: cerrarlo con Cancelar no deja
-    // anotada una conversión que nunca ocurrió.
-    if (!registrado || !mounted) return;
+    // El formulario dice cuál creó: cerrarlo con Cancelar deja el caso donde
+    // estaba, intacto.
+    if (creado == null || !mounted) return;
 
-    await repo.addComment(
-      c.id,
-      'Este caso pasó a Requerimientos: lo que pedía no es una falla sino '
-      'algo por desarrollar.',
-      authorId: usuario?.id ?? '',
-      authorName: usuario?.name ?? 'Alguien',
-    );
+    // En try: si la mudanza falla a medias hay que decirlo, no dejar al
+    // usuario creyendo que el caso se fue. Fue justo lo que pasó — el
+    // borrado se rechazaba por una regla y la pantalla no decía nada, así
+    // que Michel lo convirtió tres veces seguidas pensando que no servía el
+    // botón.
+    try {
+      final requerimientos = context.read<RequirementRepository>();
+      await requerimientos.importarHistorialDeCaso(creado.id, [
+        (
+          tipo: RequirementEvent.comentario,
+          texto:
+              'Empezó como el caso de soporte ${c.codigo}, abierto el '
+              '${AppDateUtils.formatShortDate(c.reportedAt)}'
+              '${c.clientName.isEmpty ? '' : ' por ${c.clientName}'}.',
+          autorId: c.createdBy,
+          autorNombre: c.createdByName,
+          cuando: c.reportedAt,
+        ),
+        for (final e in historia)
+          (
+            tipo: _tipoEquivalente(e.type),
+            texto: e.text,
+            autorId: e.authorId,
+            autorNombre: e.authorName,
+            cuando: e.createdAt,
+          ),
+      ]);
+
+      await repo.delete(c.id);
+      if (!mounted) return;
+
+      // El caso ya no existe: dejar su ficha abierta mostraría un hueco.
+      widget.onClose?.call();
+      if (widget.showAppBar && mounted) Navigator.of(context).maybePop();
+      if (!mounted) return;
+      SnackbarUtils.showSuccess(
+        context,
+        '${c.codigo} ahora es '
+        'REQ-${creado.numero.toString().padLeft(4, '0')}.',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      SnackbarUtils.showError(
+        context,
+        'Se creó REQ-${creado.numero.toString().padLeft(4, '0')}, pero el '
+        'caso no se pudo retirar de Casos de Soporte: '
+        '${SnackbarUtils.firebaseErrorMessage(e)}',
+      );
+    }
   }
 
-  Future<void> _editCase(SupportCaseModel c) async {
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (_) => _EditCaseDialog(supportCase: c),
-    );
-    if (saved == true && mounted) SnackbarUtils.showSuccess(context, 'Caso actualizado');
-  }
+  /// El tipo de evento del requerimiento que equivale a uno del caso.
+  ///
+  /// Casi todos se llaman igual en los dos lados; los que no tienen
+  /// equivalente —adjuntos, etiquetas, recordatorios— entran como comentario,
+  /// que conserva el texto en vez de perder la entrada.
+  static String _tipoEquivalente(String tipoDelCaso) => switch (tipoDelCaso) {
+    SupportCaseHistoryType.created => RequirementEvent.comentario,
+    SupportCaseHistoryType.statusChanged => RequirementEvent.estado,
+    SupportCaseHistoryType.assigneeChanged => RequirementEvent.asignado,
+    SupportCaseHistoryType.edited => RequirementEvent.editado,
+    _ => RequirementEvent.comentario,
+  };
 
   Future<void> _confirmDelete(SupportCaseModel c) async {
     final confirm = await showConfirmDialog(
@@ -538,15 +617,16 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                       ),
                       onPressed: () => _editCase(c),
                     ),
-                    IconButton(
-                      tooltip: 'Pasar a requerimiento',
-                      icon: Icon(
-                        LucideIcons.lightbulb,
-                        color: colors.primary,
-                        size: 18,
+                    if (canDelete)
+                      IconButton(
+                        tooltip: 'Pasar a requerimiento',
+                        icon: Icon(
+                          LucideIcons.lightbulb,
+                          color: colors.primary,
+                          size: 18,
+                        ),
+                        onPressed: () => _pasarARequerimiento(c),
                       ),
-                      onPressed: () => _pasarARequerimiento(c),
-                    ),
                     if (canDelete)
                       IconButton(
                         tooltip: 'Eliminar',
@@ -912,12 +992,21 @@ class _EditCaseDialog extends StatefulWidget {
 
 class _EditCaseDialogState extends State<_EditCaseDialog> {
   final _formKey = GlobalKey<FormState>();
-  late final _clientController = TextEditingController(text: widget.supportCase.clientName);
-  late final _contactController = TextEditingController(text: widget.supportCase.contactName);
-  late final _phoneController = TextEditingController(text: widget.supportCase.contactPhone);
-  late final _subjectController = TextEditingController(text: widget.supportCase.subject);
-  late final _descriptionController =
-      TextEditingController(text: widget.supportCase.description);
+  late final _clientController = TextEditingController(
+    text: widget.supportCase.clientName,
+  );
+  late final _contactController = TextEditingController(
+    text: widget.supportCase.contactName,
+  );
+  late final _phoneController = TextEditingController(
+    text: widget.supportCase.contactPhone,
+  );
+  late final _subjectController = TextEditingController(
+    text: widget.supportCase.subject,
+  );
+  late final _descriptionController = TextEditingController(
+    text: widget.supportCase.description,
+  );
   final _clientFocusNode = FocusNode();
   late DateTime _reportedAt = widget.supportCase.reportedAt;
   bool _isSaving = false;
@@ -959,13 +1048,15 @@ class _EditCaseDialogState extends State<_EditCaseDialog> {
     );
     if (picked != null) {
       // Keep the original time of day; only the date is being corrected.
-      setState(() => _reportedAt = DateTime(
-            picked.year,
-            picked.month,
-            picked.day,
-            _reportedAt.hour,
-            _reportedAt.minute,
-          ));
+      setState(
+        () => _reportedAt = DateTime(
+          picked.year,
+          picked.month,
+          picked.day,
+          _reportedAt.hour,
+          _reportedAt.minute,
+        ),
+      );
     }
   }
 
@@ -1031,14 +1122,17 @@ class _EditCaseDialogState extends State<_EditCaseDialog> {
                     _clientId = client.id;
                     _linkedClientName = client.name;
                   }),
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'El cliente es obligatorio' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'El cliente es obligatorio'
+                      : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _contactController,
                   style: TextStyle(color: colors.textPrimary),
-                  decoration: const InputDecoration(labelText: 'Persona que reportó'),
+                  decoration: const InputDecoration(
+                    labelText: 'Persona que reportó',
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -1052,8 +1146,9 @@ class _EditCaseDialogState extends State<_EditCaseDialog> {
                   controller: _subjectController,
                   style: TextStyle(color: colors.textPrimary),
                   decoration: const InputDecoration(labelText: 'Asunto *'),
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'El asunto es obligatorio' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'El asunto es obligatorio'
+                      : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -1067,7 +1162,9 @@ class _EditCaseDialogState extends State<_EditCaseDialog> {
                 InkWell(
                   onTap: _pickReportedDate,
                   child: InputDecorator(
-                    decoration: const InputDecoration(labelText: 'Fecha de reporte'),
+                    decoration: const InputDecoration(
+                      labelText: 'Fecha de reporte',
+                    ),
                     child: Text(
                       AppDateUtils.formatShortDate(_reportedAt),
                       style: TextStyle(color: colors.textPrimary),

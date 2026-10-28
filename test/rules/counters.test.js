@@ -77,6 +77,13 @@ async function main() {
     },
   });
 
+  // Se arranca de cero. Sin esto, la primera prueba —"dos creaciones
+  // seguidas dan números 1 y 2"— contaba también los casos que hubiera
+  // dejado una corrida anterior y fallaba con [1..12], aunque el contador
+  // funcionara perfectamente. Peor aún: al salir con error cortaba la cadena
+  // del `npm test` y las suites siguientes no llegaban a correr nunca.
+  await testEnv.clearFirestore();
+
   // Seed: one empresa with an admin who may manage support cases.
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();

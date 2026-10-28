@@ -160,8 +160,10 @@ class _HorizontalBoardState extends State<_HorizontalBoard> {
     // A trackpad or shift+wheel already scrolls sideways on its own.
     if (event.scrollDelta.dx != 0) return;
     final position = _controller.position;
-    final target = (position.pixels + event.scrollDelta.dy)
-        .clamp(position.minScrollExtent, position.maxScrollExtent);
+    final target = (position.pixels + event.scrollDelta.dy).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
     if (target == position.pixels) return;
     // Through the resolver, not directly: a column whose cards can still
     // scroll registers first (it is deeper in the hit test) and keeps the

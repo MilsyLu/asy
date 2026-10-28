@@ -53,6 +53,10 @@ class AppDateUtils {
     return DateFormat('dd/MM/yyyy HH:mm').format(date);
   }
 
+  /// La fecha sin la hora: útil para comparar días sin que las 00:01 y las
+  /// 23:59 del mismo día parezcan distintas.
+  static DateTime soloDia(DateTime d) => DateTime(d.year, d.month, d.day);
+
   /// "Buenos días" / "Buenas tardes" / "Buenas noches", según la hora.
   ///
   /// Vive aquí porque estaba escrito dos veces —en la Agenda diaria y en la
