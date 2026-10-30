@@ -562,12 +562,14 @@ class _RequirementDetailViewState extends State<RequirementDetailView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Mismo peso y mismo color que los de Casos de Soporte: son el
+        // mismo tipo de letrero y no tienen por qué verse distintos.
         Text(
           titulo,
           style: TextStyle(
-            color: colors.textSecondary,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
+            color: colors.textPrimary,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
             letterSpacing: 0.5,
           ),
         ),

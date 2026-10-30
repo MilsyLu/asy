@@ -76,6 +76,24 @@ class SupportDay {
 /// [d] sin la hora.
 DateTime dayOnly(DateTime d) => AppDateUtils.soloDia(d);
 
+/// La descripción, sólo si agrega algo al asunto.
+///
+/// Devuelve null cuando está vacía o cuando repite el asunto palabra por
+/// palabra. De 121 casos, 40 tenían las dos cosas escritas idénticas y 22 la
+/// descripción vacía: cuando el caso es de una línea —"Modificar el apellido
+/// de Juan por Z"— no hay nada más que decir y la gente repite por no dejar
+/// el campo en blanco. Leer la misma frase dos veces seguidas no informa, y
+/// peor aún, al convertir un caso en requerimiento se copiaba duplicada.
+///
+/// La comparación ignora mayúsculas y espacios de sobra: "Cambiar menú" y
+/// "cambiar menú " son la misma frase escrita dos veces, no una ampliación.
+String? descripcionUtil(String asunto, String descripcion) {
+  final d = descripcion.trim();
+  if (d.isEmpty) return null;
+  if (d.toLowerCase() == asunto.trim().toLowerCase()) return null;
+  return d;
+}
+
 /// Si [d] cae dentro de [start]–[end], ambos días incluidos.
 bool inPeriod(DateTime d, DateTime start, DateTime end) {
   final dia = dayOnly(d);

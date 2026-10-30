@@ -1668,7 +1668,10 @@ class _NewCaseFormState extends State<_NewCaseForm> {
               TextFormField(
                 controller: _subjectController,
                 style: TextStyle(color: colors.textPrimary),
-                decoration: const InputDecoration(labelText: 'Asunto *'),
+                decoration: const InputDecoration(
+                  labelText: 'Asunto *',
+                  hintText: 'Qué pasó, en una línea',
+                ),
                 validator: (v) => (v == null || v.trim().isEmpty)
                     ? 'El asunto es obligatorio'
                     : null,
@@ -1678,7 +1681,17 @@ class _NewCaseFormState extends State<_NewCaseForm> {
                 controller: _descriptionController,
                 maxLines: 3,
                 style: TextStyle(color: colors.textPrimary),
-                decoration: const InputDecoration(labelText: 'Descripción'),
+                // "Opcional" dicho sin rodeos, y una pista de para qué
+                // sirve. De 121 casos, 40 tenían la descripción idéntica al
+                // asunto: la gente la repetía por no dejar el campo en
+                // blanco. Si no hay nada que agregar, no hay que escribir.
+                decoration: const InputDecoration(
+                  labelText: 'Descripción (opcional)',
+                  hintText:
+                      'Amplía el asunto: qué se intentó, qué respondió '
+                      'el cliente, qué falta',
+                  helperText: 'Si el asunto ya lo dice todo, déjala vacía.',
+                ),
               ),
               const SizedBox(height: 12),
               Row(

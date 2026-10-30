@@ -10,6 +10,7 @@ import '../../core/theme/theme_colors.dart';
 import '../../core/utils/client_linking.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/snackbar_utils.dart';
+import '../../core/utils/support_case_metrics.dart';
 import '../../models/support_case_history_entry.dart';
 import '../../models/support_case_model.dart';
 import '../../models/support_case_tag_model.dart';
@@ -388,9 +389,12 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
     if (!confirma || !mounted) return;
 
     final repo = context.read<SupportCaseRepository>();
-    final texto = c.description.trim().isEmpty
+    // La descripción sólo si agrega algo: si repite el asunto, el
+    // requerimiento nacía con la misma frase escrita dos veces.
+    final amplia = descripcionUtil(c.subject, c.description);
+    final texto = amplia == null
         ? c.subject.trim()
-        : '${c.subject.trim()}\n\n${c.description.trim()}';
+        : '${c.subject.trim()}\n\n$amplia';
 
     // La historia se lee ANTES de abrir el formulario: después del borrado
     // ya no hay de dónde sacarla, y si algo falla aquí todavía no se ha
@@ -551,12 +555,16 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
     final catalog = context.watch<CatalogProvider>();
     final isResolved = !SupportCaseStatus.isOpen(c.status);
 
+    // En negrita y en el color del texto normal, no en gris: son los
+    // letreros que separan las partes de la ficha y antes se perdían contra
+    // el contenido que anunciaban.
     Widget sectionLabel(String text) => Text(
       text,
       style: TextStyle(
-        color: colors.textSecondary,
+        color: colors.textPrimary,
         fontSize: 12,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.bold,
+        letterSpacing: 0.5,
       ),
     );
 
@@ -820,13 +828,18 @@ class _SupportCaseDetailViewState extends State<SupportCaseDetailView> {
                   c.subject,
                   style: TextStyle(color: colors.textPrimary, fontSize: 14),
                 ),
-                const SizedBox(height: 14),
-                sectionLabel('DESCRIPCIÓN'),
-                const SizedBox(height: 4),
-                Text(
-                  c.description.isEmpty ? '—' : c.description,
-                  style: TextStyle(color: colors.textPrimary, fontSize: 14),
-                ),
+                // Sin sección cuando la descripción está vacía o repite el
+                // asunto: un guion suelto y una frase repetida ocupan sitio
+                // sin decir nada. De 121 casos, 62 estaban así.
+                if (descripcionUtil(c.subject, c.description) != null) ...[
+                  const SizedBox(height: 14),
+                  sectionLabel('DESCRIPCIÓN'),
+                  const SizedBox(height: 4),
+                  Text(
+                    descripcionUtil(c.subject, c.description)!,
+                    style: TextStyle(color: colors.textPrimary, fontSize: 14),
+                  ),
+                ],
                 const SizedBox(height: 18),
                 Row(
                   children: [
@@ -1145,7 +1158,10 @@ class _EditCaseDialogState extends State<_EditCaseDialog> {
                 TextFormField(
                   controller: _subjectController,
                   style: TextStyle(color: colors.textPrimary),
-                  decoration: const InputDecoration(labelText: 'Asunto *'),
+                  decoration: const InputDecoration(
+                    labelText: 'Asunto *',
+                    hintText: 'Qué pasó, en una línea',
+                  ),
                   validator: (v) => (v == null || v.trim().isEmpty)
                       ? 'El asunto es obligatorio'
                       : null,
@@ -1156,7 +1172,16 @@ class _EditCaseDialogState extends State<_EditCaseDialog> {
                   minLines: 3,
                   maxLines: 8,
                   style: TextStyle(color: colors.textPrimary),
-                  decoration: const InputDecoration(labelText: 'Descripción'),
+                  // Igual que en el alta: opcional de verdad y con una
+                  // pista de para qué sirve, para que nadie la rellene
+                  // copiando el asunto.
+                  decoration: const InputDecoration(
+                    labelText: 'Descripción (opcional)',
+                    hintText:
+                        'Amplía el asunto: qué se intentó, qué '
+                        'respondió el cliente, qué falta',
+                    helperText: 'Si el asunto ya lo dice todo, déjala vacía.',
+                  ),
                 ),
                 const SizedBox(height: 12),
                 InkWell(
