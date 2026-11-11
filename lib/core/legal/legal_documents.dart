@@ -26,9 +26,13 @@ abstract final class LegalResponsable {
   /// Nombre completo de la persona natural responsable.
   static const String nombre = '[PENDIENTE: nombre completo]';
 
-  /// Cédula de ciudadanía. Identifica al responsable sin ambigüedad, que es
-  /// lo que la ley pide; no es un dato sensible y va en la política.
-  static const String documento = '[PENDIENTE: cédula]';
+  /// Dirección de notificaciones. El Decreto 1377 de 2013 pide dirección,
+  /// correo y teléfono del responsable — no el número de cédula, que por
+  /// eso no se publica: es un dato personal suyo y no hace falta.
+  static const String direccion = '[PENDIENTE: dirección]';
+
+  /// Teléfono de contacto. Lo exige el mismo decreto.
+  static const String telefono = '[PENDIENTE: teléfono]';
 
   /// La firma con la que salen los productos.
   static const String nombreComercial = 'CustoDesk';
@@ -47,7 +51,8 @@ abstract final class LegalResponsable {
   /// no tenerla — dice por escrito que no se sabe quién responde.
   static bool get completo =>
       !nombre.startsWith('[') &&
-      !documento.startsWith('[') &&
+      !direccion.startsWith('[') &&
+      !telefono.startsWith('[') &&
       !ciudad.startsWith('[') &&
       !correo.startsWith('[');
 }
@@ -92,9 +97,13 @@ abstract final class LegalDocs {
     cuerpo: '''
 ## 1. Quién responde por sus datos
 
-${LegalResponsable.nombre}, persona natural identificada con cédula de ciudadanía ${LegalResponsable.documento}, con domicilio en ${LegalResponsable.ciudad}, Colombia, quien desarrolla y opera CheCu bajo el nombre comercial ${LegalResponsable.nombreComercial}, es el Responsable del Tratamiento de los datos personales que se describen en esta política.
+${LegalResponsable.nombre}, persona natural que desarrolla y opera CheCu bajo el nombre comercial ${LegalResponsable.nombreComercial}, es el Responsable del Tratamiento de los datos personales que se describen en esta política.
 
-Correo de contacto para todo lo relacionado con datos personales: ${LegalResponsable.correo}
+- Dirección: ${LegalResponsable.direccion}, ${LegalResponsable.ciudad}, Colombia.
+- Correo electrónico: ${LegalResponsable.correo}
+- Teléfono: ${LegalResponsable.telefono}
+
+Ese correo es el canal de atención para todo lo relacionado con datos personales.
 
 Esta política se expide conforme a la Ley 1581 de 2012, al Decreto 1074 de 2015 y a las demás normas colombianas sobre protección de datos personales.
 

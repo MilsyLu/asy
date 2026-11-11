@@ -10,7 +10,8 @@ void main() {
       // Es lo que impide publicar una política con corchetes sin llenar.
       final datos = [
         LegalResponsable.nombre,
-        LegalResponsable.documento,
+        LegalResponsable.direccion,
+        LegalResponsable.telefono,
         LegalResponsable.ciudad,
         LegalResponsable.correo,
       ];
