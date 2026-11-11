@@ -10,9 +10,8 @@ void main() {
       // Es lo que impide publicar una política con corchetes sin llenar.
       final datos = [
         LegalResponsable.nombre,
-        LegalResponsable.direccion,
+        LegalResponsable.domicilio,
         LegalResponsable.telefono,
-        LegalResponsable.ciudad,
         LegalResponsable.correo,
       ];
       final hayPendientes = datos.any((d) => d.startsWith('['));

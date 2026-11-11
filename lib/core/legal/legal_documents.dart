@@ -24,36 +24,36 @@ library;
 /// aceptación. No hay que tocar nada más.
 abstract final class LegalResponsable {
   /// Nombre completo de la persona natural responsable.
-  static const String nombre = '[PENDIENTE: nombre completo]';
+  static const String nombre = 'Michel Josefina Custodes Rodríguez';
 
-  /// Dirección de notificaciones. El Decreto 1377 de 2013 pide dirección,
-  /// correo y teléfono del responsable — no el número de cédula, que por
-  /// eso no se publica: es un dato personal suyo y no hace falta.
-  static const String direccion = '[PENDIENTE: dirección]';
+  /// Domicilio. Fija en qué ciudad se atiende un reclamo y ante qué
+  /// autoridad.
+  ///
+  /// La ciudad y no la dirección de la casa: el Decreto 1377 de 2013 pide
+  /// cómo contactar al responsable, y para una persona natural que trabaja
+  /// desde su casa el canal real son el correo y el teléfono de abajo.
+  /// Publicar la dirección de su vivienda la expondría sin que nadie la
+  /// necesite. El día que haya oficina o sociedad, aquí va su dirección.
+  static const String domicilio = 'Valledupar, Cesar, Colombia';
 
-  /// Teléfono de contacto. Lo exige el mismo decreto.
-  static const String telefono = '[PENDIENTE: teléfono]';
+  /// Teléfono de contacto. Lo pide el mismo decreto.
+  static const String telefono = '+57 300 238 7113';
 
   /// La firma con la que salen los productos.
   static const String nombreComercial = 'CustoDesk';
 
-  /// Domicilio. Fija ante qué autoridad y en qué ciudad se atiende un
-  /// reclamo.
-  static const String ciudad = '[PENDIENTE: ciudad]';
-
   /// El canal de atención al titular. Tiene que existir de verdad y ser
   /// revisado: la ley da plazos para contestar y empiezan a correr desde
-  /// que llega el mensaje.
-  static const String correo = '[PENDIENTE: correo de contacto]';
+  /// que llega el mensaje, no desde que alguien lo lee.
+  static const String correo = 'custodesmichel@gmail.com';
 
   /// Si falta algo por llenar. La pantalla legal lo usa para no publicar un
   /// documento a medias: una política con corchetes sin llenar es peor que
   /// no tenerla — dice por escrito que no se sabe quién responde.
   static bool get completo =>
       !nombre.startsWith('[') &&
-      !direccion.startsWith('[') &&
+      !domicilio.startsWith('[') &&
       !telefono.startsWith('[') &&
-      !ciudad.startsWith('[') &&
       !correo.startsWith('[');
 }
 
@@ -99,7 +99,7 @@ abstract final class LegalDocs {
 
 ${LegalResponsable.nombre}, persona natural que desarrolla y opera CheCu bajo el nombre comercial ${LegalResponsable.nombreComercial}, es el Responsable del Tratamiento de los datos personales que se describen en esta política.
 
-- Dirección: ${LegalResponsable.direccion}, ${LegalResponsable.ciudad}, Colombia.
+- Domicilio: ${LegalResponsable.domicilio}
 - Correo electrónico: ${LegalResponsable.correo}
 - Teléfono: ${LegalResponsable.telefono}
 
