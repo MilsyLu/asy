@@ -5,17 +5,21 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/legal/legal_documents.dart';
 import '../../core/responsive/app_spacing.dart';
 import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/theme/theme_manager.dart';
+import '../../core/utils/date_utils.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../models/app_user.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/notification_service.dart';
 import '../../services/notification_web_api_stub.dart'
     if (dart.library.js_interop) '../../services/notification_web_api.dart';
+import '../../services/legal_repository.dart';
 import '../../services/user_repository.dart';
+import '../legal/legal_page.dart';
 
 /// "Configuración" screen (Sprint 19 UX redesign): modern two-column
 /// preference hub on desktop, single column on tablet/mobile.
@@ -158,6 +162,8 @@ class _MainPrefsColumn extends StatelessWidget {
       children: [
         if (user != null) ...[
           _NotificationsSection(user: user!),
+          const SizedBox(height: AppSpacing.md),
+          _LegalSection(user: user!),
           const SizedBox(height: AppSpacing.md),
         ],
         _AppearanceSection(themeManager: themeManager),
@@ -601,6 +607,108 @@ class _InterruptorAviso extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Los documentos legales y la constancia de haberlos aceptado.
+///
+/// La constancia se muestra porque es un derecho del titular: la ley le
+/// permite pedir prueba de la autorización que dio. Tenerla a la vista
+/// evita que haya que pedirla por correo para algo que la aplicación ya
+/// sabe.
+class _LegalSection extends StatelessWidget {
+  const _LegalSection({required this.user});
+
+  final AppUser user;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return _PrefCard(
+      icon: LucideIcons.shieldCheck,
+      title: 'Privacidad y condiciones',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final doc in LegalDocs.todos)
+            InkWell(
+              onTap: () => mostrarDocumentoLegal(context, doc),
+              borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      LucideIcons.fileText,
+                      size: 18,
+                      color: colors.textSecondary,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        doc.titulo,
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      LucideIcons.chevronRight,
+                      size: 16,
+                      color: colors.textSecondary,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          const SizedBox(height: AppSpacing.xs),
+          _ConstanciaAceptacion(userId: user.id),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Usted aceptó … el 11/11/2026". La prueba, en la pantalla.
+class _ConstanciaAceptacion extends StatelessWidget {
+  const _ConstanciaAceptacion({required this.userId});
+
+  final String userId;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return StreamBuilder<List<LegalAcceptance>>(
+      stream: context.read<LegalRepository>().watchDe(userId),
+      builder: (context, snap) {
+        final lista = snap.data ?? const <LegalAcceptance>[];
+        if (lista.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final a in lista)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '${a.documentoTitulo} v${a.version} · aceptada'
+                    '${a.aceptadoEn == null ? '' : ' el ${AppDateUtils.formatShortDate(a.aceptadoEn!)}'}',
+                    style: TextStyle(
+                      color: colors.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

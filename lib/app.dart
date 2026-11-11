@@ -25,6 +25,8 @@ import 'services/requirement_repository.dart';
 import 'services/support_case_repository.dart';
 import 'services/task_repository.dart';
 import 'services/user_repository.dart';
+import 'screens/legal/legal_gate.dart';
+import 'services/legal_repository.dart';
 import 'widgets/brand_logo.dart';
 
 class TaskFlowApp extends StatelessWidget {
@@ -99,6 +101,10 @@ class TaskFlowApp extends StatelessWidget {
                   Provider<NotificationRepository>(
                     create: (_) => NotificationRepository(),
                   ),
+                  // No lleva empresaId: una aceptación es de la persona, no
+                  // de la empresa donde trabaja. Si mañana se mueve de
+                  // empresa, su autorización sigue siendo la misma.
+                  Provider<LegalRepository>(create: (_) => LegalRepository()),
                   Provider<PrinterConfigRepository>(
                     create: (_) =>
                         PrinterConfigRepository(empresaId: empresaId),
@@ -174,7 +180,10 @@ class AuthGate extends StatelessWidget {
       return const LoginPage();
     }
 
-    return const MainShell();
+    // Nadie entra sin haber autorizado el tratamiento de sus datos: la
+    // Ley 1581 de 2012 no pide sólo publicar la política, pide poder
+    // probar la autorización.
+    return const LegalGate(child: MainShell());
   }
 }
 

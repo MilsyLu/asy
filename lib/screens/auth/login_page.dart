@@ -11,6 +11,8 @@ import '../../core/utils/validators.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/notification_navigation.dart';
+import '../../core/legal/legal_documents.dart';
+import '../legal/legal_page.dart';
 import '../../widgets/brand_logo.dart';
 import '../../widgets/checu_mark.dart';
 import '../../widgets/google_g_logo.dart';
@@ -783,6 +785,40 @@ class _LoginFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Los documentos se leen sin haber entrado. Una política que sólo
+        // se puede consultar con usuario y contraseña no está publicada,
+        // y la ley pide que esté disponible.
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: AppSpacing.md,
+          children: [
+            for (final doc in LegalDocs.todos)
+              TextButton(
+                onPressed: () => mostrarDocumentoLegal(context, doc),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  foregroundColor: _kLoginPrimary.withValues(alpha: 0.7),
+                  textStyle: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+                child: Text(doc.titulo),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        _creditos(),
+      ],
+    );
+  }
+
+  Widget _creditos() {
     return Text.rich(
       TextSpan(
         text: 'Desarrollado por ',

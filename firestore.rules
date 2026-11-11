@@ -535,5 +535,38 @@ service cloud.firestore {
       // even super_admin, since this isn't an admin-moderation feature.
       allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
+
+    // -----------------------------------------------------------------
+    // legalAcceptances — la prueba de que cada persona autorizo el
+    // tratamiento de sus datos (Ley 1581 de 2012).
+    //
+    // Solo se crea. Ni el propio titular, ni un super_admin, ni el dueno de
+    // la plataforma pueden modificar ni borrar un registro: un documento
+    // probatorio que alguien puede editar despues no prueba nada, y la ley
+    // exige poder demostrar la autorizacion. Por eso tampoco se borra al
+    // eliminar la cuenta — la autorizacion existio, y haberla pedido es
+    // justamente lo que hay que poder acreditar.
+    // -----------------------------------------------------------------
+    match /legalAcceptances/{id} {
+      // Cada quien crea la suya, con su propio uid dentro del documento y
+      // en el sitio que le corresponde: el id lleva el uid, de modo que
+      // nadie puede sembrar una aceptacion en el espacio de otro.
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && id.split('__')[0] == request.auth.uid
+        && request.resource.data.documentoId is string
+        && request.resource.data.version is string;
+      allow update, delete: if false;
+
+      // Cada quien lee la suya. Un super_admin lee las de su empresa, que
+      // es quien tiene que responder si la Superintendencia le pide las
+      // autorizaciones de su equipo.
+      allow get: if isSignedIn()
+        && (resource.data.userId == request.auth.uid
+            || (isSuperAdmin() && sameEmpresa(resource.data.empresaId)));
+      // Las consultas siempre van filtradas por userId desde la app (ver
+      // LegalRepository), igual que notifications arriba.
+      allow list: if isSignedIn();
+    }
   }
 }
