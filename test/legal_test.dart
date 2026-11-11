@@ -64,27 +64,36 @@ void main() {
   });
 
   group('LegalRepository.idDe', () {
+    final momento = DateTime.utc(2026, 11, 11, 9, 30);
+
     // La regla de seguridad parte el id por '__' y exige que el primer
     // pedazo sea el uid de quien escribe (ver firestore.rules). Si esta
     // forma cambia sin cambiar la regla, nadie podría aceptar nada: la
     // escritura sería rechazada en producción y en ningún otro lado.
     test('el id empieza por el uid, como lo exige la regla', () {
-      final id = LegalRepository.idDe('abc123', LegalDocs.politica);
+      final id = LegalRepository.idDe('abc123', LegalDocs.politica, momento);
       expect(id.split('__').first, 'abc123');
-      expect(id, 'abc123__politica_datos_v1.0');
+      expect(id.startsWith('abc123__politica_datos_v1.0__'), isTrue);
     });
 
     test('dos documentos del mismo usuario no chocan', () {
-      final uno = LegalRepository.idDe('u1', LegalDocs.politica);
-      final dos = LegalRepository.idDe('u1', LegalDocs.terminos);
+      final uno = LegalRepository.idDe('u1', LegalDocs.politica, momento);
+      final dos = LegalRepository.idDe('u1', LegalDocs.terminos, momento);
       expect(uno == dos, isFalse);
     });
 
-    test('aceptar dos veces lo mismo escribe en el mismo sitio', () {
-      expect(
-        LegalRepository.idDe('u1', LegalDocs.politica),
-        LegalRepository.idDe('u1', LegalDocs.politica),
+    test('aceptar dos veces deja dos registros, no pisa el primero', () {
+      // Un identificador fijo hacía que la segunda aceptación fuera una
+      // modificación, y la regla prohíbe modificar: el usuario se quedaba
+      // sin poder entrar.
+      final uno = LegalRepository.idDe('u1', LegalDocs.politica, momento);
+      final dos = LegalRepository.idDe(
+        'u1',
+        LegalDocs.politica,
+        momento.add(const Duration(seconds: 1)),
       );
+      expect(uno == dos, isFalse);
+      expect(dos.split('__').first, 'u1');
     });
   });
 }

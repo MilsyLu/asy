@@ -59,10 +59,20 @@ class LegalRepository {
   CollectionReference<Map<String, dynamic>> get _collection =>
       _firestore.collection('legalAcceptances');
 
-  /// El identificador del registro. Lo construyen igual la app y la regla
-  /// de seguridad, y por eso aceptar dos veces el mismo documento no crea
-  /// dos registros: se escribe sobre el mismo sitio.
-  static String idDe(String uid, LegalDoc doc) => '${uid}__${doc.clave}';
+  /// El identificador del registro.
+  ///
+  /// Empieza por el uid de quien acepta, y la regla de seguridad lo exige
+  /// así: nadie puede sembrar una aceptación en el espacio de otro.
+  ///
+  /// Termina en el instante, de modo que **cada aceptación es un registro
+  /// nuevo** y ninguna pisa a la anterior. Con un identificador fijo,
+  /// aceptar dos veces el mismo documento era una escritura sobre algo que
+  /// ya existía, y la regla —que prohíbe modificar— la rechazaba: a quien
+  /// le reapareciera la pantalla por un corte de red le salía un error de
+  /// permisos y se quedaba sin poder entrar. Dos registros de lo mismo no
+  /// estorban; perder el acceso sí.
+  static String idDe(String uid, LegalDoc doc, DateTime cuando) =>
+      '${uid}__${doc.clave}__${cuando.millisecondsSinceEpoch}';
 
   /// Qué documentos vigentes le faltan por aceptar a [uid].
   ///
@@ -95,8 +105,12 @@ class LegalRepository {
     required String origen,
   }) async {
     final lote = _firestore.batch();
+    // La hora del equipo sólo decide el nombre del registro. La fecha que
+    // vale es `aceptadoEn`, que la pone el servidor: un reloj mal puesto no
+    // puede fechar una autorización.
+    final ahora = DateTime.now();
     for (final doc in docs) {
-      lote.set(_collection.doc(idDe(uid, doc)), {
+      lote.set(_collection.doc(idDe(uid, doc, ahora)), {
         'userId': uid,
         'userName': nombre,
         'userEmail': correo,
