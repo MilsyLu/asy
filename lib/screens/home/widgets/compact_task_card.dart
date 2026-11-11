@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/responsive/app_spacing.dart';
 import '../../../core/theme/theme_colors.dart';
+import '../../../core/utils/recordatorio_resumen.dart';
 import '../../../core/utils/reschedule_summary.dart';
 import '../../../core/utils/task_type_colors.dart';
 import '../../../models/task_model.dart';
@@ -43,6 +44,13 @@ class CompactTaskCard extends StatelessWidget {
     final accent = accentColor ?? taskStatusColor(colors, statusName);
     final typeColor =
         catalog.taskTypeById(task.taskTypeId)?.parsedColor ?? colors.primary;
+    final recordatorio = resumenRecordatorio(
+      recordatorio: task.reminderTime,
+      enviado: task.reminderSent,
+      // `date` es la cadena "YYYY-MM-DD"; lo que hace falta aquí es el
+      // día como fecha, que es lo que arma `scheduledDateTime`.
+      fechaTarea: task.scheduledDateTime,
+    );
     final reprogramacion = rescheduleSummary(
       history: task.rescheduleHistory,
       rescheduledCount: task.rescheduledCount,
@@ -130,6 +138,42 @@ class CompactTaskCard extends StatelessWidget {
                         ),
                       ],
                     ),
+                    // Si va a sonar, y cuándo. Antes una tarea podía
+                    // tener recordatorio y no se notaba en ninguna vista:
+                    // había que abrirla para saberlo.
+                    if (recordatorio != null) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(
+                            task.reminderSent
+                                ? LucideIcons.bellOff
+                                : LucideIcons.bell,
+                            size: 12,
+                            color: task.reminderSent
+                                ? colors.textSecondary
+                                : colors.primary,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              recordatorio,
+                              style: TextStyle(
+                                color: task.reminderSent
+                                    ? colors.textSecondary
+                                    : colors.primary,
+                                fontSize: 11,
+                                fontWeight: task.reminderSent
+                                    ? FontWeight.normal
+                                    : FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     // De dónde venía, si se movió. "Reprogramada" por sí
                     // solo no decía ni la fecha anterior ni si de verdad
                     // cambió de día.

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:taskflow_executive/core/utils/autor_tarea.dart';
 import 'package:taskflow_executive/core/utils/report_filters.dart';
 import 'package:taskflow_executive/models/task_model.dart';
 
@@ -16,6 +17,8 @@ void main() {
     String? grupo = 'g1',
     String estado = 'pendiente',
     String? tipo = 'instalacion',
+    String? asignadaPor,
+    String? via,
   }) => TaskModel(
     id: id,
     hour: '10:00',
@@ -26,6 +29,8 @@ void main() {
     taskTypeId: tipo,
     groupId: grupo,
     date: '2026-08-15',
+    createdBy: asignadaPor,
+    createdVia: via,
   );
 
   group('sin filtros', () {
@@ -60,16 +65,16 @@ void main() {
     });
 
     test('encuentra la ñ escrita sin virgulilla', () {
-      final r = const ReportFilters(search: 'panaderia').apply([
-        tarea(id: 'a', cliente: 'Panadería los andes'),
-      ]);
+      final r = const ReportFilters(
+        search: 'panaderia',
+      ).apply([tarea(id: 'a', cliente: 'Panadería los andes')]);
       expect(r.map((t) => t.id), ['a']);
     });
 
     test('busca en cualquier parte del nombre, no solo al principio', () {
-      final r = const ReportFilters(search: 'burger').apply([
-        tarea(id: 'a', cliente: 'KAYROS BURGER'),
-      ]);
+      final r = const ReportFilters(
+        search: 'burger',
+      ).apply([tarea(id: 'a', cliente: 'KAYROS BURGER')]);
       expect(r.map((t) => t.id), ['a']);
     });
   });
@@ -84,27 +89,25 @@ void main() {
     });
 
     test('un texto sin dígitos no se compara contra el teléfono', () {
-      final r = const ReportFilters(search: 'zzz').apply([
-        tarea(id: 'a', telefono: '3005551234'),
-      ]);
+      final r = const ReportFilters(
+        search: 'zzz',
+      ).apply([tarea(id: 'a', telefono: '3005551234')]);
       expect(r, isEmpty);
     });
   });
 
   group('filtros por lista', () {
     test('equipo', () {
-      final r = const ReportFilters(groupId: 'g1').apply([
-        tarea(id: 'a', grupo: 'g1'),
-        tarea(id: 'b', grupo: 'g2'),
-      ]);
+      final r = const ReportFilters(
+        groupId: 'g1',
+      ).apply([tarea(id: 'a', grupo: 'g1'), tarea(id: 'b', grupo: 'g2')]);
       expect(r.map((t) => t.id), ['a']);
     });
 
     test('usuario', () {
-      final r = const ReportFilters(userId: 'u2').apply([
-        tarea(id: 'a', usuario: 'u1'),
-        tarea(id: 'b', usuario: 'u2'),
-      ]);
+      final r = const ReportFilters(
+        userId: 'u2',
+      ).apply([tarea(id: 'a', usuario: 'u1'), tarea(id: 'b', usuario: 'u2')]);
       expect(r.map((t) => t.id), ['b']);
     });
 
@@ -125,19 +128,18 @@ void main() {
     });
 
     test('una tarea sin equipo no entra al filtrar por equipo', () {
-      final r = const ReportFilters(groupId: 'g1').apply([
-        tarea(id: 'a', grupo: null),
-      ]);
+      final r = const ReportFilters(
+        groupId: 'g1',
+      ).apply([tarea(id: 'a', grupo: null)]);
       expect(r, isEmpty);
     });
 
     test('"Sin equipo" alcanza justo las que no tienen equipo', () {
       // Sin esta opción esas tareas no las selecciona ningún filtro: quedan
       // fuera de toda vista filtrada y de todo export, sin aviso.
-      final r = const ReportFilters(groupId: kSinAsignar).apply([
-        tarea(id: 'a', grupo: null),
-        tarea(id: 'b', grupo: 'g1'),
-      ]);
+      final r = const ReportFilters(
+        groupId: kSinAsignar,
+      ).apply([tarea(id: 'a', grupo: null), tarea(id: 'b', grupo: 'g1')]);
       expect(r.map((t) => t.id), ['a']);
     });
 
@@ -159,12 +161,91 @@ void main() {
       statusId: 'completada',
     );
     final r = f.apply([
-      tarea(id: 'ok', cliente: 'Allitas Burger', grupo: 'g1', estado: 'completada'),
-      tarea(id: 'otroEquipo', cliente: 'Allitas Burger', grupo: 'g2', estado: 'completada'),
-      tarea(id: 'otroEstado', cliente: 'Allitas Burger', grupo: 'g1', estado: 'pendiente'),
-      tarea(id: 'otroCliente', cliente: 'Pizza', grupo: 'g1', estado: 'completada'),
+      tarea(
+        id: 'ok',
+        cliente: 'Allitas Burger',
+        grupo: 'g1',
+        estado: 'completada',
+      ),
+      tarea(
+        id: 'otroEquipo',
+        cliente: 'Allitas Burger',
+        grupo: 'g2',
+        estado: 'completada',
+      ),
+      tarea(
+        id: 'otroEstado',
+        cliente: 'Allitas Burger',
+        grupo: 'g1',
+        estado: 'pendiente',
+      ),
+      tarea(
+        id: 'otroCliente',
+        cliente: 'Pizza',
+        grupo: 'g1',
+        estado: 'completada',
+      ),
     ]);
     expect(r.map((t) => t.id), ['ok']);
+  });
+
+  group('asignadas por', () {
+    final tareas = [
+      tarea(id: 'elena1', asignadaPor: 'u-elena'),
+      tarea(id: 'elena2', asignadaPor: 'u-elena'),
+      tarea(id: 'michel', asignadaPor: 'u-michel'),
+      tarea(id: 'hoja', via: 'hoja'),
+      tarea(id: 'vieja'),
+    ];
+
+    test('deja solo las de esa persona', () {
+      const f = ReportFilters(autorId: 'u-elena');
+      expect(f.apply(tareas).map((t) => t.id), ['elena1', 'elena2']);
+    });
+
+    test('las de la hoja de calculo se pueden pedir aparte', () {
+      const f = ReportFilters(autorId: AutorTarea.hoja);
+      expect(f.apply(tareas).map((t) => t.id), ['hoja']);
+    });
+
+    test('las viejas sin autor tambien son alcanzables', () {
+      // Si no lo fueran, sumar los filtros de todos los autores dejaria
+      // tareas afuera y los totales no cuadrarian con la lista.
+      const f = ReportFilters(autorId: AutorTarea.sinRegistrar);
+      expect(f.apply(tareas).map((t) => t.id), ['vieja']);
+    });
+
+    test('sumando los autores salen todas las tareas', () {
+      final claves = {for (final t in tareas) claveAutor(t)};
+      final suma = [
+        for (final c in claves) ...ReportFilters(autorId: c).apply(tareas),
+      ];
+      expect(suma.length, tareas.length);
+    });
+
+    test('quien asigno no se confunde con a quien se le asigno', () {
+      // La tarea la asigno Elena y la tiene Natalia: filtrar por encargado
+      // Elena no debe traerla.
+      final t = [tarea(id: 'x', asignadaPor: 'u-elena', usuario: 'u-natalia')];
+      expect(const ReportFilters(autorId: 'u-elena').apply(t).length, 1);
+      expect(const ReportFilters(userId: 'u-elena').apply(t), isEmpty);
+    });
+
+    test('cuenta como filtro activo', () {
+      expect(const ReportFilters(autorId: 'u-elena').isEmpty, isFalse);
+    });
+
+    test('el resumen del reporte dice quien asigno', () {
+      const f = ReportFilters(autorId: 'u-elena');
+      final texto = f.describe(
+        groupName: (_) => '',
+        userName: (_) => '',
+        statusName: (_) => '',
+        taskTypeName: (_) => '',
+        autorName: (_) => 'Elena',
+      );
+      expect(texto, contains('Asignadas por: Elena'));
+    });
   });
 
   group('copyWith', () {

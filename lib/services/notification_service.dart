@@ -31,23 +31,31 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 /// established here; nothing currently dispatches on [type] — that's for
 /// whichever sprint adds in-app navigation on notification tap.
 class NotificationPayload {
-  const NotificationPayload({this.type, this.taskId, this.caseId});
+  const NotificationPayload({
+    this.type,
+    this.taskId,
+    this.caseId,
+    this.requirementId,
+  });
 
   final String? type;
   final String? taskId;
   final String? caseId;
+  final String? requirementId;
 
   factory NotificationPayload.fromMessage(RemoteMessage message) {
     return NotificationPayload(
       type: message.data['type'] as String?,
       taskId: message.data['taskId'] as String?,
       caseId: message.data['caseId'] as String?,
+      requirementId: message.data['requirementId'] as String?,
     );
   }
 
   @override
   String toString() =>
-      'NotificationPayload(type: $type, taskId: $taskId, caseId: $caseId)';
+      'NotificationPayload(type: $type, taskId: $taskId, caseId: $caseId, '
+      'requirementId: $requirementId)';
 }
 
 /// Wraps Firebase Cloud Messaging + flutter_local_notifications.
@@ -170,10 +178,16 @@ class NotificationService {
         final params = Uri.parse(url).queryParameters;
         final taskId = params['openTask'];
         final caseId = params['openCase'];
+        final requirementId = params['openRequirement'];
         debugPrint(
-          '[WEB_FCM] notification click -> openTask=$taskId openCase=$caseId',
+          '[WEB_FCM] notification click -> openTask=$taskId '
+          'openCase=$caseId openRequirement=$requirementId',
         );
-        openNotificationFromData({'taskId': ?taskId, 'caseId': ?caseId});
+        openNotificationFromData({
+          'taskId': ?taskId,
+          'caseId': ?caseId,
+          'requirementId': ?requirementId,
+        });
       });
     }
 
@@ -302,6 +316,10 @@ class NotificationService {
     if (taskId != null && taskId.isNotEmpty) return 'task:$taskId';
     final caseId = data['caseId'] as String?;
     if (caseId != null && caseId.isNotEmpty) return 'case:$caseId';
+    final requirementId = data['requirementId'] as String?;
+    if (requirementId != null && requirementId.isNotEmpty) {
+      return 'req:$requirementId';
+    }
     return null;
   }
 

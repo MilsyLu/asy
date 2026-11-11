@@ -185,7 +185,7 @@ service cloud.firestore {
           (isSuperAdmin() && sameEmpresa(resource.data.empresaId))
           || (isOwner(userId)
               && request.resource.data.diff(resource.data).affectedKeys()
-                  .hasOnly(['fcmTokens', 'lastLogin', 'streakDays', 'maxStreakDays', 'name', 'themeMode', 'accentColor',  'photoUrl', 'pushNotificationMode']))
+                  .hasOnly(['fcmTokens', 'lastLogin', 'streakDays', 'maxStreakDays', 'name', 'themeMode', 'accentColor',  'photoUrl', 'pushNotificationMode', 'avisarRequerimientoNuevo']))
           || (hasPermission('manageUsers')
               && sameEmpresa(resource.data.empresaId)
               && resource.data.role == 'trabajador_normal'

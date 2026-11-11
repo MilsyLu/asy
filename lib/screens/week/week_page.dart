@@ -9,9 +9,11 @@ import '../../core/utils/date_utils.dart';
 import '../../core/utils/task_visibility.dart';
 import '../../models/task_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/filtro_autor_provider.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/task_repository.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/filtro_autor_chip.dart';
 import '../home/add_edit_task_page.dart';
 import '../home/widgets/compact_task_card.dart';
 import '../home/widgets/task_card.dart';
@@ -19,8 +21,18 @@ import '../home/widgets/task_detail_dialog.dart';
 
 const _dayLabels = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'];
 const _monthNames = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Septiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
 ];
 
 String _monthYear(DateTime date) =>
@@ -85,6 +97,7 @@ class _WeekPageState extends State<WeekPage> {
     final catalog = context.watch<CatalogProvider>();
     final auth = context.watch<AuthProvider>();
     final currentUser = auth.appUser;
+    final filtroAutor = context.watch<FiltroAutorProvider>().autor;
     final weekEnd = _weekStart.add(const Duration(days: 6));
 
     if (currentUser == null) {
@@ -107,9 +120,12 @@ class _WeekPageState extends State<WeekPage> {
       body: StreamBuilder<List<TaskModel>>(
         stream: _tasksStream,
         builder: (context, snapshot) {
-          if (!_loadLogged && snapshot.connectionState != ConnectionState.waiting) {
+          if (!_loadLogged &&
+              snapshot.connectionState != ConnectionState.waiting) {
             _loadLogged = true;
-            debugPrint('[PERF] Semana load: ${_loadStopwatch.elapsedMilliseconds}ms');
+            debugPrint(
+              '[PERF] Semana load: ${_loadStopwatch.elapsedMilliseconds}ms',
+            );
           }
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const LoadingIndicator();
@@ -121,12 +137,10 @@ class _WeekPageState extends State<WeekPage> {
             );
           }
 
-          final allTasks = (snapshot.data ?? [])
-              .where((t) => isTaskVisibleToUser(
-                    task: t,
-                    user: currentUser,
-                  ))
+          final visibles = (snapshot.data ?? [])
+              .where((t) => isTaskVisibleToUser(task: t, user: currentUser))
               .toList();
+          final allTasks = aplicarFiltroAutor(visibles, filtroAutor);
 
           final tasksByDate = <String, List<TaskModel>>{};
           for (final t in allTasks) {
@@ -134,8 +148,9 @@ class _WeekPageState extends State<WeekPage> {
           }
 
           final selectedKey = AppDateUtils.formatDateKey(_selectedDay);
-          final selectedTasks = List<TaskModel>.from(tasksByDate[selectedKey] ?? [])
-            ..sort((a, b) => a.hour.compareTo(b.hour));
+          final selectedTasks = List<TaskModel>.from(
+            tasksByDate[selectedKey] ?? [],
+          )..sort((a, b) => a.hour.compareTo(b.hour));
 
           return Column(
             children: [
@@ -297,8 +312,7 @@ class _DayChip extends StatelessWidget {
     final numberColor = isSelected
         ? colors.onPrimary
         : (isToday ? colors.primary : colors.textPrimary);
-    final labelColor =
-        isSelected ? colors.onPrimary : colors.textSecondary;
+    final labelColor = isSelected ? colors.onPrimary : colors.textSecondary;
     final dotColor = isSelected
         ? colors.onPrimary.withValues(alpha: 0.7)
         : colors.primary;
@@ -425,13 +439,17 @@ class _DaySummary extends StatelessWidget {
               spacing: 6,
               children: [
                 if (pendingCount > 0)
-                  _StatusBadge(count: pendingCount, color: colors.statusPending),
+                  _StatusBadge(
+                    count: pendingCount,
+                    color: colors.statusPending,
+                  ),
                 if (completedCount > 0)
                   _StatusBadge(count: completedCount, color: colors.success),
                 if (rescheduledCount > 0)
                   _StatusBadge(
-                      count: rescheduledCount,
-                      color: colors.statusRescheduled),
+                    count: rescheduledCount,
+                    color: colors.statusRescheduled,
+                  ),
               ],
             ),
         ],

@@ -95,6 +95,24 @@ class TaskModel {
   /// falls back to impersonal wording there rather than inventing a name.
   final String? updatedBy;
 
+  /// Quién marchó la tarea como completada — que no siempre es el
+  /// encargado.
+  ///
+  /// Hasta ahora sólo se guardaba [completedAt]: cualquier aviso o reporte
+  /// tenía que suponer que la completó el encargado, y acreditar a quien no
+  /// fue es peor que no decir nada. Nulo en las tareas completadas antes de
+  /// que existiera el campo.
+  final String? completedBy;
+
+  /// Por dónde entró la tarea: `'hoja'` cuando la creó el puente de Google
+  /// Sheets, nulo cuando la creó alguien desde la app.
+  ///
+  /// La hoja no tiene una persona detrás, así que [createdBy] sigue vacío
+  /// ahí; sin esto, esas tareas eran indistinguibles de las viejas que
+  /// nacieron antes de que se guardara el autor, y "quién asignó qué"
+  /// mezclaba dos cosas distintas. Ver `autor_tarea.dart`.
+  final String? createdVia;
+
   /// The tenant ("empresa") this task belongs to. See `AppUser.empresaId`.
   final String? empresaId;
 
@@ -123,6 +141,8 @@ class TaskModel {
     this.deletedByName,
     this.createdBy,
     this.updatedBy,
+    this.completedBy,
+    this.createdVia,
     this.empresaId,
   });
 
@@ -165,6 +185,8 @@ class TaskModel {
       deletedByName: map['deletedByName'] as String?,
       createdBy: map['createdBy'] as String?,
       updatedBy: map['updatedBy'] as String?,
+      completedBy: map['completedBy'] as String?,
+      createdVia: map['createdVia'] as String?,
       empresaId: map['empresaId'] as String?,
     );
   }
@@ -204,6 +226,8 @@ class TaskModel {
       'deletedByName': deletedByName,
       'createdBy': createdBy,
       'updatedBy': updatedBy,
+      'completedBy': completedBy,
+      'createdVia': createdVia,
       'empresaId': empresaId,
     };
   }

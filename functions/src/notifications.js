@@ -64,7 +64,18 @@ function isPushAllowed(mode, type) {
       return (
         type === "task_created_assigned" ||
         type === "task_reminder" ||
-        type === "task_reprogrammed_assigned"
+        type === "task_reprogrammed_assigned" ||
+        // "Completaron lo que usted mandó" entra aquí: este modo quiere
+        // decir "sólo lo que me toca a mí", y una tarea que uno asignó le
+        // toca tanto como una que le asignaron. Lo que deja fuera es el
+        // ruido del grupo, no lo propio.
+        type === "task_completed_creator" ||
+        // Un requerimiento nuevo sólo se le avisa a quien lo aprueba y lo
+        // asigna (ver getRequirementSupervisorIds). Para esa persona es
+        // trabajo suyo que entra, no ruido ajeno: dejarlo fuera de este
+        // modo significaria que justo quien tiene que actuar es el unico
+        // que no se entera.
+        type === "requirement_created"
       );
     case "group_only":
       return type === "task_created_group" || type === "task_reprogrammed_group";
@@ -94,6 +105,7 @@ async function recordNotification(userId, { title, body, data = {} }) {
       body,
       taskId: data.taskId || null,
       caseId: data.caseId || null,
+      requirementId: data.requirementId || null,
       isRead: false,
       createdAt: FieldValue.serverTimestamp(),
     });
@@ -169,6 +181,8 @@ async function sendNotificationToUser(userId, { title, body, data = {} }) {
       clickUrl = `${APP_ORIGIN}/?openTask=${data.taskId}`;
     } else if (data.caseId) {
       clickUrl = `${APP_ORIGIN}/?openCase=${data.caseId}`;
+    } else if (data.requirementId) {
+      clickUrl = `${APP_ORIGIN}/?openRequirement=${data.requirementId}`;
     }
     const pushData = clickUrl ? { ...data, url: clickUrl } : data;
 
@@ -377,10 +391,46 @@ async function getSupportCaseSupervisorIds(db, empresaId) {
   return [...ids];
 }
 
+/**
+ * Resuelve a quien hay que avisarle de un requerimiento nuevo, DENTRO de
+ * [empresaId]: todo super_admin, mas todo admin_equipo con el permiso
+ * `manageRequirements` — los mismos que pueden aprobarlo y asignarlo.
+ *
+ * Se decide por el permiso y no por una lista de destinatarios aparte a
+ * proposito. Una lista seria un segundo sitio donde esta escrito quien se
+ * encarga de los requerimientos, y el dia que alguien entra o sale del
+ * cargo se actualiza uno de los dos: el aviso le sigue llegando a quien ya
+ * no le toca, o no le llega a quien ahora si. Con el permiso hay un solo
+ * sitio, el que Michel ya mueve en la ficha de cada usuario.
+ *
+ * Es la misma forma de [getSupportCaseSupervisorIds] — un requerimiento,
+ * como un caso, no pertenece a un equipo: es de toda la empresa.
+ *
+ * @param {FirebaseFirestore.Firestore} db
+ * @param {string} empresaId
+ * @returns {Promise<string[]>} ids sin repetir.
+ */
+async function getRequirementSupervisorIds(db, empresaId) {
+  const [superSnap, scopedSnap] = await Promise.all([
+    db.collection("users").where("empresaId", "==", empresaId).where("role", "==", "super_admin").get(),
+    db
+      .collection("users")
+      .where("empresaId", "==", empresaId)
+      .where("role", "==", "admin_equipo")
+      .where("permissions.manageRequirements", "==", true)
+      .get(),
+  ]);
+  const ids = new Set();
+  for (const doc of superSnap.docs) ids.add(doc.id);
+  for (const doc of scopedSnap.docs) ids.add(doc.id);
+  return [...ids];
+}
+
 module.exports = {
   sendNotificationToUser,
   sendNotificationToUsers,
   notifyAdminsOfTaskCreated,
   getAdminIdsForTask,
   getSupportCaseSupervisorIds,
+  getRequirementSupervisorIds,
 };

@@ -22,6 +22,7 @@ import '../widgets/app_drawer.dart';
 import '../widgets/dashboard_range_selector.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/confirm_dialog.dart';
+import '../widgets/filtro_autor_chip.dart';
 import '../widgets/user_avatar.dart';
 import 'admin/admin_panel_page.dart';
 import '../widgets/update_banner.dart';
@@ -122,50 +123,73 @@ class _CalendarSectionState extends State<_CalendarSection> {
 
   @override
   Widget build(BuildContext context) {
+    // Uno solo, construido una vez: lo que cambia es dónde entra.
+    final selector = SegmentedButton<_CalView>(
+      segments: const [
+        ButtonSegment(
+          value: _CalView.mes,
+          label: Text('Mes'),
+          icon: Icon(LucideIcons.calendar, size: 15),
+        ),
+        ButtonSegment(
+          value: _CalView.semana,
+          label: Text('Semana'),
+          icon: Icon(LucideIcons.calendarDays, size: 15),
+        ),
+        // La tercera mirada: no "qué hay ese día" sino "quién lo
+        // tiene, y quién está libre".
+        ButtonSegment(
+          value: _CalView.encargados,
+          label: Text('Encargados'),
+          icon: Icon(LucideIcons.userCheck, size: 15),
+        ),
+      ],
+      selected: {_view},
+      onSelectionChanged: (s) => _setView(s.first),
+      style: const ButtonStyle(
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+
+    // Encargados ya trae su propia fila de filtros, y el selector entra
+    // ahí mismo: dos barras una encima de otra gastaban una franja entera
+    // de pantalla en no decir nada. Mes y Semana no tienen esa fila —su
+    // encabezado es el título del mes—, así que ahí la barra se queda.
+    final enEncargados = _view == _CalView.encargados;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.sm,
+        if (!enEncargados)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.sm,
+            ),
+            child: Row(
+              children: [
+                selector,
+                const SizedBox(width: AppSpacing.sm),
+                const FiltroAutorChip(),
+              ],
+            ),
           ),
-          child: Row(
-            children: [
-              SegmentedButton<_CalView>(
-                segments: const [
-                  ButtonSegment(
-                    value: _CalView.mes,
-                    label: Text('Mes'),
-                    icon: Icon(LucideIcons.calendar, size: 15),
-                  ),
-                  ButtonSegment(
-                    value: _CalView.semana,
-                    label: Text('Semana'),
-                    icon: Icon(LucideIcons.calendarDays, size: 15),
-                  ),
-                  // La tercera mirada: no "qué hay ese día" sino "quién lo
-                  // tiene, y quién está libre".
-                  ButtonSegment(
-                    value: _CalView.encargados,
-                    label: Text('Encargados'),
-                    icon: Icon(LucideIcons.userCheck, size: 15),
-                  ),
-                ],
-                selected: {_view},
-                onSelectionChanged: (s) => _setView(s.first),
-                style: const ButtonStyle(
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-            ],
-          ),
-        ),
         Expanded(
           child: IndexedStack(
             index: _CalView.values.indexOf(_view),
-            children: const [CalendarPage(), WeekPage(), ByAssigneePage()],
+            children: [
+              const CalendarPage(),
+              const WeekPage(),
+              // Sólo cuando está a la vista: el mismo botón no puede estar
+              // dos veces en el árbol, y las tres vistas siguen vivas
+              // dentro del IndexedStack aunque no se vean.
+              ByAssigneePage(
+                encabezado: enEncargados
+                    ? [selector, const FiltroAutorChip()]
+                    : const [],
+              ),
+            ],
           ),
         ),
       ],
@@ -355,7 +379,8 @@ class _MainShellState extends State<MainShell> {
     _loadSidebarState();
     // Tap-to-open, background/terminated-app case: the service worker
     // (web/firebase-messaging-sw.js) sends a background push click to
-    // "<origin>/?openTask=<taskId>" or "<origin>/?openCase=<caseId>" — the
+    // "<origin>/?openTask=<taskId>", "<origin>/?openCase=<caseId>" or
+    // "<origin>/?openRequirement=<reqId>" — the
     // foreground/in-app-list/mobile cases are handled directly in
     // notification_service.dart and don't go through the URL at all.
     // Deferred to a post-frame callback so the Provider tree (needed by
@@ -366,14 +391,19 @@ class _MainShellState extends State<MainShell> {
     if (kIsWeb) {
       final taskId = Uri.base.queryParameters['openTask'];
       final caseId = Uri.base.queryParameters['openCase'];
+      final requirementId = Uri.base.queryParameters['openRequirement'];
       if ((taskId != null && taskId.isNotEmpty) ||
-          (caseId != null && caseId.isNotEmpty)) {
+          (caseId != null && caseId.isNotEmpty) ||
+          (requirementId != null && requirementId.isNotEmpty)) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (taskId != null && taskId.isNotEmpty) {
             openTaskFromNotification(taskId);
           }
           if (caseId != null && caseId.isNotEmpty) {
             openSupportCaseFromNotification(caseId);
+          }
+          if (requirementId != null && requirementId.isNotEmpty) {
+            openRequirementFromNotification(requirementId);
           }
           clearOpenTaskQueryParam();
         });

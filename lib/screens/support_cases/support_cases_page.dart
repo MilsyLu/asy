@@ -324,8 +324,23 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
                 canDelete: canDelete,
               );
 
+        // Lo que de verdad hay en pantalla, que no es siempre `filtered`:
+        // la tabla enseña abiertos o resueltos, el tablero sólo abiertos y
+        // el resumen los toma todos. Contar `filtered` daría un número que
+        // no corresponde a las filas que se ven.
+        final mostrados = (!isMobile && _viewMode == _ViewMode.resumen)
+            ? filtered.length
+            : (!isMobile && _viewMode == _ViewMode.kanban)
+            ? abiertos.length
+            : ((_viewMode == _ViewMode.resueltos ||
+                          _statusFilter == SupportCaseStatus.resuelto)
+                      ? resueltos
+                      : abiertos)
+                  .length;
+
         final header = _CasesHeader(
           all: all,
+          mostrados: mostrados,
           searchController: _searchController,
           onQueryChanged: (v) => setState(() => _query = v),
           filter: _filter,
@@ -460,6 +475,7 @@ class _SupportCasesPageState extends State<SupportCasesPage> {
 class _CasesHeader extends StatelessWidget {
   const _CasesHeader({
     required this.all,
+    required this.mostrados,
     required this.searchController,
     required this.onQueryChanged,
     required this.filter,
@@ -482,6 +498,9 @@ class _CasesHeader extends StatelessWidget {
   });
 
   final List<SupportCaseModel> all;
+
+  /// Cuántos casos quedan a la vista con los filtros puestos.
+  final int mostrados;
   final TextEditingController searchController;
   final ValueChanged<String> onQueryChanged;
   final _QuickFilter filter;
@@ -807,6 +826,14 @@ class _CasesHeader extends StatelessWidget {
                     onTap: () => onFilterChanged(f),
                   ),
                 ChipFecha(rango: rango, onChanged: onRangoChanged),
+                // Cuántos están saliendo. El denominador es el mismo
+                // conjunto que cuenta el chip "Todos" —abiertos, o
+                // resueltos en esa vista— para que los dos números
+                // cuadren entre sí en vez de contarse cosas distintas.
+                Text(
+                  '$mostrados de ${base.length}',
+                  style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                ),
               ];
 
               if (angosto) {
@@ -863,7 +890,15 @@ class _CasesHeader extends StatelessWidget {
                     // Los filtros, a todo el ancho: con la fila entera para
                     // ellos caben los cinco en una línea en vez de dejar
                     // "Mis casos" solo abajo.
-                    Wrap(spacing: 8, runSpacing: 8, children: chips),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      // Centrado: el conteo es texto suelto entre chips, que
+                      // son mas altos, y alineado arriba quedaba flotando
+                      // por encima de la fila.
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: chips,
+                    ),
                   ],
                 );
               }
@@ -903,7 +938,15 @@ class _CasesHeader extends StatelessWidget {
                   // cortado contra el borde sin nada que lo indique.
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: Wrap(spacing: 8, runSpacing: 8, children: chips),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      // Centrado: el conteo es texto suelto entre chips, que
+                      // son mas altos, y alineado arriba quedaba flotando
+                      // por encima de la fila.
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: chips,
+                    ),
                   ),
                 ],
               );

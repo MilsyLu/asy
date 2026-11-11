@@ -12,6 +12,12 @@ class NotificationModel {
   final String body;
   final String? taskId;
   final String? caseId;
+
+  /// El requerimiento del que habla el aviso, si habla de uno. Es lo que
+  /// hace que tocar la notificación lo abra, igual que [taskId] y [caseId]
+  /// con una tarea y un caso.
+  final String? requirementId;
+
   final bool isRead;
   final DateTime? createdAt;
 
@@ -29,6 +35,7 @@ class NotificationModel {
     required this.body,
     this.taskId,
     this.caseId,
+    this.requirementId,
     this.isRead = false,
     this.createdAt,
     this.empresaId,
@@ -43,6 +50,7 @@ class NotificationModel {
       body: map['body'] as String? ?? '',
       taskId: map['taskId'] as String?,
       caseId: map['caseId'] as String?,
+      requirementId: map['requirementId'] as String?,
       isRead: map['isRead'] as bool? ?? false,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate(),
       empresaId: map['empresaId'] as String?,
@@ -61,6 +69,7 @@ class NotificationModel {
       'body': body,
       'taskId': taskId,
       'caseId': caseId,
+      'requirementId': requirementId,
       'isRead': isRead,
       'createdAt': withServerTimestamp
           ? FieldValue.serverTimestamp()
@@ -75,6 +84,7 @@ class NotificationModel {
     String? body,
     String? taskId,
     String? caseId,
+    String? requirementId,
     bool? isRead,
   }) {
     return NotificationModel(
@@ -85,6 +95,7 @@ class NotificationModel {
       body: body ?? this.body,
       taskId: taskId ?? this.taskId,
       caseId: caseId ?? this.caseId,
+      requirementId: requirementId ?? this.requirementId,
       isRead: isRead ?? this.isRead,
       createdAt: createdAt,
     );

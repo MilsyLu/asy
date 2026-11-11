@@ -116,6 +116,10 @@ class AppNotificationTypes {
   static const String taskCreatedGroup = 'task_created_group';
   static const String taskCreatedAdmin = 'task_created_admin';
   static const String taskReminder = 'task_reminder';
+
+  /// Un requerimiento nuevo, para quien tiene que aprobarlo y asignarlo
+  /// (`functions/src/notifyRequirementCreated.js`).
+  static const String requirementCreated = 'requirement_created';
 }
 
 /// Values for `users/{userId}.pushNotificationMode` (Sprint 7.5.0 — replaces

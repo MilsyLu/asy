@@ -8,8 +8,10 @@ import '../../core/utils/date_utils.dart';
 import '../../core/utils/task_visibility.dart';
 import '../../models/task_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/filtro_autor_provider.dart';
 import '../../services/task_repository.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/filtro_autor_chip.dart';
 import '../home/add_edit_task_page.dart';
 import '../home/widgets/compact_task_card.dart';
 import '../home/widgets/task_card.dart';
@@ -51,6 +53,7 @@ class _CalendarPageState extends State<CalendarPage> {
     final auth = context.watch<AuthProvider>();
     final currentUser = auth.appUser;
     final colors = context.colors;
+    final filtroAutor = context.watch<FiltroAutorProvider>().autor;
 
     // Pull a wide-enough window so paging months doesn't require a
     // new query for the visible range immediately.
@@ -78,9 +81,12 @@ class _CalendarPageState extends State<CalendarPage> {
       body: StreamBuilder<List<TaskModel>>(
         stream: _tasksStream,
         builder: (context, snapshot) {
-          if (!_loadLogged && snapshot.connectionState != ConnectionState.waiting) {
+          if (!_loadLogged &&
+              snapshot.connectionState != ConnectionState.waiting) {
             _loadLogged = true;
-            debugPrint('[PERF] Calendario load: ${_loadStopwatch.elapsedMilliseconds}ms');
+            debugPrint(
+              '[PERF] Calendario load: ${_loadStopwatch.elapsedMilliseconds}ms',
+            );
           }
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const LoadingIndicator();
@@ -92,12 +98,10 @@ class _CalendarPageState extends State<CalendarPage> {
             );
           }
 
-          final tasks = (snapshot.data ?? [])
-              .where((t) => isTaskVisibleToUser(
-                    task: t,
-                    user: currentUser,
-                  ))
+          final visibles = (snapshot.data ?? [])
+              .where((t) => isTaskVisibleToUser(task: t, user: currentUser))
               .toList();
+          final tasks = aplicarFiltroAutor(visibles, filtroAutor);
 
           final tasksByDate = <String, List<TaskModel>>{};
           for (final t in tasks) {
@@ -109,82 +113,94 @@ class _CalendarPageState extends State<CalendarPage> {
             ..sort((a, b) => a.hour.compareTo(b.hour));
 
           final calendarWidget = TableCalendar<TaskModel>(
-                locale: 'es_ES',
-                firstDay: DateTime.utc(2020, 1, 1),
-                lastDay: DateTime.utc(2035, 12, 31),
-                focusedDay: _focusedDay,
-                selectedDayPredicate: (day) => isSameDay(day, _selectedDay),
-                onDaySelected: (selected, focused) {
-                  setState(() {
-                    _selectedDay = selected;
-                    _focusedDay = focused;
-                  });
-                },
-                onPageChanged: (focused) {
-                  setState(() => _focusedDay = focused);
-                },
-                eventLoader: (day) =>
-                    tasksByDate[AppDateUtils.formatDateKey(day)] ?? [],
-                headerStyle: HeaderStyle(
-                  formatButtonVisible: false,
-                  titleCentered: true,
-                  titleTextStyle: TextStyle(color: colors.primary, fontWeight: FontWeight.bold, fontSize: 17),
-                  leftChevronIcon: Icon(LucideIcons.chevronLeft, color: colors.primary),
-                  rightChevronIcon: Icon(LucideIcons.chevronRight, color: colors.primary),
-                ),
-                daysOfWeekStyle: DaysOfWeekStyle(
-                  weekdayStyle: TextStyle(color: colors.textSecondary),
-                  weekendStyle: TextStyle(color: colors.textSecondary),
-                ),
-                calendarStyle: CalendarStyle(
-                  defaultTextStyle: TextStyle(color: colors.textPrimary),
-                  weekendTextStyle: TextStyle(color: colors.textPrimary),
-                  outsideTextStyle: TextStyle(color: colors.textSecondary.withValues(alpha: 0.4)),
-                  todayDecoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: colors.primary, width: 1.5),
-                  ),
-                  todayTextStyle: TextStyle(color: colors.primary),
-                  selectedDecoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: colors.primary,
-                  ),
-                  selectedTextStyle: TextStyle(
-                    color: colors.background,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  markerDecoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: colors.primaryLight,
-                  ),
-                  markersMaxCount: 1,
-                ),
-                calendarBuilders: CalendarBuilders<TaskModel>(
-                  markerBuilder: (context, day, events) {
-                    if (events.isEmpty) return null;
-                    return Positioned(
-                      bottom: 2,
-                      child: Container(
-                        width: 18,
-                        height: 18,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: colors.primary,
-                        ),
-                        child: Text(
-                          '${events.length}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: colors.background,
-                          ),
-                        ),
+            locale: 'es_ES',
+            firstDay: DateTime.utc(2020, 1, 1),
+            lastDay: DateTime.utc(2035, 12, 31),
+            focusedDay: _focusedDay,
+            selectedDayPredicate: (day) => isSameDay(day, _selectedDay),
+            onDaySelected: (selected, focused) {
+              setState(() {
+                _selectedDay = selected;
+                _focusedDay = focused;
+              });
+            },
+            onPageChanged: (focused) {
+              setState(() => _focusedDay = focused);
+            },
+            eventLoader: (day) =>
+                tasksByDate[AppDateUtils.formatDateKey(day)] ?? [],
+            headerStyle: HeaderStyle(
+              formatButtonVisible: false,
+              titleCentered: true,
+              titleTextStyle: TextStyle(
+                color: colors.primary,
+                fontWeight: FontWeight.bold,
+                fontSize: 17,
+              ),
+              leftChevronIcon: Icon(
+                LucideIcons.chevronLeft,
+                color: colors.primary,
+              ),
+              rightChevronIcon: Icon(
+                LucideIcons.chevronRight,
+                color: colors.primary,
+              ),
+            ),
+            daysOfWeekStyle: DaysOfWeekStyle(
+              weekdayStyle: TextStyle(color: colors.textSecondary),
+              weekendStyle: TextStyle(color: colors.textSecondary),
+            ),
+            calendarStyle: CalendarStyle(
+              defaultTextStyle: TextStyle(color: colors.textPrimary),
+              weekendTextStyle: TextStyle(color: colors.textPrimary),
+              outsideTextStyle: TextStyle(
+                color: colors.textSecondary.withValues(alpha: 0.4),
+              ),
+              todayDecoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: colors.primary, width: 1.5),
+              ),
+              todayTextStyle: TextStyle(color: colors.primary),
+              selectedDecoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colors.primary,
+              ),
+              selectedTextStyle: TextStyle(
+                color: colors.background,
+                fontWeight: FontWeight.bold,
+              ),
+              markerDecoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colors.primaryLight,
+              ),
+              markersMaxCount: 1,
+            ),
+            calendarBuilders: CalendarBuilders<TaskModel>(
+              markerBuilder: (context, day, events) {
+                if (events.isEmpty) return null;
+                return Positioned(
+                  bottom: 2,
+                  child: Container(
+                    width: 18,
+                    height: 18,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: colors.primary,
+                    ),
+                    child: Text(
+                      '${events.length}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: colors.background,
                       ),
-                    );
-                  },
-                ),
-              );
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
 
           final listHeader = Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -220,7 +236,8 @@ class _CalendarPageState extends State<CalendarPage> {
                     final task = selectedTasks[index];
                     return GestureDetector(
                       onTap: () => showTaskDetailDialog(context, task),
-                      onLongPress: () => showTaskQuickActionsSheet(context, task),
+                      onLongPress: () =>
+                          showTaskQuickActionsSheet(context, task),
                       child: CompactTaskCard(task: task),
                     );
                   },
@@ -256,7 +273,10 @@ class _CalendarPageState extends State<CalendarPage> {
                     VerticalDivider(width: 1, color: colors.divider),
                     Expanded(
                       child: Column(
-                        children: [listHeader, Expanded(child: listBody)],
+                        children: [
+                          listHeader,
+                          Expanded(child: listBody),
+                        ],
                       ),
                     ),
                   ],

@@ -146,6 +146,12 @@ const syncTaskFromSheet = onRequest(async (req, res) => {
         reminderSent: false,
         isDeleted: false,
         createdAt: Timestamp.now(),
+        // Deja dicho por donde entro. No hay una persona detras, asi que
+        // createdBy sigue vacio; sin esta marca, estas tareas eran
+        // indistinguibles de las viejas que nacieron antes de que se
+        // guardara el autor, y cualquier conteo de "quien asigno que"
+        // mezclaba dos cosas distintas. Ver lib/core/utils/autor_tarea.dart.
+        createdVia: "hoja",
       });
       resultTaskId = ref.id;
     }

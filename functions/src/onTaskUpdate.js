@@ -6,6 +6,7 @@ const {
   notifyAdminsOfTaskCreated,
   getAdminIdsForTask,
 } = require("./notifications");
+const { notifyTaskCompleted } = require("./notifyTaskCompleted");
 
 /**
  * Notifies the assigned worker (personal push), the rest of the group
@@ -31,9 +32,21 @@ const onTaskUpdate = onDocumentUpdated("tasks/{taskId}", async (event) => {
   const after = event.data?.after?.data();
   if (!before || !after) return;
 
+  // "Se completó" vive en este mismo disparador y no en una función aparte:
+  // las dos escucharían exactamente el mismo evento, y dos funciones sobre
+  // `tasks/{taskId}` se invocan ambas con cada escritura. Dentro, cada aviso
+  // decide solo si le toca.
+  //
+  // Se espera al final y no aquí: así el aviso de completada y el de
+  // reprogramación no se bloquean entre sí, y un fallo en uno no se lleva
+  // por delante al otro.
+  const avisoCompletada = notifyTaskCompleted(taskId, before, after).catch((e) =>
+    console.error(`[FCM][ERROR] Completada ${taskId}: ${e}`)
+  );
+
   const dateChanged = before.date !== after.date;
   const hourChanged = before.hour !== after.hour;
-  if (!dateChanged && !hourChanged) return;
+  if (!dateChanged && !hourChanged) return avisoCompletada;
   if (after.isDeleted) return;
 
   const { assignedUserId, clientName, taskTypeId, groupId, hour, date, empresaId, updatedBy } =
@@ -150,7 +163,7 @@ const onTaskUpdate = onDocumentUpdated("tasks/{taskId}", async (event) => {
     })()
   );
 
-  await Promise.all(pending);
+  await Promise.all([...pending, avisoCompletada]);
 });
 
 module.exports = { onTaskUpdate };

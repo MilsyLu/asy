@@ -9,8 +9,10 @@ import '../../models/app_user.dart';
 import '../../models/task_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
+import '../../providers/filtro_autor_provider.dart';
 import '../../services/task_repository.dart';
 import '../../widgets/calendario_menu.dart';
+import '../../widgets/filtro_autor_chip.dart';
 import '../../widgets/loading_indicator.dart';
 import '../home/widgets/compact_task_card.dart';
 import '../home/widgets/task_detail_dialog.dart';
@@ -29,7 +31,19 @@ enum _Modo { dia, semana, mes }
 /// distancias. El día sirve para despachar hoy, la semana para ver quién está
 /// cargado, y el mes para seguir a una persona.
 class ByAssigneePage extends StatefulWidget {
-  const ByAssigneePage({super.key});
+  const ByAssigneePage({super.key, this.encabezado = const []});
+
+  /// Los controles del calendario —el selector de vista y el filtro de
+  /// "asignadas por"— para dibujarlos dentro de la barra de esta vista.
+  ///
+  /// Vienen de afuera en vez de construirse aquí: son los mismos que usan
+  /// las otras dos vistas y tienen que seguir siendo unos solos. Lo único
+  /// que cambia es dónde caben — ver `_CalendarSection`.
+  ///
+  /// Lista y no un único widget para que entren sueltos en el `Wrap` de la
+  /// barra: metidos en una fila, en pantalla angosta bajarían juntos en vez
+  /// de acomodarse cada uno donde quepa.
+  final List<Widget> encabezado;
 
   @override
   State<ByAssigneePage> createState() => _ByAssigneePageState();
@@ -101,6 +115,7 @@ class _ByAssigneePageState extends State<ByAssigneePage> {
     final repo = context.read<TaskRepository>();
     final catalog = context.watch<CatalogProvider>();
     final colors = context.colors;
+    final filtroAutor = context.watch<FiltroAutorProvider>().autor;
 
     final personas = [
       for (final u in catalog.users)
@@ -123,10 +138,10 @@ class _ByAssigneePageState extends State<ByAssigneePage> {
             builder: (context, snap) {
               if (snap.hasError) return StreamErrorState(error: snap.error!);
               if (!snap.hasData) return const LoadingIndicator();
-              final tareas = [
+              final tareas = aplicarFiltroAutor([
                 for (final t in snap.data!)
                   if (!t.isDeleted) t,
-              ];
+              ], filtroAutor);
               return switch (_modo) {
                 _Modo.dia => _VistaDia(tareas: tareas, personas: personas),
                 _Modo.semana => _VistaSemana(
@@ -158,6 +173,7 @@ class _ByAssigneePageState extends State<ByAssigneePage> {
         runSpacing: 8,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
+          ...widget.encabezado,
           SegmentedButton<_Modo>(
             segments: const [
               ButtonSegment(value: _Modo.dia, label: Text('Día')),

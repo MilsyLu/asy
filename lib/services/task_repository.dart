@@ -29,11 +29,20 @@ class ClientTaskHistory {
     required this.total,
     required this.completed,
     required this.rescheduled,
+    this.tareas = const [],
   });
 
   final int total;
   final int completed;
   final int rescheduled;
+
+  /// Las tareas del cliente, de la más reciente a la más vieja.
+  ///
+  /// La consulta ya las traía enteras y sólo se quedaba con tres cifras.
+  /// Tres cifras dicen cuántas veces se le atendió, pero no **cuándo**, que
+  /// es lo que uno busca cuando un cliente pregunta "¿y lo de la vez
+  /// pasada?".
+  final List<TaskModel> tareas;
 
   bool get hasHistory => total > 0;
 }
@@ -83,6 +92,36 @@ class TaskRepository {
         .where('date', isLessThanOrEqualTo: endKey)
         .orderBy('date')
         .orderBy('hour')
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => TaskModel.fromDoc(d))
+              .where((t) => !t.isDeleted)
+              .toList(),
+        );
+  }
+
+  /// Las tareas **asignadas** dentro del rango, sin importar para cuándo
+  /// quedaron.
+  ///
+  /// Contraparte de [watchTasksInRange], que va por la fecha de la tarea.
+  /// Son dos preguntas distintas: "qué hay el martes" y "qué mandé el
+  /// martes" — y quien asigna el lunes trabajo para toda la semana no
+  /// encuentra lo suyo mirando por fecha de la tarea.
+  ///
+  /// [end] se lleva al final del día: un rango que termina el martes tiene
+  /// que incluir lo asignado el martes a las 4 de la tarde, y `createdAt`
+  /// lleva la hora, a diferencia de `date`.
+  Stream<List<TaskModel>> watchTasksCreatedInRange(
+    DateTime start,
+    DateTime end,
+  ) {
+    final desde = DateTime(start.year, start.month, start.day);
+    final hasta = DateTime(end.year, end.month, end.day, 23, 59, 59, 999);
+    return _collection
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(desde))
+        .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(hasta))
+        .orderBy('createdAt')
         .snapshots()
         .map(
           (snap) => snap.docs
@@ -195,21 +234,29 @@ class TaskRepository {
     String? rescheduledStatusId,
   }) async {
     final snap = await _collection.where('clientId', isEqualTo: clientId).get();
+    // Lo que está en la papelera no cuenta: seguía sumando en los tres
+    // números, así que la ficha decía que un cliente tenía tareas que ya
+    // nadie ve en ninguna pantalla.
+    final tareas = [
+      for (final d in snap.docs)
+        if (!(d.data()['isDeleted'] as bool? ?? false)) TaskModel.fromDoc(d),
+    ]..sort((a, b) => b.scheduledDateTime.compareTo(a.scheduledDateTime));
+
     var completed = 0;
     var rescheduled = 0;
-    for (final doc in snap.docs) {
-      final statusId = doc.data()['statusId'] as String?;
-      if (completedStatusId != null && statusId == completedStatusId) {
+    for (final t in tareas) {
+      if (completedStatusId != null && t.statusId == completedStatusId) {
         completed++;
       }
-      if (rescheduledStatusId != null && statusId == rescheduledStatusId) {
+      if (rescheduledStatusId != null && t.statusId == rescheduledStatusId) {
         rescheduled++;
       }
     }
     return ClientTaskHistory(
-      total: snap.docs.length,
+      total: tareas.length,
       completed: completed,
       rescheduled: rescheduled,
+      tareas: tareas,
     );
   }
 
@@ -293,11 +340,21 @@ class TaskRepository {
         .map((snap) => snap.docs.map((d) => TaskModel.fromDoc(d)).toList());
   }
 
-  /// Marks a task as completed by the worker.
-  Future<void> completeTask(String taskId, String completedStatusId) {
+  /// Marca la tarea como completada, dejando dicho quién lo hizo.
+  ///
+  /// [completedBy] es quien está usando la app en ese momento, que no
+  /// siempre es el encargado: un administrador puede marcar la tarea de
+  /// otro. Sin este dato, un aviso sólo podía suponer que fue el
+  /// encargado — y daría por hecho algo falso cada vez que no lo fuera.
+  Future<void> completeTask(
+    String taskId,
+    String completedStatusId, {
+    required String? completedBy,
+  }) {
     return _tasksCollection.doc(taskId).update({
       'statusId': completedStatusId,
       'completedAt': Timestamp.fromDate(DateTime.now()),
+      'completedBy': completedBy,
     });
   }
 

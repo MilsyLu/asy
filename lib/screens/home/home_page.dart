@@ -13,6 +13,8 @@ import '../../core/utils/validators.dart';
 import '../../models/app_user.dart';
 import '../../models/task_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/filtro_autor_provider.dart';
+import '../../widgets/filtro_autor_chip.dart';
 import '../../providers/catalog_provider.dart';
 import '../../services/task_repository.dart';
 import '../../widgets/loading_indicator.dart';
@@ -133,11 +135,14 @@ class _HomePageState extends State<HomePage> {
                   );
                 }
 
-                final visibleTasks = (snapshot.data ?? [])
-                    .where(
-                      (t) => isTaskVisibleToUser(task: t, user: currentUser),
-                    )
-                    .toList();
+                final visibleTasks = aplicarFiltroAutor(
+                  (snapshot.data ?? [])
+                      .where(
+                        (t) => isTaskVisibleToUser(task: t, user: currentUser),
+                      )
+                      .toList(),
+                  context.watch<FiltroAutorProvider>().autor,
+                );
 
                 final allAgenda = _Agenda.classify(
                   visibleTasks,
@@ -175,7 +180,7 @@ class _HomePageState extends State<HomePage> {
                 }
 
                 return ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                   children: [
                     _HomeHeader(
                       user: currentUser,
@@ -183,12 +188,11 @@ class _HomePageState extends State<HomePage> {
                       agenda: allAgenda,
                     ),
                     const SizedBox(height: 20),
-                    _CountersGrid(agenda: agenda),
-                    const SizedBox(height: 20),
                     _NextTaskCard(task: nextTask),
                     const SizedBox(height: 24),
                     _FiltersBar(
                       catalog: catalog,
+                      agenda: agenda,
                       groupFilter: _groupFilter,
                       userFilter: _userFilter,
                       statusFilter: _statusFilter,
@@ -260,9 +264,17 @@ class _HomePageState extends State<HomePage> {
     required _Agenda agenda,
     required TaskModel? nextTask,
   }) {
-    final colors = context.colors;
     return Padding(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      // Arriba va pegado: entre la barra de titulo y la tarjeta del saludo
+      // quedaba una franja vacia de 24 px que no decia nada, y en un
+      // portatil esa franja es justo lo que hace falta para que la agenda
+      // de hoy entre completa sin bajar.
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.sm,
+        AppSpacing.lg,
+        AppSpacing.sm,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -277,49 +289,10 @@ class _HomePageState extends State<HomePage> {
                   showNextTaskStrip: true,
                   nextTask: nextTask,
                 ),
-                const SizedBox(height: AppSpacing.md),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _CounterCard(
-                        label: 'Pendientes',
-                        count: agenda.pendingToday.length,
-                        icon: LucideIcons.circleDot,
-                        color: colors.statusPending,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _CounterCard(
-                        label: 'Reprogramadas',
-                        count: agenda.rescheduledToday.length,
-                        icon: LucideIcons.repeat,
-                        color: colors.statusRescheduled,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _CounterCard(
-                        label: 'Completadas',
-                        count: agenda.completedToday.length,
-                        icon: LucideIcons.checkCircle2,
-                        color: colors.success,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _CounterCard(
-                        label: 'Atrasadas',
-                        count: agenda.overdue.length,
-                        icon: LucideIcons.alertTriangle,
-                        color: colors.error,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.md),
+                const SizedBox(height: AppSpacing.sm),
                 _FiltersBar(
                   catalog: context.watch<CatalogProvider>(),
+                  agenda: agenda,
                   groupFilter: _groupFilter,
                   userFilter: _userFilter,
                   statusFilter: _statusFilter,
@@ -330,7 +303,7 @@ class _HomePageState extends State<HomePage> {
                   onStatusChanged: (v) => setState(() => _statusFilter = v),
                   onClientChanged: (v) => setState(() => _clientQuery = v),
                 ),
-                const SizedBox(height: AppSpacing.md),
+                const SizedBox(height: AppSpacing.sm),
                 Expanded(
                   child: _DesktopAgendaPanel(
                     allAgenda: allAgenda,
@@ -376,11 +349,10 @@ class _HomePageState extends State<HomePage> {
     required _Agenda agenda,
     required TaskModel? nextTask,
   }) {
-    final colors = context.colors;
     return ListView(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.pagePaddingTablet,
-        AppSpacing.md,
+        AppSpacing.sm,
         AppSpacing.pagePaddingTablet,
         AppSpacing.xxl,
       ),
@@ -403,48 +375,9 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         const SizedBox(height: AppSpacing.md),
-        Row(
-          children: [
-            Expanded(
-              child: _CounterCard(
-                label: 'Pendientes',
-                count: agenda.pendingToday.length,
-                icon: LucideIcons.circleDot,
-                color: colors.statusPending,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _CounterCard(
-                label: 'Reprogramadas',
-                count: agenda.rescheduledToday.length,
-                icon: LucideIcons.repeat,
-                color: colors.statusRescheduled,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _CounterCard(
-                label: 'Completadas',
-                count: agenda.completedToday.length,
-                icon: LucideIcons.checkCircle2,
-                color: colors.success,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _CounterCard(
-                label: 'Atrasadas',
-                count: agenda.overdue.length,
-                icon: LucideIcons.alertTriangle,
-                color: colors.error,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.md),
         _FiltersBar(
           catalog: context.watch<CatalogProvider>(),
+          agenda: agenda,
           groupFilter: _groupFilter,
           userFilter: _userFilter,
           statusFilter: _statusFilter,
@@ -642,80 +575,60 @@ class _HomeHeader extends StatelessWidget {
         : null;
     final showOwnLine = groupName != null || user.isAdminOfAnyKind;
 
+    // Dos renglones en vez de cinco. Eran cinco líneas apiladas —saludo,
+    // fecha, y tres datos sueltos de una línea cada uno— que se comían una
+    // banda entera de pantalla para decir cuatro cifras, y empujaban la
+    // agenda por debajo del borde. En pantalla angosta el `Wrap` las vuelve
+    // a repartir en las que hagan falta.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '${AppDateUtils.saludoDelDia(DateTime.now())}, $firstName',
-          style: TextStyle(
-            color: colors.textPrimary,
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          dateLabel,
-          style: TextStyle(color: colors.textSecondary, fontSize: 14),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        Wrap(
+          spacing: 10,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Icon(LucideIcons.listTodo, size: 16, color: colors.primary),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                _summaryText(groupName, user.isAdminOfAnyKind, todayCount),
-                style: TextStyle(
-                  color: colors.textPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
+            Text(
+              '${AppDateUtils.saludoDelDia(DateTime.now())}, $firstName',
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
+            ),
+            Text(
+              dateLabel,
+              style: TextStyle(color: colors.textSecondary, fontSize: 13),
             ),
           ],
         ),
-        if (showOwnLine) ...[
-          const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(LucideIcons.userCheck, size: 16, color: colors.primary),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Tus tareas asignadas: $myCount',
-                  style: TextStyle(
-                    color: colors.textSecondary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 16,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            _DatoCabecera(
+              icono: LucideIcons.listTodo,
+              texto: _summaryText(groupName, user.isAdminOfAnyKind, todayCount),
+              color: colors.primary,
+              textoColor: colors.textPrimary,
+            ),
+            if (showOwnLine)
+              _DatoCabecera(
+                icono: LucideIcons.userCheck,
+                texto: 'Tus tareas asignadas: $myCount',
+                color: colors.primary,
+                textoColor: colors.textSecondary,
               ),
-            ],
-          ),
-        ],
-        if (overdueCount > 0) ...[
-          const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(LucideIcons.alertTriangle, size: 16, color: colors.error),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  _overdueText(overdueCount),
-                  style: TextStyle(
-                    color: colors.error,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+            if (overdueCount > 0)
+              _DatoCabecera(
+                icono: LucideIcons.alertTriangle,
+                texto: _overdueText(overdueCount),
+                color: colors.error,
+                textoColor: colors.error,
               ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ],
     );
   }
@@ -745,6 +658,43 @@ class _HomeHeader extends StatelessWidget {
     final noun = count == 1 ? 'tarea atrasada' : 'tareas atrasadas';
     final verb = count == 1 ? 'requiere' : 'requieren';
     return '$count $noun $verb atención';
+  }
+}
+
+/// Un dato de la cabecera: iconito y texto, en una sola línea.
+///
+/// La misma estructura estaba escrita tres veces seguidas, con el icono y
+/// el tamaño copiados; aquí es una sola y los tres caben en un renglón.
+class _DatoCabecera extends StatelessWidget {
+  const _DatoCabecera({
+    required this.icono,
+    required this.texto,
+    required this.color,
+    required this.textoColor,
+  });
+
+  final IconData icono;
+  final String texto;
+  final Color color;
+  final Color textoColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icono, size: 15, color: color),
+        const SizedBox(width: 5),
+        Text(
+          texto,
+          style: TextStyle(
+            color: textoColor,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -994,114 +944,99 @@ class _QuickActionButton extends StatelessWidget {
 /// the active Equipo/Encargado/Cliente/Estado filters — the underlying counts
 /// are unchanged from the previous design, only the presentation is more
 /// compact (big number + small label).
-class _CountersGrid extends StatelessWidget {
-  const _CountersGrid({required this.agenda});
+/// Los cuatro números del día, en una línea.
+///
+/// Eran cuatro tarjetas con el número en grande, en dos filas en el
+/// teléfono y una ancha en el computador: una franja entera de pantalla
+/// para cuatro cifras de un solo dígito, que emp0ujaba la agenda —lo que
+/// uno viene a mirar— por debajo del borde.
+///
+/// Aquí van dentro de la barra de filtros, pequeños y con su punto de
+/// color, que es lo que los hace distinguibles de un vistazo.
+///
+/// Vivían escritos tres veces —teléfono, tableta y computador— con los
+/// mismos cuatro contadores copiados; ahora es uno solo.
+class _ContadoresEnLinea extends StatelessWidget {
+  const _ContadoresEnLinea({required this.agenda});
 
   final _Agenda agenda;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return Column(
+    return Wrap(
+      spacing: 14,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _CounterCard(
-                label: 'Pendientes',
-                count: agenda.pendingToday.length,
-                icon: LucideIcons.circleDot,
-                color: colors.statusPending,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _CounterCard(
-                label: 'Reprogramadas',
-                count: agenda.rescheduledToday.length,
-                icon: LucideIcons.repeat,
-                color: colors.statusRescheduled,
-              ),
-            ),
-          ],
+        _Contador(
+          etiqueta: 'Pendientes',
+          cuantas: agenda.pendingToday.length,
+          color: colors.statusPending,
         ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _CounterCard(
-                label: 'Completadas',
-                count: agenda.completedToday.length,
-                icon: LucideIcons.checkCircle2,
-                color: colors.success,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _CounterCard(
-                label: 'Atrasadas',
-                count: agenda.overdue.length,
-                icon: LucideIcons.alertTriangle,
-                color: colors.error,
-              ),
-            ),
-          ],
+        _Contador(
+          etiqueta: 'Reprogramadas',
+          cuantas: agenda.rescheduledToday.length,
+          color: colors.statusRescheduled,
+        ),
+        _Contador(
+          etiqueta: 'Completadas',
+          cuantas: agenda.completedToday.length,
+          color: colors.success,
+        ),
+        _Contador(
+          etiqueta: 'Atrasadas',
+          cuantas: agenda.overdue.length,
+          color: colors.error,
         ),
       ],
     );
   }
 }
 
-class _CounterCard extends StatelessWidget {
-  const _CounterCard({
-    required this.label,
-    required this.count,
-    required this.icon,
+class _Contador extends StatelessWidget {
+  const _Contador({
+    required this.etiqueta,
+    required this.cuantas,
     required this.color,
   });
 
-  final String label;
-  final int count;
-  final IconData icon;
+  final String etiqueta;
+  final int cuantas;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-        border: Border(left: BorderSide(color: color, width: 3)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$count',
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: colors.textSecondary, fontSize: 11),
-                ),
-              ],
-            ),
+    // En cero se apaga: cuatro números igual de oscuros obligan a leerlos
+    // todos para ver cuál importa.
+    final hay = cuantas > 0;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            color: hay ? color : colors.divider,
+            shape: BoxShape.circle,
           ),
-          Icon(icon, color: color, size: 18),
-        ],
-      ),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          '$cuantas',
+          style: TextStyle(
+            color: hay ? colors.textPrimary : colors.textSecondary,
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          etiqueta,
+          style: TextStyle(color: colors.textSecondary, fontSize: 12),
+        ),
+      ],
     );
   }
 }
@@ -1126,14 +1061,14 @@ class _SectionHeader extends StatelessWidget {
     final effectiveColor = color ?? context.colors.primary;
     return Row(
       children: [
-        Icon(icon, color: effectiveColor, size: 18),
-        const SizedBox(width: 8),
+        Icon(icon, color: effectiveColor, size: 16),
+        const SizedBox(width: 7),
         Expanded(
           child: Text(
             title,
             style: TextStyle(
               color: context.colors.textPrimary,
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -1218,8 +1153,8 @@ class _AgendaTaskTile extends StatelessWidget {
           color: colors.surface,
           borderRadius: BorderRadius.circular(12),
           // Only the left side is visible (others default to BorderSide.none)
-          // so this stays a single-visible-color border, same as
-          // _CounterCard above it. A Border with two different *visible*
+          // so this stays a single-visible-color border. A Border with two
+          // different *visible*
           // colors (e.g. adding colors.divider on the other 3 sides) plus a
           // borderRadius throws a FlutterError at paint time ("A borderRadius
           // can only be given on borders with uniform colors") — the
@@ -1472,6 +1407,7 @@ class _OverdueSection extends StatelessWidget {
 class _FiltersBar extends StatelessWidget {
   const _FiltersBar({
     required this.catalog,
+    required this.agenda,
     required this.groupFilter,
     required this.userFilter,
     required this.statusFilter,
@@ -1484,6 +1420,10 @@ class _FiltersBar extends StatelessWidget {
   });
 
   final CatalogProvider catalog;
+
+  /// Para los cuatro números del día, que van en esta misma fila.
+  final _Agenda agenda;
+
   final String? groupFilter;
   final String? userFilter;
   final String? statusFilter;
@@ -1586,6 +1526,17 @@ class _FiltersBar extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
+              const SizedBox(width: 14),
+              // Los números del día viajan con los filtros a propósito:
+              // describen lo mismo que la lista de abajo, y esa lista es la
+              // filtrada. Separados, uno diría "2 completadas" mientras el
+              // otro muestra una sola tarea.
+              Expanded(child: _ContadoresEnLinea(agenda: agenda)),
+              const SizedBox(width: 10),
+              // El único filtro de esta barra que no vive aquí: lo comparte
+              // con el Calendario, para no tener que volver a elegirse uno
+              // mismo al cambiar de vista.
+              const FiltroAutorChip(),
             ],
           ),
           const SizedBox(height: 10),
@@ -1739,7 +1690,7 @@ class _DesktopHeaderCard extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
@@ -1975,7 +1926,7 @@ class _DesktopAgendaPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
             child: _SectionHeader(
               icon: LucideIcons.listTodo,
               title: 'Agenda de hoy',
@@ -2004,7 +1955,7 @@ class _DesktopAgendaPanel extends StatelessWidget {
             ],
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
                 children: [
                   if (agenda.agendaToday.isEmpty)
                     Padding(
@@ -2055,7 +2006,7 @@ class _DesktopAgendaColumnHeader extends StatelessWidget {
       letterSpacing: 0.3,
     );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
       child: Row(
         children: [
           SizedBox(

@@ -312,6 +312,26 @@ class _NotificationsSection extends StatelessWidget {
             'elijas "No recibir notificaciones push".',
             style: TextStyle(color: context.colors.textSecondary, fontSize: 11),
           ),
+          // Sólo para quien puede aprobar y asignar requerimientos: es a
+          // quien le llega el aviso (ver
+          // `functions/src/notifyRequirementCreated.js`). Mostrárselo a
+          // los demás sería ofrecer apagar algo que nunca les suena.
+          if (user.hasPermission(AppPermissions.manageRequirements)) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Divider(height: 1, color: context.colors.divider),
+            const SizedBox(height: AppSpacing.xs),
+            _InterruptorAviso(
+              icon: LucideIcons.fileText,
+              label: 'Avisarme de requerimientos nuevos',
+              description:
+                  'Cuando alguien registre uno, para poder aprobarlo y '
+                  'asignarlo.',
+              value: user.avisarRequerimientoNuevo,
+              onChanged: (v) => context
+                  .read<UserRepository>()
+                  .setAvisarRequerimientoNuevo(user.id, v),
+            ),
+          ],
         ],
       ),
     );
@@ -511,6 +531,73 @@ class _NotifRow extends StatelessWidget {
                     )
                   : null,
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Un aviso que se enciende o se apaga, no uno que se elige entre varios.
+///
+/// Lleva interruptor y no el círculo de [_NotifRow] a propósito: los modos
+/// de arriba son excluyentes —uno de los cuatro—, y esto es independiente
+/// de ellos. Darle la misma forma haría pensar que elegirlo apaga los otros.
+class _InterruptorAviso extends StatelessWidget {
+  const _InterruptorAviso({
+    required this.icon,
+    required this.label,
+    required this.description,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String label;
+  final String description;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return InkWell(
+      onTap: () => onChanged(!value),
+      borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.xs,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: value ? colors.primary : colors.textSecondary,
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontWeight: value ? FontWeight.w600 : FontWeight.normal,
+                      fontSize: 13,
+                    ),
+                  ),
+                  Text(
+                    description,
+                    style: TextStyle(color: colors.textSecondary, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Switch(value: value, onChanged: onChanged),
           ],
         ),
       ),

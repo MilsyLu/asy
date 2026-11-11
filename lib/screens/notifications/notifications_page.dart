@@ -65,6 +65,8 @@ class NotificationsPage extends StatelessWidget {
                 openTaskFromNotification(notification.taskId);
               } else if (notification.caseId != null) {
                 openSupportCaseFromNotification(notification.caseId);
+              } else if (notification.requirementId != null) {
+                openRequirementFromNotification(notification.requirementId);
               }
             },
             onDeleteNotification: (notification) {
@@ -191,6 +193,8 @@ IconData _iconForType(String type) {
       return LucideIcons.shieldCheck;
     case AppNotificationTypes.taskReminder:
       return LucideIcons.bell;
+    case AppNotificationTypes.requirementCreated:
+      return LucideIcons.fileText;
     default:
       return LucideIcons.bell;
   }

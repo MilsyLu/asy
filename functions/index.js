@@ -4,6 +4,7 @@ initializeApp();
 
 const { onTaskCreate } = require("./src/onTaskCreate");
 const { onTaskUpdate } = require("./src/onTaskUpdate");
+const { notifyRequirementCreated } = require("./src/notifyRequirementCreated");
 const { checkReminders } = require("./src/checkReminders");
 const { deleteUserPermanently } = require("./src/deleteUser");
 const { cleanOldNotifications } = require("./src/cleanOldNotifications");
@@ -19,6 +20,7 @@ const { generarCartaDigital, listarCartasDigitales, borrarCartaDigital, verCarta
 
 exports.onTaskCreate = onTaskCreate;
 exports.onTaskUpdate = onTaskUpdate;
+exports.notifyRequirementCreated = notifyRequirementCreated;
 exports.checkReminders = checkReminders;
 exports.deleteUserPermanently = deleteUserPermanently;
 exports.cleanOldNotifications = cleanOldNotifications;

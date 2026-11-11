@@ -29,7 +29,10 @@ class FormSectionCard extends StatelessWidget {
     final colors = context.colors;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.md),
+      // Arriba menos aire que a los lados: el titulo ya se separa solo por
+      // su propio alto, y 16 px encima de "Nueva tarea" empujaban el
+      // formulario entero hacia abajo.
+      padding: const EdgeInsets.fromLTRB(AppSpacing.md, 10, AppSpacing.md, 12),
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
@@ -55,7 +58,7 @@ class FormSectionCard extends StatelessWidget {
               ?trailing,
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: 10),
           child,
         ],
       ),

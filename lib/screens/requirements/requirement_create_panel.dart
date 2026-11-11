@@ -5,11 +5,13 @@ import 'package:provider/provider.dart';
 import '../../core/constants/requirement_constants.dart';
 import '../../core/responsive/app_spacing.dart';
 import '../../core/theme/theme_colors.dart';
+import '../../core/utils/client_linking.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../models/client_model.dart';
 import '../../models/requirement_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/catalog_provider.dart';
+import '../../services/catalog_repository.dart';
 import '../../services/requirement_repository.dart';
 import 'requirement_module_dialog.dart';
 
@@ -207,18 +209,62 @@ class _RequirementCreatePanelState extends State<RequirementCreatePanel> {
 
   Future<void> _elegirClientes() async {
     final catalog = context.read<CatalogProvider>();
+    // La lista arranca en el catálogo y crece con lo que se cree aquí
+    // mismo. Se trabaja sobre esta copia y no sobre `catalog.clients` porque
+    // el cliente recién creado tarda en volver por el stream de Firestore:
+    // mapear contra el catálogo al cerrar perdería justo al que se acaba
+    // de crear.
+    final disponibles = [...catalog.clients];
     final elegidos = {for (final c in _clientes) c.id};
     final busqueda = TextEditingController();
+    var creando = false;
 
-    final res = await showDialog<Set<String>>(
+    final res = await showDialog<List<ClientModel>>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) {
-          final q = busqueda.text.trim().toLowerCase();
+          final escrito = busqueda.text.trim();
+          final q = escrito.toLowerCase();
           final lista = [
-            for (final c in catalog.clients)
+            for (final c in disponibles)
               if (q.isEmpty || c.name.toLowerCase().contains(q)) c,
           ];
+          // Crear se ofrece sólo si no existe ya uno con ese nombre: un
+          // segundo "zona salchipapa" partiría en dos su historial.
+          final puedeCrear =
+              escrito.isNotEmpty &&
+              clientsMatchingName(disponibles, escrito).isEmpty;
+
+          Future<void> crear() async {
+            if (creando) return;
+            setLocal(() => creando = true);
+            try {
+              final id = await context.read<CatalogRepository>().addClient(
+                escrito,
+                '',
+              );
+              disponibles
+                ..add(ClientModel(id: id, name: escrito))
+                ..sort(
+                  (a, b) =>
+                      a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+                );
+              elegidos.add(id);
+              // Se limpia la búsqueda para que el nuevo se vea ya marcado
+              // entre los demás, en vez de dejar la lista filtrada por el
+              // nombre que se acaba de escribir.
+              busqueda.clear();
+            } catch (_) {
+              if (mounted) {
+                SnackbarUtils.showError(
+                  context,
+                  'No se pudo crear el cliente.',
+                );
+              }
+            }
+            setLocal(() => creando = false);
+          }
+
           return AlertDialog(
             title: const Text('¿Quién lo pidió?'),
             content: SizedBox(
@@ -230,11 +276,34 @@ class _RequirementCreatePanelState extends State<RequirementCreatePanel> {
                     controller: busqueda,
                     autofocus: true,
                     decoration: const InputDecoration(
-                      hintText: 'Buscar cliente…',
+                      hintText: 'Buscar o escribir uno nuevo…',
                       prefixIcon: Icon(LucideIcons.search, size: 18),
                     ),
                     onChanged: (_) => setLocal(() {}),
+                    onSubmitted: (_) {
+                      if (puedeCrear) crear();
+                    },
                   ),
+                  // El cliente que falta se crea aquí mismo: salir a la
+                  // pantalla de Clientes obligaba a perder el requerimiento
+                  // a medio escribir.
+                  if (puedeCrear)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: creando ? null : crear,
+                        icon: creando
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(LucideIcons.userPlus, size: 16),
+                        label: Text('Crear cliente "$escrito"'),
+                      ),
+                    ),
                   const SizedBox(height: 8),
                   Expanded(
                     child: ListView.builder(
@@ -265,7 +334,10 @@ class _RequirementCreatePanelState extends State<RequirementCreatePanel> {
                 child: const Text('Cancelar'),
               ),
               ElevatedButton(
-                onPressed: () => Navigator.of(ctx).pop(elegidos),
+                onPressed: () => Navigator.of(ctx).pop([
+                  for (final c in disponibles)
+                    if (elegidos.contains(c.id)) c,
+                ]),
                 child: const Text('Listo'),
               ),
             ],
@@ -278,10 +350,7 @@ class _RequirementCreatePanelState extends State<RequirementCreatePanel> {
     setState(() {
       _clientes
         ..clear()
-        ..addAll([
-          for (final c in context.read<CatalogProvider>().clients)
-            if (res.contains(c.id)) c,
-        ]);
+        ..addAll(res);
     });
   }
 

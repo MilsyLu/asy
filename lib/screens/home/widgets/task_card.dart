@@ -20,6 +20,7 @@ import '../../../widgets/trash_dialog.dart';
 import '../add_edit_task_page.dart';
 import 'reschedule_dialog.dart';
 import 'task_detail_dialog.dart';
+import '../../../core/utils/recordatorio_resumen.dart';
 import '../../../core/utils/reschedule_summary.dart';
 
 /// Card representation of a single task, used on Home / Calendar / Week.
@@ -60,6 +61,11 @@ class TaskCard extends StatelessWidget {
     final colors = context.colors;
     final typeColor =
         catalog.taskTypeById(task.taskTypeId)?.parsedColor ?? colors.primary;
+    final recordatorio = resumenRecordatorio(
+      recordatorio: task.reminderTime,
+      enviado: task.reminderSent,
+      fechaTarea: task.scheduledDateTime,
+    );
     final reprogramacion = rescheduleSummary(
       history: task.rescheduleHistory,
       rescheduledCount: task.rescheduledCount,
@@ -217,6 +223,42 @@ class TaskCard extends StatelessWidget {
                           ),
                       ],
                     ),
+                    // Si va a sonar, y cuándo. La tarjeta no decía nada del
+                    // recordatorio: había que abrir la tarea para saber si
+                    // estaba puesto.
+                    if (recordatorio != null) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            task.reminderSent
+                                ? LucideIcons.bellOff
+                                : LucideIcons.bell,
+                            size: 13,
+                            color: task.reminderSent
+                                ? colors.textSecondary
+                                : colors.primary,
+                          ),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              recordatorio,
+                              style: TextStyle(
+                                color: task.reminderSent
+                                    ? colors.textSecondary
+                                    : colors.primary,
+                                fontSize: 12,
+                                fontWeight: task.reminderSent
+                                    ? FontWeight.normal
+                                    : FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     ...[
                       const SizedBox(height: 10),
                       const Divider(height: 1),
@@ -309,6 +351,40 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
+/// Marca [task] como completada, dejando dicho quién lo hizo.
+///
+/// Sin confirmar: para los sitios donde el usuario ya eligió "Completar"
+/// en un menú y volver a preguntarle sería un clic de más. Los que sí
+/// preguntan usan [completeTaskWithConfirm], que termina aquí.
+///
+/// Esto estaba copiado en tres pantallas. Al guardar quién completa, tres
+/// copias son tres sitios donde se puede olvidar el dato — y el que se
+/// olvide deja la tarea sin autor sin que nadie se entere.
+Future<void> completarTarea(BuildContext context, TaskModel task) async {
+  // Todo lo que depende del context se lee antes del primer await.
+  final catalog = context.read<CatalogProvider>();
+  final repo = context.read<TaskRepository>();
+  final quien = context.read<AuthProvider>().appUser?.id;
+  final completedId = catalog.completedStatusId;
+  if (completedId == null) {
+    SnackbarUtils.showError(
+      context,
+      'No existe un estado "Completada" configurado',
+    );
+    return;
+  }
+  try {
+    await repo.completeTask(task.id, completedId, completedBy: quien);
+    if (context.mounted) {
+      SnackbarUtils.showSuccess(context, 'Tarea completada');
+    }
+  } catch (e) {
+    if (context.mounted) {
+      SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
+    }
+  }
+}
+
 /// Marks [task] as completed after confirmation, showing a success/error
 /// snackbar. Shared by [TaskCard]'s action row and the Home agenda widgets
 /// (quick "Completar" buttons on the next-task card and agenda tiles).
@@ -317,9 +393,7 @@ Future<void> completeTaskWithConfirm(
   TaskModel task,
 ) async {
   final catalog = context.read<CatalogProvider>();
-  final repo = context.read<TaskRepository>();
-  final completedId = catalog.completedStatusId;
-  if (completedId == null) {
+  if (catalog.completedStatusId == null) {
     SnackbarUtils.showError(
       context,
       'No existe un estado "Completada" configurado',
@@ -333,17 +407,8 @@ Future<void> completeTaskWithConfirm(
         '¿Marcar la tarea de ${task.clientName} a las ${task.hour} como completada?',
     confirmLabel: 'Completar',
   );
-  if (!confirm) return;
-  try {
-    await repo.completeTask(task.id, completedId);
-    if (context.mounted) {
-      SnackbarUtils.showSuccess(context, 'Tarea completada');
-    }
-  } catch (e) {
-    if (context.mounted) {
-      SnackbarUtils.showError(context, SnackbarUtils.firebaseErrorMessage(e));
-    }
-  }
+  if (!confirm || !context.mounted) return;
+  await completarTarea(context, task);
 }
 
 /// Soft-deletes [task] after showing the standard trash confirmation dialog.
@@ -448,30 +513,7 @@ Future<void> showTaskQuickActionsSheet(BuildContext context, TaskModel task) {
                 title: const Text('Completar'),
                 onTap: () async {
                   Navigator.of(sheetContext).pop();
-                  final repo = context.read<TaskRepository>();
-                  final completedId = catalog.completedStatusId;
-                  if (completedId == null) {
-                    if (context.mounted) {
-                      SnackbarUtils.showError(
-                        context,
-                        'No existe un estado "Completada" configurado',
-                      );
-                    }
-                    return;
-                  }
-                  try {
-                    await repo.completeTask(task.id, completedId);
-                    if (context.mounted) {
-                      SnackbarUtils.showSuccess(context, 'Tarea completada');
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      SnackbarUtils.showError(
-                        context,
-                        SnackbarUtils.firebaseErrorMessage(e),
-                      );
-                    }
-                  }
+                  if (context.mounted) await completarTarea(context, task);
                 },
               ),
             ListTile(

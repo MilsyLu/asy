@@ -8,6 +8,7 @@ import '../../../models/app_user.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/catalog_provider.dart';
 import '../../../widgets/loading_indicator.dart';
+import '../../../widgets/user_avatar.dart';
 
 /// Report 4: every user ranked by current login streak — scoped to the
 /// viewer's own managed teams for an admin_equipo, same as every other tab
@@ -50,14 +51,40 @@ class StreakReportTab extends StatelessWidget {
             border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
           ),
           child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: colors.background,
-              child: Text(
-                '${index + 1}',
-                style: TextStyle(
-                  color: colors.primary,
-                  fontWeight: FontWeight.bold,
-                ),
+            // La foto de la persona con su puesto encima, en vez de un
+            // circulo con un numero: en una lista de gente, la cara es lo
+            // que uno reconoce de un vistazo, y el puesto se sigue viendo.
+            // Quien no tiene foto cargada sigue mostrando sus iniciales.
+            leading: SizedBox(
+              width: 44,
+              height: 44,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  UserAvatarDisplay(user: user, size: 44, borderWidth: 1.5),
+                  Positioned(
+                    left: -2,
+                    bottom: -2,
+                    child: Container(
+                      width: 19,
+                      height: 19,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: colors.surface,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: colors.primary, width: 1.2),
+                      ),
+                      child: Text(
+                        '${index + 1}',
+                        style: TextStyle(
+                          color: colors.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             title: Text(user.name, style: TextStyle(color: colors.textPrimary)),

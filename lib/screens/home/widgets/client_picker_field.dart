@@ -94,7 +94,7 @@ class _ClientPickerFieldState extends State<ClientPickerField> {
           validator: (v) =>
               Validators.required(v, fieldName: 'El nombre del cliente'),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         TextFormField(
           controller: widget.phoneController,
           keyboardType: TextInputType.phone,

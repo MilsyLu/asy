@@ -531,9 +531,9 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
             clientId: _clientId,
             onClientIdChanged: (id) => setState(() => _clientId = id),
           ),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: 10),
           Divider(color: colors.divider, height: 1),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: 10),
           _sectionLabel(colors, LucideIcons.calendarClock, 'PROGRAMACIÓN'),
           const SizedBox(height: AppSpacing.sm),
           // Fecha stacked above Hora (not side by side) — this card's
@@ -541,9 +541,9 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
           // splitting it with Fecha would leave HourGridSelector too
           // narrow for more than one cramped column of hour cards.
           dateField,
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: 10),
           hourField,
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: 10),
           InkWell(
             onTap: _pickReminder,
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
@@ -604,7 +604,7 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
             'El recordatorio debe ser anterior a la hora de la tarea.',
             style: TextStyle(color: colors.textSecondary, fontSize: 11),
           ),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(child: assignedField),
@@ -612,7 +612,7 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
               Expanded(child: groupField),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: 10),
           statusField != null
               ? Row(
                   children: [
@@ -622,7 +622,7 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
                   ],
                 )
               : taskTypeField,
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: 10),
           Row(
             children: [
               Icon(LucideIcons.globe, color: colors.primary, size: 18),
@@ -657,7 +657,7 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: 10),
           TextFormField(
             controller: _observationsController,
             maxLines: 3,
@@ -671,7 +671,7 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
               ),
             ),
           ),
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: 12),
           // Al final del formulario y no en la cabecera: arriba quedaba por
           // encima del primer campo, así que al terminar de llenar había que
           // volver al principio del panel a buscarlo. Aquí el botón está

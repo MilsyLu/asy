@@ -1,4 +1,5 @@
 import '../../models/task_model.dart';
+import 'autor_tarea.dart';
 
 /// Stands for "the ones that have none" in a dropdown whose other options are
 /// ids — a task can have no team and no type, and `catalog` shows those as
@@ -20,6 +21,7 @@ class ReportFilters {
     this.userId,
     this.statusId,
     this.taskTypeId,
+    this.autorId,
   });
 
   /// Free text, matched against the client's name and phone.
@@ -31,12 +33,21 @@ class ReportFilters {
   final String? statusId;
   final String? taskTypeId;
 
+  /// Quién asignó la tarea: un id de usuario, o una de las claves de
+  /// [AutorTarea] para las que no tienen una persona detrás.
+  ///
+  /// Aparte de [userId], que es a quién se le asignó. Son dos preguntas
+  /// distintas y mezclarlas era lo que impedía contestar la de Elena:
+  /// "¿cuántas asigné yo?" no es "¿cuántas tengo yo?".
+  final String? autorId;
+
   bool get isEmpty =>
       search.trim().isEmpty &&
       groupId == null &&
       userId == null &&
       statusId == null &&
-      taskTypeId == null;
+      taskTypeId == null &&
+      autorId == null;
 
   ReportFilters copyWith({
     String? search,
@@ -44,10 +55,12 @@ class ReportFilters {
     String? userId,
     String? statusId,
     String? taskTypeId,
+    String? autorId,
     bool clearGroup = false,
     bool clearUser = false,
     bool clearStatus = false,
     bool clearTaskType = false,
+    bool clearAutor = false,
   }) {
     return ReportFilters(
       search: search ?? this.search,
@@ -55,6 +68,7 @@ class ReportFilters {
       userId: clearUser ? null : (userId ?? this.userId),
       statusId: clearStatus ? null : (statusId ?? this.statusId),
       taskTypeId: clearTaskType ? null : (taskTypeId ?? this.taskTypeId),
+      autorId: clearAutor ? null : (autorId ?? this.autorId),
     );
   }
 
@@ -63,6 +77,10 @@ class ReportFilters {
     if (userId != null && task.assignedUserId != userId) return false;
     if (statusId != null && task.statusId != statusId) return false;
     if (!_matchesId(taskTypeId, task.taskTypeId)) return false;
+    // Por clave de autor y no por `createdBy` a secas: así "Hoja de
+    // cálculo" y "Sin registrar" también se pueden elegir, en vez de ser
+    // tareas que ningún filtro alcanza y que desaparecen de los totales.
+    if (autorId != null && claveAutor(task) != autorId) return false;
 
     final query = search.trim();
     if (query.isEmpty) return true;
@@ -100,6 +118,7 @@ class ReportFilters {
     required String Function(String?) userName,
     required String Function(String?) statusName,
     required String Function(String?) taskTypeName,
+    String Function(String)? autorName,
   }) {
     String label(String id, String Function(String?) nameOf) =>
         nameOf(id == kSinAsignar ? null : id);
@@ -110,6 +129,8 @@ class ReportFilters {
       if (userId != null) 'Encargado: ${label(userId!, userName)}',
       if (statusId != null) 'Estado: ${label(statusId!, statusName)}',
       if (taskTypeId != null) 'Tipo: ${label(taskTypeId!, taskTypeName)}',
+      if (autorId != null)
+        'Asignadas por: ${autorName?.call(autorId!) ?? autorId}',
     ];
   }
 }

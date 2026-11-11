@@ -14,11 +14,11 @@ import '../../../models/task_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/catalog_provider.dart';
 import '../../../services/task_repository.dart';
-import '../../../widgets/confirm_dialog.dart';
 import '../../../widgets/task_type_chip.dart';
 import '../../../widgets/trash_dialog.dart';
 import '../add_edit_task_page.dart';
 import 'reschedule_dialog.dart';
+import 'task_card.dart';
 import '../../../core/utils/reschedule_summary.dart';
 
 /// Returns a human-readable label for the reminder stored in [task].
@@ -250,39 +250,8 @@ Future<void> showTaskDetailDialog(BuildContext context, TaskModel task) {
                           ),
                           onPressed: () async {
                             Navigator.of(dialogContext).pop();
-                            final completedId = catalog.completedStatusId;
-                            if (completedId == null) {
-                              if (context.mounted) {
-                                SnackbarUtils.showError(
-                                  context,
-                                  'No existe un estado "Completada" configurado',
-                                );
-                              }
-                              return;
-                            }
-                            final confirm = await showConfirmDialog(
-                              context,
-                              title: 'Completar tarea',
-                              message:
-                                  '¿Marcar la tarea de ${task.clientName} a las ${task.hour} como completada?',
-                              confirmLabel: 'Completar',
-                            );
-                            if (!confirm) return;
-                            try {
-                              await repo.completeTask(task.id, completedId);
-                              if (context.mounted) {
-                                SnackbarUtils.showSuccess(
-                                  context,
-                                  'Tarea completada',
-                                );
-                              }
-                            } catch (e) {
-                              if (context.mounted) {
-                                SnackbarUtils.showError(
-                                  context,
-                                  SnackbarUtils.firebaseErrorMessage(e),
-                                );
-                              }
+                            if (context.mounted) {
+                              await completeTaskWithConfirm(context, task);
                             }
                           },
                           icon: const Icon(LucideIcons.checkCircle, size: 16),

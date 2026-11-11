@@ -3,6 +3,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../core/responsive/app_spacing.dart';
 import '../../../core/theme/theme_colors.dart';
+import '../../../core/utils/autor_tarea.dart';
 import '../../../core/utils/report_filters.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/catalog_provider.dart';
@@ -23,6 +24,8 @@ class ReportFilterBar extends StatefulWidget {
     required this.catalog,
     required this.matchCount,
     required this.dateSelector,
+    required this.porFechaDeAsignacion,
+    required this.onEjeChanged,
   });
 
   final ReportFilters filters;
@@ -39,6 +42,10 @@ class ReportFilterBar extends StatefulWidget {
   /// The date-range button, laid out here so the whole first row reads as one
   /// control instead of three stacked bands eating the top of the screen.
   final Widget dateSelector;
+
+  /// Si el rango de fechas se lee como "asignadas en" en vez de "para".
+  final bool porFechaDeAsignacion;
+  final ValueChanged<bool> onEjeChanged;
 
   @override
   State<ReportFilterBar> createState() => _ReportFilterBarState();
@@ -62,6 +69,10 @@ class _ReportFilterBarState extends State<ReportFilterBar> {
 
   static const double _anchoFecha = 236;
   static const double _anchoFiltro = 170;
+
+  /// Más ancho que un filtro: "De cuándo se asignó" no cabe en 170 y
+  /// cortado a la mitad diría otra cosa.
+  static const double _anchoEje = 210;
 
   @override
   void didUpdateWidget(ReportFilterBar oldWidget) {
@@ -95,6 +106,24 @@ class _ReportFilterBarState extends State<ReportFilterBar> {
       (a, b) => display(a).toLowerCase().compareTo(display(b).toLowerCase()),
     );
   }
+
+  /// Las claves de autor presentes en las tareas cargadas, ordenadas por el
+  /// nombre que se muestra.
+  ///
+  /// Aparte de [_options] porque un autor no es un id que pueda faltar: es
+  /// siempre una de tres cosas — una persona, la hoja, o sin registrar — y
+  /// ninguna se representa con [kSinAsignar].
+  List<String> _autores() {
+    final claves = <String>{for (final t in widget.tasks) claveAutor(t)};
+    return claves.toList()..sort(
+      (a, b) => _nombreAutor(
+        a,
+      ).toLowerCase().compareTo(_nombreAutor(b).toLowerCase()),
+    );
+  }
+
+  String _nombreAutor(String clave) =>
+      nombreAutor(clave, (id) => catalog.userById(id)?.name);
 
   Widget _buscador(AppColorsExtension colors) {
     return TextField(
@@ -132,6 +161,52 @@ class _ReportFilterBarState extends State<ReportFilterBar> {
     );
   }
 
+  /// Qué significa el rango de fechas.
+  ///
+  /// Va pegado al botón de fechas y no entre los filtros: no recorta la
+  /// lista como ellos, cambia qué preguntan las fechas de al lado. Puesto
+  /// entre los demás se leería como un filtro más.
+  Widget _eje(AppColorsExtension colors) {
+    final activo = widget.porFechaDeAsignacion;
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: activo ? colors.primary.withValues(alpha: 0.10) : colors.surface,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        border: Border.all(color: activo ? colors.primary : colors.divider),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<bool>(
+          value: activo,
+          isDense: true,
+          isExpanded: true,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+          dropdownColor: colors.surface,
+          style: TextStyle(color: colors.textPrimary, fontSize: 13),
+          selectedItemBuilder: (context) => const [
+            _Closed(label: 'Las fechas son', value: 'De la tarea'),
+            _Closed(label: 'Las fechas son', value: 'De cuándo se asignó'),
+          ],
+          items: const [
+            DropdownMenuItem(
+              value: false,
+              child: Text(
+                'Para cuándo es la tarea',
+                style: TextStyle(fontSize: 13),
+              ),
+            ),
+            DropdownMenuItem(
+              value: true,
+              child: Text('Cuándo se asignó', style: TextStyle(fontSize: 13)),
+            ),
+          ],
+          onChanged: (v) => widget.onEjeChanged(v ?? false),
+        ),
+      ),
+    );
+  }
+
   List<Widget> _filtros() {
     return [
       _FilterDropdown(
@@ -154,6 +229,20 @@ class _ReportFilterBarState extends State<ReportFilterBar> {
           v == null
               ? filters.copyWith(clearUser: true)
               : filters.copyWith(userId: v),
+        ),
+      ),
+      // "Asignadas por" va junto a "Encargado" y no al final: son las dos
+      // caras de la misma pregunta — quién la mandó y quién la tiene— y
+      // separadas se confunden una con otra.
+      _FilterDropdown(
+        label: 'Asignadas por',
+        value: filters.autorId,
+        options: _autores(),
+        nameOf: (id) => id == null ? 'Todos' : _nombreAutor(id),
+        onChanged: (v) => onChanged(
+          v == null
+              ? filters.copyWith(clearAutor: true)
+              : filters.copyWith(autorId: v),
         ),
       ),
       _FilterDropdown(
@@ -204,6 +293,8 @@ class _ReportFilterBarState extends State<ReportFilterBar> {
                 children: [
                   SizedBox(width: _anchoFecha, child: widget.dateSelector),
                   const SizedBox(width: AppSpacing.sm),
+                  SizedBox(width: _anchoEje, child: _eje(colors)),
+                  const SizedBox(width: AppSpacing.sm),
                   // Takes whatever the fixed controls leave, so the row fills
                   // the width instead of trailing off into empty space.
                   Expanded(child: _buscador(colors)),
@@ -224,6 +315,7 @@ class _ReportFilterBarState extends State<ReportFilterBar> {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 SizedBox(width: _anchoFecha, child: widget.dateSelector),
+                SizedBox(width: _anchoEje, child: _eje(colors)),
                 SizedBox(width: 260, child: _buscador(colors)),
                 ...filtros,
                 if (!filters.isEmpty) limpiar,
@@ -235,6 +327,23 @@ class _ReportFilterBarState extends State<ReportFilterBar> {
         // it: every number below and every export now describes a subset, and
         // a filtered total screenshotted as "the month" is a mistake nothing
         // else on screen would catch.
+        if (widget.porFechaDeAsignacion) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Icon(LucideIcons.info, size: 14, color: colors.primary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Las fechas cuentan cuándo se asignó cada tarea, no para '
+                  'cuándo quedó: aquí salen tareas programadas para después '
+                  'del rango.',
+                  style: TextStyle(color: colors.primary, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ],
         if (!filters.isEmpty) ...[
           const SizedBox(height: AppSpacing.sm),
           Container(

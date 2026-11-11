@@ -8,6 +8,9 @@ import '../../core/utils/date_utils.dart';
 import '../../models/client_model.dart';
 import '../../models/requirement_model.dart';
 import '../../models/support_case_model.dart';
+import '../../models/task_model.dart';
+import '../../providers/catalog_provider.dart';
+import '../home/widgets/task_detail_dialog.dart';
 import '../../services/requirement_repository.dart';
 import '../../services/support_case_repository.dart';
 import '../../widgets/support_case_badges.dart';
@@ -21,9 +24,19 @@ import '../support_cases/support_case_detail_view.dart';
 /// Un caso o requerimiento es de este cliente si está enlazado a su registro
 /// o, en los antiguos que nunca se enlazaron, si lleva su mismo nombre.
 class ClientActivitySection extends StatelessWidget {
-  const ClientActivitySection({super.key, required this.client});
+  const ClientActivitySection({
+    super.key,
+    required this.client,
+    this.tareas = const [],
+  });
 
   final ClientModel client;
+
+  /// Las tareas del cliente, ya consultadas por quien abre la ficha para
+  /// sus tres contadores. Se reciben hechas en vez de volver a pedirlas:
+  /// serían dos consultas idénticas para la misma pantalla, y dos sitios
+  /// donde se podría contar distinto.
+  final List<TaskModel> tareas;
 
   static String _norm(String s) => s.trim().toLowerCase();
 
@@ -61,9 +74,39 @@ class ClientActivitySection extends StatelessWidget {
               ..sort((a, b) => b.reportedAt.compareTo(a.reportedAt));
             final reqs = reqSnap.data!.where(_isMineRequirement).toList()
               ..sort((a, b) => b.receivedAt.compareTo(a.receivedAt));
+            final catalog = context.watch<CatalogProvider>();
+
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                _Group(
+                  title: 'Tareas',
+                  emptyText: 'Sin tareas registradas.',
+                  children: [
+                    for (final t in tareas)
+                      _Row(
+                        code: catalog.taskTypeName(t.taskTypeId),
+                        text: t.observations.trim().isEmpty
+                            ? catalog.userName(t.assignedUserId)
+                            : t.observations,
+                        // La fecha para la que quedó la tarea y su hora:
+                        // es lo que uno recuerda cuando pregunta por "lo de
+                        // la vez pasada".
+                        date: t.scheduledDateTime,
+                        conHora: true,
+                        trailing: Text(
+                          catalog.statusName(t.statusId),
+                          style: TextStyle(
+                            color: context.colors.textSecondary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        onTap: () => showTaskDetailDialog(context, t),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
                 _Group(
                   title: 'Casos de soporte',
                   emptyText: 'Sin casos de soporte.',
@@ -121,7 +164,11 @@ class ClientActivitySection extends StatelessWidget {
 }
 
 class _Group extends StatelessWidget {
-  const _Group({required this.title, required this.emptyText, required this.children});
+  const _Group({
+    required this.title,
+    required this.emptyText,
+    required this.children,
+  });
 
   final String title;
   final String emptyText;
@@ -146,7 +193,10 @@ class _Group extends StatelessWidget {
         // el historial de una vez. Una lista con su propio scroll dentro de
         // otra obligaba a desplazar dos cosas distintas.
         if (children.isEmpty)
-          Text(emptyText, style: TextStyle(color: colors.textSecondary, fontSize: 12))
+          Text(
+            emptyText,
+            style: TextStyle(color: colors.textSecondary, fontSize: 12),
+          )
         else
           ...children,
       ],
@@ -161,11 +211,16 @@ class _Row extends StatelessWidget {
     required this.date,
     required this.trailing,
     required this.onTap,
+    this.conHora = false,
   });
 
   final String code;
   final String text;
   final DateTime date;
+
+  /// Las tareas llevan hora; un caso o un requerimiento, no — ahí se
+  /// registra el día en que entró, y una hora inventada confundiría.
+  final bool conHora;
   final Widget trailing;
   final VoidCallback onTap;
 
@@ -190,7 +245,8 @@ class _Row extends StatelessWidget {
                     style: TextStyle(color: colors.textPrimary, fontSize: 13),
                   ),
                   Text(
-                    '$code · ${AppDateUtils.formatShortDate(date)}',
+                    '$code · ${AppDateUtils.formatShortDate(date)}'
+                    '${conHora ? ' · ${AppDateUtils.formatHour(date)}' : ''}',
                     style: TextStyle(color: colors.textSecondary, fontSize: 11),
                   ),
                 ],
@@ -199,7 +255,11 @@ class _Row extends StatelessWidget {
             const SizedBox(width: 8),
             trailing,
             const SizedBox(width: 2),
-            Icon(LucideIcons.chevronRight, size: 16, color: colors.textSecondary),
+            Icon(
+              LucideIcons.chevronRight,
+              size: 16,
+              color: colors.textSecondary,
+            ),
           ],
         ),
       ),

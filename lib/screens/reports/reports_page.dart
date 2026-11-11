@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/responsive/app_spacing.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
+import '../../core/utils/autor_tarea.dart';
 import '../../core/utils/report_filters.dart';
 import '../../core/utils/report_metrics.dart';
 import '../../core/utils/snackbar_utils.dart';
@@ -96,6 +97,14 @@ class _ReportsPageState extends State<ReportsPage>
   /// describes a subset is the kind of mismatch people quote in meetings.
   ReportFilters _filters = const ReportFilters();
 
+  /// Qué significa el rango de fechas de arriba.
+  ///
+  /// Por omisión, para cuándo es la tarea, que es como se ha leído siempre
+  /// este reporte. La otra opción contesta "¿cuántas asigné hoy?", que no
+  /// se podía contestar en ninguna parte: quien reparte trabajo un lunes
+  /// para toda la semana no ve nada suyo mirando el lunes.
+  bool _porFechaDeAsignacion = false;
+
   @override
   void initState() {
     super.initState();
@@ -161,7 +170,9 @@ class _ReportsPageState extends State<ReportsPage>
 
     return Scaffold(
       body: StreamBuilder<List<TaskModel>>(
-        stream: repo.watchTasksInRange(_range.start, _range.end),
+        stream: _porFechaDeAsignacion
+            ? repo.watchTasksCreatedInRange(_range.start, _range.end)
+            : repo.watchTasksInRange(_range.start, _range.end),
         builder: (context, snapshot) {
           if (!loadLogged &&
               snapshot.connectionState != ConnectionState.waiting) {
@@ -200,6 +211,9 @@ class _ReportsPageState extends State<ReportsPage>
                   tasks: visible,
                   catalog: catalog,
                   matchCount: tasks.length,
+                  porFechaDeAsignacion: _porFechaDeAsignacion,
+                  onEjeChanged: (v) =>
+                      setState(() => _porFechaDeAsignacion = v),
                   // El botón de siempre, pero ahora despliega el
                   // calendario pegado a él en vez de abrir una ventana a
                   // pantalla completa.
@@ -241,6 +255,10 @@ class _ReportsPageState extends State<ReportsPage>
                                 end: _range.end,
                                 generatedBy: currentUser.name,
                                 activeFilters: _filters.describe(
+                                  autorName: (clave) => nombreAutor(
+                                    clave,
+                                    (id) => catalog.userById(id)?.name,
+                                  ),
                                   groupName: catalog.groupName,
                                   userName: catalog.userName,
                                   statusName: catalog.statusName,
@@ -264,6 +282,10 @@ class _ReportsPageState extends State<ReportsPage>
                                 end: _range.end,
                                 generatedBy: currentUser.name,
                                 activeFilters: _filters.describe(
+                                  autorName: (clave) => nombreAutor(
+                                    clave,
+                                    (id) => catalog.userById(id)?.name,
+                                  ),
                                   groupName: catalog.groupName,
                                   userName: catalog.userName,
                                   statusName: catalog.statusName,

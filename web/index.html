@@ -211,7 +211,8 @@
       //    shown through FCM (the SDK's listener calls
       //    stopImmediatePropagation, so it never runs for FCM ones).
       //
-      // Either way the destination carries ?openTask= / ?openCase=, which
+      // Either way the destination carries ?openTask= / ?openCase= /
+      // ?openRequirement=, which
       // main_shell.dart reads on startup and strips afterwards.
       navigator.serviceWorker.addEventListener('message', function (event) {
         var payload = event.data || {};

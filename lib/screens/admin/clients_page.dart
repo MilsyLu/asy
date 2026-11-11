@@ -221,37 +221,48 @@ class _ClientsPageState extends State<ClientsPage> {
                               );
                             }
                             final history = snapshot.data!;
-                            return Row(
+                            // Los recuadros y el historial salen de la misma
+                            // consulta. Separados, habia que pedir las tareas
+                            // del cliente dos veces para la misma ficha.
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Expanded(
-                                  child: _HistoryStatBox(
-                                    label: 'Tareas',
-                                    value: '${history.total}',
-                                    color: colors.primary,
-                                  ),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _HistoryStatBox(
+                                        label: 'Tareas',
+                                        value: '${history.total}',
+                                        color: colors.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: _HistoryStatBox(
+                                        label: 'Completadas',
+                                        value: '${history.completed}',
+                                        color: colors.success,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: _HistoryStatBox(
+                                        label: 'Reprogramadas',
+                                        value: '${history.rescheduled}',
+                                        color: colors.error,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: _HistoryStatBox(
-                                    label: 'Completadas',
-                                    value: '${history.completed}',
-                                    color: colors.success,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: _HistoryStatBox(
-                                    label: 'Reprogramadas',
-                                    value: '${history.rescheduled}',
-                                    color: colors.error,
-                                  ),
+                                const SizedBox(height: 20),
+                                ClientActivitySection(
+                                  client: client,
+                                  tareas: history.tareas,
                                 ),
                               ],
                             );
                           },
                         ),
-                        const SizedBox(height: 20),
-                        ClientActivitySection(client: client),
                       ],
                     ),
                   ),
@@ -1040,19 +1051,31 @@ Future<void> _showClientDetailSheet(
                         );
                       }
                       final history = snapshot.data!;
-                      return Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _HistoryChip(label: '${history.total} tareas'),
-                          _HistoryChip(label: '${history.completed} completadas'),
-                          _HistoryChip(label: '${history.rescheduled} reprogramadas'),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              _HistoryChip(label: '${history.total} tareas'),
+                              _HistoryChip(
+                                label: '${history.completed} completadas',
+                              ),
+                              _HistoryChip(
+                                label: '${history.rescheduled} reprogramadas',
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          ClientActivitySection(
+                            client: client,
+                            tareas: history.tareas,
+                          ),
                         ],
                       );
                     },
                   ),
-                  const SizedBox(height: 16),
-                  ClientActivitySection(client: client),
                   if (canEdit) ...[
                     const SizedBox(height: 20),
                     SizedBox(

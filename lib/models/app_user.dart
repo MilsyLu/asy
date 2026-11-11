@@ -63,6 +63,17 @@ class AppUser {
   /// `functions/src/notifications.js` `sendNotificationToUser`).
   final String pushNotificationMode;
 
+  /// Si quiere enterarse de los requerimientos nuevos.
+  ///
+  /// Sólo le llega a quien puede aprobarlos y asignarlos
+  /// (`manageRequirements`), y este interruptor le deja apagarlo. Apaga el
+  /// aviso completo —el push y la campana—, a diferencia de
+  /// [pushNotificationMode], que calla el teléfono pero deja el registro:
+  /// son dos cosas distintas a propósito. Las fichas escritas antes de que
+  /// este campo existiera no lo traen, y [fromMap] las deja en `true`:
+  /// quien pidió el aviso no tiene que ir a activárselo a nadie.
+  final bool avisarRequerimientoNuevo;
+
   const AppUser({
     required this.id,
     required this.email,
@@ -82,6 +93,7 @@ class AppUser {
     this.photoUrl,
     this.isActive = true,
     this.pushNotificationMode = AppPushNotificationModes.all,
+    this.avisarRequerimientoNuevo = true,
   });
 
   bool get isSuperAdmin => role == AppRoles.superAdmin;
@@ -156,6 +168,8 @@ class AppUser {
       photoUrl: map['photoUrl'] as String?,
       isActive: map['isActive'] as bool? ?? true,
       pushNotificationMode: _resolvePushNotificationMode(map),
+      avisarRequerimientoNuevo:
+          map['avisarRequerimientoNuevo'] as bool? ?? true,
     );
   }
 
@@ -208,6 +222,7 @@ class AppUser {
       'photoUrl': photoUrl,
       'isActive': isActive,
       'pushNotificationMode': pushNotificationMode,
+      'avisarRequerimientoNuevo': avisarRequerimientoNuevo,
     };
   }
 
@@ -226,6 +241,7 @@ class AppUser {
     String? photoUrl,
     bool? isActive,
     String? pushNotificationMode,
+    bool? avisarRequerimientoNuevo,
   }) {
     return AppUser(
       id: id,
@@ -245,6 +261,8 @@ class AppUser {
       photoUrl: photoUrl ?? this.photoUrl,
       isActive: isActive ?? this.isActive,
       pushNotificationMode: pushNotificationMode ?? this.pushNotificationMode,
+      avisarRequerimientoNuevo:
+          avisarRequerimientoNuevo ?? this.avisarRequerimientoNuevo,
     );
   }
 }

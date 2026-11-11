@@ -262,4 +262,15 @@ class UserRepository {
       'pushNotificationMode': mode,
     }, SetOptions(merge: true));
   }
+
+  /// Enciende o apaga el aviso de requerimiento nuevo para [uid].
+  ///
+  /// Ver [AppUser.avisarRequerimientoNuevo]: apaga el aviso entero, no sólo
+  /// el push. `merge: true` para que las fichas viejas, que no traen el
+  /// campo, lo estrenen sin tocarles nada más.
+  Future<void> setAvisarRequerimientoNuevo(String uid, bool avisar) {
+    return _collection.doc(uid).set({
+      'avisarRequerimientoNuevo': avisar,
+    }, SetOptions(merge: true));
+  }
 }

@@ -5,6 +5,7 @@ import '../core/utils/snackbar_utils.dart';
 import '../core/utils/task_visibility.dart';
 import '../providers/auth_provider.dart';
 import '../screens/home/widgets/task_detail_dialog.dart';
+import '../screens/requirements/requirement_detail_view.dart';
 import '../screens/support_cases/support_case_detail_view.dart';
 import 'support_case_repository.dart';
 import 'task_repository.dart';
@@ -80,6 +81,37 @@ Future<void> openSupportCaseFromNotification(String? caseId) async {
   );
 }
 
+/// El equivalente para Requerimientos: abre [requirementId] como página
+/// completa encima de lo que haya en pantalla, igual que
+/// [openSupportCaseFromNotification].
+///
+/// No comprueba antes si el requerimiento existe. La propia vista de
+/// detalle escucha el documento y ya dice "Este requerimiento ya no
+/// existe" cuando no está: adelantarse con una consulta aparte sería leerlo
+/// dos veces para contestar lo mismo, y dejaría el mensaje escrito en dos
+/// sitios.
+Future<void> openRequirementFromNotification(String? requirementId) async {
+  if (requirementId == null || requirementId.isEmpty) return;
+  final context = rootNavigatorKey.currentContext;
+  if (context == null) return;
+
+  final auth = context.read<AuthProvider>();
+  if (auth.appUser == null) return;
+
+  await rootNavigatorKey.currentState?.push(
+    MaterialPageRoute(
+      builder: (_) => Scaffold(
+        body: SafeArea(
+          child: RequirementDetailView(
+            requirementId: requirementId,
+            onClose: () => rootNavigatorKey.currentState?.maybePop(),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 /// Dispatches based on whichever id is present in a raw FCM `data` map —
 /// used by entry points that already have the full payload (foreground
 /// click, background/terminated relaunch). A task takes priority if a
@@ -88,10 +120,13 @@ Future<void> openSupportCaseFromNotification(String? caseId) async {
 Future<void> openNotificationFromData(Map<String, dynamic> data) async {
   final taskId = data['taskId'] as String?;
   final caseId = data['caseId'] as String?;
+  final requirementId = data['requirementId'] as String?;
   if (taskId != null && taskId.isNotEmpty) {
     await openTaskFromNotification(taskId);
   } else if (caseId != null && caseId.isNotEmpty) {
     await openSupportCaseFromNotification(caseId);
+  } else if (requirementId != null && requirementId.isNotEmpty) {
+    await openRequirementFromNotification(requirementId);
   }
 }
 
@@ -113,6 +148,8 @@ Future<void> openNotificationFromPayload(String? payload) async {
   final id = payload.substring(colonIndex + 1);
   if (kind == 'case') {
     await openSupportCaseFromNotification(id);
+  } else if (kind == 'req') {
+    await openRequirementFromNotification(id);
   } else {
     await openTaskFromNotification(id);
   }

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'core/constants/app_constants.dart';
 import 'core/theme/theme_manager.dart';
 import 'providers/auth_provider.dart';
+import 'providers/filtro_autor_provider.dart';
 import 'providers/dashboard_range_provider.dart';
 import 'providers/support_case_panel_provider.dart';
 import 'providers/catalog_provider.dart';
@@ -117,6 +118,12 @@ class TaskFlowApp extends StatelessWidget {
                   // la página y el botón "Nuevo caso" de la barra superior.
                   ChangeNotifierProvider<SupportCasePanelController>(
                     create: (_) => SupportCasePanelController(),
+                  ),
+                  // Por quién están filtradas las tareas en Calendario y
+                  // Agenda: uno solo para las cuatro vistas, para que no
+                  // haya que volver a elegir al cambiar de una a otra.
+                  ChangeNotifierProvider<FiltroAutorProvider>(
+                    create: (_) => FiltroAutorProvider(),
                   ),
                 ],
                 child: ChangeNotifierProvider<AppUpdateService>(
