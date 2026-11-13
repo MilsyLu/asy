@@ -118,32 +118,6 @@ service cloud.firestore {
       return me().role != 'admin_equipo' || hasPermission('manageTasks');
     }
 
-    // Sprint 7.4.9B — only the task's current assignedUserId or a
-    // super_admin may directly change the reminder. Mirrors the rule
-    // enforced client-side in AddEditTaskPage (Encargado edita su propio
-    // recordatorio / Administrador edita cualquiera).
-    function canEditReminder() {
-      return isSuperAdmin()
-        || request.auth.uid == resource.data.get('assignedUserId', null);
-    }
-
-    // True when this write leaves reminderTime/reminderSent exactly as they
-    // were — any user who already passes canAccessTask() may still edit
-    // every other field freely (complete, soft-delete, edit other fields).
-    function reminderUnchanged() {
-      return request.resource.data.get('reminderTime', null) == resource.data.get('reminderTime', null)
-        && request.resource.data.get('reminderSent', false) == resource.data.get('reminderSent', false);
-    }
-
-    // True when date/hour is changing — a reschedule, which legitimately
-    // recalculates/clears the reminder as a side effect and is intentionally
-    // not gated by canEditReminder() (reschedule permissions are unchanged
-    // by this sprint).
-    function taskTimeChanged() {
-      return request.resource.data.get('date', null) != resource.data.get('date', null)
-        || request.resource.data.get('hour', null) != resource.data.get('hour', null);
-    }
-
     // -----------------------------------------------------------------
     // users
     // -----------------------------------------------------------------
@@ -225,16 +199,18 @@ service cloud.firestore {
       allow list: if isSignedIn() && resource.data.empresaId == myEmpresaId();
       allow create: if request.resource.data.empresaId == myEmpresaId()
         && canAccessTask(request.resource.data) && canWriteTask();
-      // Sprint 7.4.9B: a direct change to reminderTime/reminderSent (not a
-      // side effect of rescheduling) additionally requires canEditReminder()
-      // — the task's current assignedUserId or a super_admin. empresaId is
-      // immutable — a task can never be moved between empresas by an update.
+      // El recordatorio ya no tiene regla propia: quien puede editar la
+      // tarea puede ponerle o quitarle el aviso. Antes solo podian el
+      // encargado y un super_admin, de modo que quien registraba una tarea
+      // para otra persona no podia ponerle recordatorio ni corregirselo,
+      // que es justo cuando mas falta hace. No abre nada nuevo: quien pasa
+      // estas comprobaciones ya puede reescribir la tarea entera.
+      // empresaId es inmutable — una tarea nunca cambia de empresa.
       allow update: if resource.data.empresaId == request.resource.data.empresaId
         && sameEmpresa(resource.data.empresaId)
         && canAccessTask(resource.data)
         && canAccessTask(request.resource.data)
-        && canWriteTask()
-        && (reminderUnchanged() || taskTimeChanged() || canEditReminder());
+        && canWriteTask();
       // Permanent delete: super_admin always, or an admin_equipo with
       // manageTasks deleting a task that belongs to one of their teams.
       // Soft delete uses update() above and is available to any signed-in

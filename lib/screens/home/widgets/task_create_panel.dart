@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/responsive/app_spacing.dart';
 import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/utils/recordatorio_al_mover.dart';
 import '../../../core/utils/snackbar_utils.dart';
 import '../../../core/utils/client_linking.dart';
 import '../../../core/utils/validators.dart';
@@ -87,6 +88,33 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
     taskDateTime: _taskDateTime(),
   );
 
+  /// Cambia el día o la hora y arrastra el recordatorio con ellos.
+  ///
+  /// Aquí la tarea todavía no existe, pero el problema es el mismo: quien
+  /// elige "quince minutos antes" y después corrige la hora espera que el
+  /// aviso se corrija solo, no que se quede en la hora que ya descartó.
+  void _moverTarea({DateTime? fecha, String? hora}) {
+    final anterior = _taskDateTime();
+    final habia = _reminderDateTime;
+    setState(() {
+      if (fecha != null) _selectedDate = fecha;
+      if (hora != null) _selectedHour = hora;
+      final movido = moverRecordatorio(
+        recordatorioActual: _reminderDateTime,
+        momentoAnterior: anterior,
+        momentoNuevo: _taskDateTime(),
+      );
+      _reminderDateTime = movido.instante;
+      if (movido.seQuito) _reminderOption = ReminderOption.none;
+    });
+    if (habia != null && _reminderDateTime == null && mounted) {
+      SnackbarUtils.showInfo(
+        context,
+        'Se quitó el recordatorio: a esta hora ya no alcanzaría a avisar.',
+      );
+    }
+  }
+
   Future<void> _pickReminder() async {
     final result = await pickReminder(
       context,
@@ -137,7 +165,7 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
       firstDate: DateTime.now().subtract(const Duration(days: 365)),
       lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
     );
-    if (picked != null) setState(() => _selectedDate = picked);
+    if (picked != null) _moverTarea(fecha: picked);
   }
 
   /// Deja el formulario como recién abierto — lo usa el botón "Limpiar" y
@@ -406,9 +434,9 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
                 initialTime: initial,
               );
               if (!mounted || picked == null) return;
-              setState(() {
-                _selectedHour = TaskSchedulingService.formatTimeOfDay(picked);
-              });
+              _moverTarea(
+                hora: TaskSchedulingService.formatTimeOfDay(picked),
+              );
             },
             child: InputDecorator(
               decoration: InputDecoration(
@@ -427,7 +455,7 @@ class _TaskCreatePanelState extends State<TaskCreatePanel> {
             hours: TaskSchedulingService.catalogHours(catalog),
             selectedDate: _selectedDate,
             selectedHour: _selectedHour,
-            onHourSelected: (h) => setState(() => _selectedHour = h),
+            onHourSelected: (h) => _moverTarea(hora: h),
           );
 
     final assignedField = DropdownButtonFormField<String>(

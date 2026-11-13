@@ -4,14 +4,15 @@ import 'package:provider/provider.dart';
 
 import '../../../core/theme/theme_colors.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/utils/recordatorio_al_mover.dart';
 import '../../../core/utils/snackbar_utils.dart';
 import '../../../core/utils/time_selection.dart';
-import '../../../core/utils/validators.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/catalog_provider.dart';
 import '../../../services/task_repository.dart';
 import '../../../services/task_scheduling_service.dart';
+import 'reminder_picker.dart';
 import '../../../widgets/confirm_dialog.dart';
 
 /// Quick-action dialog used by [TaskCard] to change a task's date/hour.
@@ -196,11 +197,24 @@ Future<void> _confirmReschedule({
     if (!proceed) return;
   }
 
-  final reminderStillValid = Validators.isReminderValid(
-    taskDate: newDate,
-    taskHour: newHour,
-    reminderDateTime: task.reminderTime,
+  // El recordatorio se mueve con la tarea.
+  //
+  // Antes se comprobaba si el recordatorio viejo seguía siendo anterior a
+  // la nueva hora y, si lo era, se dejaba intacto. Una tarea de hoy a las
+  // 4:00 p. m. movida cuatro días adelante cumplía esa condición de sobra
+  // —el aviso de hoy a las 3:45 es anterior a cualquier día futuro— así
+  // que se quedaba quieto y sonaba hoy, por una tarea que ya no era de
+  // hoy. Lo que la persona eligió no fue una hora concreta, fue "quince
+  // minutos antes": eso es lo que se conserva.
+  final movido = moverRecordatorio(
+    recordatorioActual: task.reminderTime,
+    momentoAnterior: taskDateTimeFromHour(
+      AppDateUtils.parseDateKey(task.date),
+      task.hour,
+    ),
+    momentoNuevo: taskDateTimeFromHour(newDate, newHour),
   );
+  final seQuitoElRecordatorio = movido.seQuito;
 
   final rescheduledStatusId = catalog.rescheduledStatusId;
   if (rescheduledStatusId == null) {
@@ -224,15 +238,15 @@ Future<void> _confirmReschedule({
       previousDate: task.date,
       previousHour: task.hour,
       rescheduledBy: currentUserId,
-      reminderTime: reminderStillValid ? task.reminderTime : null,
-      clearReminder: !reminderStillValid && task.reminderTime != null,
+      reminderTime: movido.instante,
+      clearReminder: movido.instante == null && task.reminderTime != null,
     );
 
     if (context.mounted) {
-      if (!reminderStillValid && task.reminderTime != null) {
+      if (seQuitoElRecordatorio) {
         SnackbarUtils.showInfo(
           context,
-          'El recordatorio se eliminó porque ya no es anterior a la nueva hora',
+          'Se quitó el recordatorio: a esta hora ya no alcanzaría a avisar.',
         );
       }
       Navigator.of(context).pop(true);

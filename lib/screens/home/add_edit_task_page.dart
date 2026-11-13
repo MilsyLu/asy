@@ -7,6 +7,7 @@ import '../../core/responsive/app_spacing.dart';
 import '../../core/responsive/responsive.dart';
 import '../../core/theme/theme_colors.dart';
 import '../../core/utils/date_utils.dart';
+import '../../core/utils/recordatorio_al_mover.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../core/utils/client_linking.dart';
 import '../../core/utils/validators.dart';
@@ -109,6 +110,36 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     taskDateTime: _taskDateTime(),
   );
 
+  /// Cambia el día o la hora de la tarea, y arrastra el recordatorio con
+  /// ella.
+  ///
+  /// Un solo camino para los cuatro controles que mueven la tarea —el
+  /// calendario, la rejilla de horas y los dos relojes— para que ninguno se
+  /// quede sin arrastrar el recordatorio. Sin esto, lo que la persona
+  /// eligió como "quince minutos antes" se quedaba clavado en el día viejo
+  /// y sonaba ese día.
+  void _moverTarea({DateTime? fecha, String? hora}) {
+    final anterior = _taskDateTime();
+    final habia = _reminderDateTime;
+    setState(() {
+      if (fecha != null) _selectedDate = fecha;
+      if (hora != null) _selectedHour = hora;
+      final movido = moverRecordatorio(
+        recordatorioActual: _reminderDateTime,
+        momentoAnterior: anterior,
+        momentoNuevo: _taskDateTime(),
+      );
+      _reminderDateTime = movido.instante;
+      if (movido.seQuito) _reminderOption = ReminderOption.none;
+    });
+    if (habia != null && _reminderDateTime == null && mounted) {
+      SnackbarUtils.showInfo(
+        context,
+        'Se quitó el recordatorio: a esta hora ya no alcanzaría a avisar.',
+      );
+    }
+  }
+
   Future<void> _pickReminder() async {
     final result = await pickReminder(
       context,
@@ -168,7 +199,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
       firstDate: DateTime.now().subtract(const Duration(days: 365)),
       lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
     );
-    if (picked != null) setState(() => _selectedDate = picked);
+    if (picked != null) _moverTarea(fecha: picked);
   }
 
   /// Resolves [_clientId] to a real `clients/{id}` at save time: if already
@@ -226,14 +257,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     final repo = context.read<TaskRepository>();
     final auth = context.read<AuthProvider>();
     final currentUserId = auth.appUser?.id;
-    final isAdmin = auth.isSuperAdmin;
     final dateKey = AppDateUtils.formatDateKey(_selectedDate);
-    // Sprint 7.4.9B Objetivo D: only the task's encargado or an admin may
-    // change the reminder of an EXISTING task; the creator of a brand-new
-    // task may always set its initial reminder. Mirrored in firestore.rules
-    // (canEditReminder()) as the authoritative check.
-    final canEditReminder =
-        !_isEditing || isAdmin || _assignedUserId == currentUserId;
 
     setState(() => _isSaving = true);
     try {
@@ -269,16 +293,17 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
       final resolvedClientId = await _resolveOrCreateClientId(catalog);
 
       if (_isEditing) {
-        // Sprint 7.4.9B: a user without canEditReminder must not change
-        // reminderTime/reminderSent at all, even incidentally — otherwise
-        // firestore.rules' reminderUnchanged() check would reject the
-        // whole update, blocking their edit of unrelated fields too.
-        final reminderTimeToSave = canEditReminder
-            ? _reminderDateTime
-            : widget.existingTask!.reminderTime;
-        final reminderSentToSave = canEditReminder
-            ? false
-            : widget.existingTask!.reminderSent;
+        final cambioElAviso =
+            _reminderDateTime != widget.existingTask!.reminderTime ||
+            dateKey != widget.existingTask!.date ||
+            _selectedHour != widget.existingTask!.hour;
+        // El recordatorio es de la tarea, no del encargado: quien puede
+        // editar la tarea puede ponerle o quitarle el aviso, sea o no quien
+        // la va a hacer. Antes sólo podían el encargado y un
+        // superadministrador, de modo que quien registraba una tarea para
+        // otra persona no podía ponerle recordatorio ni corregírselo —
+        // justo lo que más se necesita cuando uno le encarga algo a
+        // alguien. La regla equivalente salió también de firestore.rules.
         await repo.updateTask(
           widget.existingTask!.id,
           {
@@ -291,8 +316,14 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
             'clientPhone': Validators.cleanPhone(_clientPhoneController.text),
             'clientId': resolvedClientId,
             'observations': _observationsController.text.trim(),
-            'reminderTime': reminderTimeToSave,
-            'reminderSent': reminderSentToSave,
+            'reminderTime': _reminderDateTime,
+            // Sólo vuelve a quedar pendiente si de verdad cambió algo del
+            // aviso. Ponerlo siempre en 'false', como estaba, hacía que
+            // corregir una observación bastara para que un recordatorio ya
+            // enviado volviera a sonar.
+            'reminderSent': cambioElAviso
+                ? false
+                : widget.existingTask!.reminderSent,
             'groupId': _groupId,
             'visibleToAllGroups': _visibleToAllGroups,
             // Changing date/hour from this form fires onTaskUpdate exactly like
@@ -372,9 +403,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     final currentUser = auth.appUser!;
     // Broad "has elevated reach" flag — true for super_admin AND
     // admin_equipo — used for the form's own visibility/breadth (Estado
-    // field, assignee pool, group selector). Reminder-edit rights below are
-    // intentionally NOT gated by this: that stays super_admin-only, mirroring
-    // firestore.rules' canEditReminder(), which wasn't extended.
+    // field, assignee pool, group selector).
     final isAdmin = auth.isAdminOfAnyKind;
     final colors = context.colors;
 
@@ -388,12 +417,6 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     if (!isAdmin) {
       _assignedUserId ??= currentUser.id;
     }
-    // Sprint 7.4.9B Objetivo D/E: same rule as in _save() — only the
-    // encargado or a super_admin may edit an EXISTING task's reminder (not
-    // extended to admin_equipo); the creator of a brand-new task may always
-    // set the initial one.
-    final canEditReminder =
-        !_isEditing || auth.isSuperAdmin || _assignedUserId == currentUser.id;
     if (_statusId == null && !_isEditing) {
       _statusId = catalog.pendingStatusId;
     }
@@ -468,7 +491,6 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
         isGroupLocked: isGroupLocked,
         availableTaskTypes: availableTaskTypes,
         isAdmin: isAdmin,
-        canEditReminder: canEditReminder,
       );
     }
 
@@ -501,11 +523,9 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                     initialTime: initial,
                   );
                   if (!mounted || picked == null) return;
-                  setState(() {
-                    _selectedHour = TaskSchedulingService.formatTimeOfDay(
-                      picked,
-                    );
-                  });
+                  _moverTarea(
+                    hora: TaskSchedulingService.formatTimeOfDay(picked),
+                  );
                 },
                 child: InputDecorator(
                   decoration: InputDecoration(
@@ -525,7 +545,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                 hours: TaskSchedulingService.catalogHours(catalog),
                 selectedDate: _selectedDate,
                 selectedHour: _selectedHour,
-                onHourSelected: (h) => setState(() => _selectedHour = h),
+                onHourSelected: (h) => _moverTarea(hora: h),
               ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
@@ -658,44 +678,31 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
             ),
             const SizedBox(height: 16),
             InkWell(
-              onTap: canEditReminder ? _pickReminder : null,
+              onTap: _pickReminder,
               child: InputDecorator(
                 decoration: InputDecoration(
                   labelText: 'Recordatorio (opcional)',
                   prefixIcon: Icon(LucideIcons.bell, color: colors.primary),
-                  suffixIcon: !canEditReminder
-                      ? Icon(
-                          LucideIcons.lock,
-                          color: colors.textSecondary,
-                          size: 18,
+                  suffixIcon: _reminderOption != ReminderOption.none
+                      ? IconButton(
+                          icon: Icon(
+                            LucideIcons.xCircle,
+                            color: colors.textSecondary,
+                          ),
+                          onPressed: () => setState(() {
+                            _reminderDateTime = null;
+                            _reminderOption = ReminderOption.none;
+                          }),
                         )
-                      : (_reminderOption != ReminderOption.none
-                            ? IconButton(
-                                icon: Icon(
-                                  LucideIcons.xCircle,
-                                  color: colors.textSecondary,
-                                ),
-                                onPressed: () => setState(() {
-                                  _reminderDateTime = null;
-                                  _reminderOption = ReminderOption.none;
-                                }),
-                              )
-                            : null),
-                ),
-                child: Text(
-                  _reminderLabel(),
-                  style: !canEditReminder
-                      ? TextStyle(color: colors.textSecondary)
                       : null,
                 ),
+                child: Text(_reminderLabel()),
               ),
             ),
             Padding(
               padding: const EdgeInsets.only(top: 6, left: 4),
               child: Text(
-                canEditReminder
-                    ? 'El recordatorio debe ser anterior a la hora de la tarea.'
-                    : 'Solo el encargado o un administrador pueden modificar el recordatorio.',
+                'El recordatorio debe ser anterior a la hora de la tarea.',
                 style: TextStyle(color: colors.textSecondary, fontSize: 12),
               ),
             ),
@@ -732,7 +739,6 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     required bool isGroupLocked,
     required List<TaskTypeModel> availableTaskTypes,
     required bool isAdmin,
-    required bool canEditReminder,
   }) {
     return Scaffold(
       appBar: AppBar(
@@ -770,7 +776,6 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                     isGroupLocked: isGroupLocked,
                     availableTaskTypes: availableTaskTypes,
                     isAdmin: isAdmin,
-                    canEditReminder: canEditReminder,
                   );
                   final clientSection = _buildClientSection(
                     colors: colors,
@@ -825,7 +830,6 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
     required bool isGroupLocked,
     required List<TaskTypeModel> availableTaskTypes,
     required bool isAdmin,
-    required bool canEditReminder,
   }) {
     final dateField = InkWell(
       onTap: _pickDate,
@@ -850,9 +854,9 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                 initialTime: initial,
               );
               if (!mounted || picked == null) return;
-              setState(() {
-                _selectedHour = TaskSchedulingService.formatTimeOfDay(picked);
-              });
+              _moverTarea(
+                hora: TaskSchedulingService.formatTimeOfDay(picked),
+              );
             },
             child: InputDecorator(
               decoration: InputDecoration(
@@ -871,7 +875,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
             hours: TaskSchedulingService.catalogHours(catalog),
             selectedDate: _selectedDate,
             selectedHour: _selectedHour,
-            onHourSelected: (h) => setState(() => _selectedHour = h),
+            onHourSelected: (h) => _moverTarea(hora: h),
           );
 
     final assignedField = DropdownButtonFormField<String>(
@@ -963,7 +967,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
           ),
           const SizedBox(height: AppSpacing.md),
           InkWell(
-            onTap: canEditReminder ? _pickReminder : null,
+            onTap: _pickReminder,
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
             child: Container(
               padding: const EdgeInsets.symmetric(
@@ -994,9 +998,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                         Text(
                           _reminderLabel(),
                           style: TextStyle(
-                            color: !canEditReminder
-                                ? colors.textSecondary
-                                : colors.textPrimary,
+                            color: colors.textPrimary,
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                           ),
@@ -1004,13 +1006,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
                       ],
                     ),
                   ),
-                  if (!canEditReminder)
-                    Icon(
-                      LucideIcons.lock,
-                      color: colors.textSecondary,
-                      size: 18,
-                    )
-                  else if (_reminderOption != ReminderOption.none)
+                  if (_reminderOption != ReminderOption.none)
                     IconButton(
                       icon: Icon(
                         LucideIcons.xCircle,
@@ -1027,9 +1023,7 @@ class _AddEditTaskPageState extends State<AddEditTaskPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            canEditReminder
-                ? 'El recordatorio debe ser anterior a la hora de la tarea.'
-                : 'Solo el encargado o un administrador pueden modificar el recordatorio.',
+            'El recordatorio debe ser anterior a la hora de la tarea.',
             style: TextStyle(color: colors.textSecondary, fontSize: 11),
           ),
           const SizedBox(height: AppSpacing.md),
